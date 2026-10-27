@@ -1,0 +1,3517 @@
+Private Sub btn_guardar_precio_Click()
+  With Principal
+    If .opc_precios_reales.Value Then
+      If .opc_placilla_3 Then
+         conectarBD
+         .grilla_psjes_precios.TextMatrix(.grilla_psjes_precios.row, 6) = FormatCurrency(txt_precio_act.Text, 0)
+         upd_index_precio_prov_pl lbl_folio.Caption, txt_precio_act.Text
+         desconectarBD
+      Else
+         conectarBD
+         .grilla_psjes_precios.TextMatrix(.grilla_psjes_precios.row, 6) = FormatCurrency(txt_precio_act.Text, 0)
+         upd_index_precio_prov_stgo lbl_folio.Caption, txt_precio_act.Text
+         desconectarBD
+      End If
+    Else
+      MsgBox "Para actualizar el precio debe buscar por:" & Chr(13) & "opción precios reales y buscar nuevamente", vbExclamation, "Validación"
+    End If
+  End With
+  Unload Me
+End Sub
+
+Private Sub lbl_cod_prod_Click()
+
+End Sub
+
+
+Private Sub grilla_buscar_cte_DblClick()
+ With grilla_buscar_cte
+   Select Case Principal.MultiPage1.Value
+     Case 2
+       Principal.txt_rut_cte.Text = .TextMatrix(.row, 1)
+     
+     Case 6
+       Principal.txt_rut_prov = .TextMatrix(.row, 1)
+       Principal.txt_nom_prov = .TextMatrix(.row, 2)
+   End Select
+ End With
+End Sub
+
+Private Sub UserForm_Click()
+
+End Sub
+
+Private Sub UserForm_Initialize()
+ FORMATO_GRILLA grilla_buscar_cte
+ conectarBD
+ Select Case Principal.MultiPage1.Value
+    Case 2
+      If Principal.opc_pla_cte.Value Then
+        crg_grilla_cte_placilla grilla_buscar_cte
+      Else
+        crg_grilla_cte_stgo grilla_buscar_cte
+      End If
+    Case 6
+       If Principal.opc_placilla_mant.Value Then
+          crg_grilla_cte_placilla grilla_buscar_cte
+       Else
+          crg_grilla_cte_stgo grilla_buscar_cte
+       End If
+ End Select
+ desconectarBD
+End Sub
+
+
+Private Sub btn_bsucar_precio_Click()
+Dim precio As String
+conectarBD
+ If opc_placilla_mant.Value Then
+    precio = buscar_precio_pl(txt_rut_prov.Text, txt_cod_prod.Text)
+    If precio <> "0" Then
+       txt_precio = precio
+    Else
+       MsgBox "el cliente no tiene precio registrado para el producto seleccionado", vbExclamation, "Validacion"
+    End If
+ Else
+    precio = buscar_precio_stgo(txt_rut_prov.Text, txt_cod_prod.Text)
+    If precio <> "0" Then
+       txt_precio = precio
+    Else
+       MsgBox "el cliente no tiene precio registrado para el producto", vbExclamation, "Validacion"
+    End If
+ End If
+desconectarBD
+End Sub
+
+Private Sub btn_buscar_cte_Click()
+  Dim ruta As String
+  grilla_inf_cte.Clear
+  FORMATO_GRILLA grilla_inf_cte
+  If opc_rut_cte.Value = True Then
+     If opc_stgo_cte Then
+     conectarBD
+        crg_inf_cte_stgo grilla_inf_cte, fecha_desde_cte, fecha_hasta_cte, txt_rut_cte
+        crg_datos_cte_stgo txt_rut_cte
+        desconectarBD
+     ElseIf opc_pla_cte Then
+     conectarBD
+        crg_inf_cte_placilla grilla_inf_cte, fecha_desde_cte, fecha_hasta_cte, txt_rut_cte
+        crg_datos_cte_placilla txt_rut_cte
+        desconectarBD
+     ElseIf opc_thno_cte Then
+        ruta = "192.168.2.56:\BDWM\thno\PWAREHOUSE.FDB"
+        conectarBdFirebird ruta
+        crg_inf_cte_thno grilla_inf_cte, fecha_desde_cte, fecha_hasta_cte, txt_rut_cte
+        crg_datos_cte_thno txt_rut_cte
+        desconectarBdFirebird
+     End If
+  ElseIf Opc_folio.Value = True Then
+     'crg_inf_folio_stgo grilla_inf_cte, txt_folio
+  End If
+  
+End Sub
+
+Private Sub btn_buscar_grp_Click()
+ conectarBD
+    CARGAR_INF_RET_STGO grilla_grp_ret_stgo, fecha_desde_grp, fecha_fin_grp
+    CARGAR_INF_RET_EMP grilla_grp_ret_emp, fecha_desde_grp, fecha_fin_grp
+    CARGAR_INF_MIX_STGO grilla_mix_stgo, fecha_desde_grp, fecha_fin_grp
+    CARGAR_INF_MIX_PLACILLA grilla_mix_placilla, fecha_desde_grp, fecha_fin_grp
+    CARGAR_INF_RET_REGIONES_STGO grilla_grp_ret_reg, fecha_desde_grp, fecha_fin_grp
+    CARGAR_INF_AGRICOLA grilla_grp_agr, fecha_desde_grp, fecha_fin_grp
+    CARGAR_INF_PESQUERA grilla_grp_pes, fecha_desde_grp, fecha_fin_grp
+    CARGAR_INF_AGROSUPER grilla_grp_pes, fecha_desde_grp, fecha_fin_grp
+ desconectarBD
+End Sub
+
+Private Sub btn_Buscar_imp_Click()
+ Dim ruta As String
+ 
+ If opc_placilla_imp.Value Then
+    ruta = "192.168.2.56:\BDWM\placilla\WMDBSPC.GDB"
+    conectarBdFirebird ruta
+    CRG_INF_PES_IMP_PL grilla_imp_pesajes, fecha_desde_imp, fecha_hasta_imp
+    desconectarBdFirebird
+ ElseIf opc_stgo_imp.Value Then
+    ruta = "192.168.2.56:\BDWM\placilla2\WMDBSPC.GDB"
+    conectarBdFirebird ruta
+    CRG_INF_PES_IMP_PL grilla_imp_pesajes, fecha_desde_imp, fecha_hasta_imp
+    desconectarBdFirebird
+ ElseIf opc_thno_imp.Value Then 'MICHAEL**********************************************
+    
+    ruta = "192.168.2.56:\BDWM\thno\PWAREHOUSE.FDB"
+    conectarBdFirebird ruta
+    CRG_INF_PES_IMP_THNO grilla_imp_pesajes, fecha_desde_imp, fecha_hasta_imp
+    desconectarBdFirebird
+ End If
+ 
+End Sub
+
+Private Sub btn_buscar_pes_pr_Click()
+conectarBD
+If opc_placilla_3 Then
+    If opc_precio_teo.Value Then
+       Select Case cmb_filtro_inf_precio.Value
+          Case Is = "Todos"
+            FORMATO_GRILLA grilla_psjes_precios
+            CARGAR_INF_PRECIOS_TEO_PL grilla_psjes_precios, fecha_desde_pes_pr, fecha_hasta_pes_pr
+          Case Is = "Resumen"
+
+          Case Is = ""
+            MsgBox "Seleccione una opcion en filtro de informe", vbExclamation, "Validación"
+       End Select
+    Else
+       Select Case cmb_filtro_inf_precio.Value
+          Case Is = "Todos"
+            FORMATO_GRILLA grilla_psjes_precios
+            CARGAR_INF_PRECIOS_REALES_PL grilla_psjes_precios, fecha_desde_pes_pr, fecha_hasta_pes_pr
+          Case Is = "Resumen"
+            CARGAR_INF_PRECIOS_REALES_PL_2 grilla_psjes_precios, fecha_desde_pes_pr, fecha_hasta_pes_pr
+            del_tmp_inf_precio_prov
+          Case Is = ""
+            MsgBox "Seleccione una opcion en filtro de informe", vbExclamation, "Validación"
+       End Select
+    End If
+Else
+  If opc_precio_teo.Value Then
+     Select Case cmb_filtro_inf_precio.Value
+       Case Is = "Todos"
+         FORMATO_GRILLA grilla_psjes_precios
+         CARGAR_INF_PRECIOS_TEO_STGO grilla_psjes_precios, fecha_desde_pes_pr, fecha_hasta_pes_pr
+       Case Is = "Resumen"
+         
+       Case Is = ""
+         MsgBox "Seleccione una opcion en filtro de informe", vbExclamation, "Validación"
+     End Select
+  Else
+     Select Case cmb_filtro_inf_precio.Value
+          Case Is = "Todos"
+            FORMATO_GRILLA grilla_psjes_precios
+            CARGAR_INF_PRECIOS_REALES_STGO grilla_psjes_precios, fecha_desde_pes_pr, fecha_hasta_pes_pr
+          Case Is = "Resumen"
+            CARGAR_INF_PRECIOS_REALES_STGO_2 grilla_psjes_precios, fecha_desde_pes_pr, fecha_hasta_pes_pr
+            del_tmp_inf_precio_prov
+          Case Is = ""
+            MsgBox "Seleccione una opcion en filtro de informe", vbExclamation, "Validación"
+     End Select
+  End If
+End If
+desconectarBD
+End Sub
+
+Private Sub btn_buscar_psjes_Click()
+conectarBD
+  crg_det_psjes_jcramm grilla_det_psjes, txt_last_folio.Text
+  crg_res_psjes grilla_res_psjes
+  del_tmp_res_jcramm
+desconectarBD
+End Sub
+
+Private Sub btn_exp_excel_2_Click()
+If opc_placilla_3 Then
+  EXP_EXCEL_PL_PRECIO grilla_psjes_precios, grilla_res_mat_precio, fecha_desde_pes_pr, fecha_hasta_pes_pr
+Else
+  EXP_EXCEL_STGO_PRECIO grilla_psjes_precios, grilla_res_mat_precio, fecha_desde_pes_pr, fecha_hasta_pes_pr
+End If
+End Sub
+
+Private Sub btn_guardar_precios_Click()
+conectarBD
+With grilla_psjes_precios
+  If opc_placilla_3.Value Then
+     If opc_precio_teo Then
+        For row = 1 To .Rows - 1
+          If buscar_index_precio_real_pl(.TextMatrix(row, 1)) = False Then
+            ing_index_precio_prov_pl .TextMatrix(row, 1), .TextMatrix(row, 6), .TextMatrix(row, 8)
+          End If
+        Next row
+        MsgBox "Precios ingresados correctamente", vbInformation, "Validacion Ingreso Pesajes"
+     Else
+        MsgBox "Para Guardar precios teoricos seleccione opción:" & Chr(13) & "Informe con Precios Teoricos", vbExclamation, "Validación"
+     End If
+  Else
+     If opc_precio_teo Then
+        For row = 1 To .Rows - 1
+          If buscar_index_precio_real_stgo(.TextMatrix(row, 1)) = False Then
+            ing_index_precio_prov_stgo .TextMatrix(row, 1), .TextMatrix(row, 6), .TextMatrix(row, 8)
+          End If
+        Next row
+     Else
+        MsgBox "Para Guardar precios teoricos seleccione opción:" & Chr(13) & "Informe con Precios Teoricos", vbExclamation, "Validación"
+     End If
+  End If
+End With
+desconectarBD
+End Sub
+
+Private Sub btn_imp_datos_Click()
+Dim cont_psjes As Integer
+Dim encontrado As Boolean
+
+encontrado = False
+cont_psje = 0
+If opc_placilla_imp.Value Then
+   conectarBD
+   With grilla_imp_pesajes
+       For i = 1 To .Rows - 1
+          encontrado = get_pesaje_placilla(.TextMatrix(i, 1))
+          If encontrado = False Then
+             ing_pes_pl_fb .TextMatrix(i, 1), .TextMatrix(i, 2), .TextMatrix(i, 3), .TextMatrix(i, 4), .TextMatrix(i, 5), .TextMatrix(i, 6), .TextMatrix(i, 7), .TextMatrix(i, 8), .TextMatrix(i, 9), .TextMatrix(i, 10), .TextMatrix(i, 11), .TextMatrix(i, 12), .TextMatrix(i, 13), .TextMatrix(i, 14), .TextMatrix(i, 15), .TextMatrix(i, 16), .TextMatrix(i, 17), .TextMatrix(i, 18)
+             cont_psje = cont_psje + 1
+          End If
+       Next
+   End With
+   desconectarBD
+   MsgBox "Se importaron " & cont_psje & " pesajes exitosamente", vbInformation, "Validación"
+ElseIf opc_stgo_imp.Value Then
+   conectarBD
+   With grilla_imp_pesajes
+       For i = 1 To .Rows - 1
+          encontrado = get_pesaje_stgo(.TextMatrix(i, 1))
+          If encontrado = False Then
+             ing_pes_stgo_fb .TextMatrix(i, 1), .TextMatrix(i, 2), .TextMatrix(i, 3), .TextMatrix(i, 4), .TextMatrix(i, 5), .TextMatrix(i, 6), .TextMatrix(i, 7), .TextMatrix(i, 8), .TextMatrix(i, 9), .TextMatrix(i, 10), .TextMatrix(i, 11), .TextMatrix(i, 12), .TextMatrix(i, 13), .TextMatrix(i, 14), .TextMatrix(i, 15), .TextMatrix(i, 16), .TextMatrix(i, 17), .TextMatrix(i, 18)
+             cont_psje = cont_psje + 1
+          End If
+       Next
+   End With
+   desconectarBD
+   MsgBox "Se importaron " & cont_psje & " pesajes exitosamente", vbInformation, "Validación"
+ElseIf opc_thno_imp.Value Then 'MICHAEL*****************************************************************************
+   conectarBD
+   With grilla_imp_pesajes
+        For i = 1 To .Rows - 1
+            encontrado = get_pesaje_THNO(.TextMatrix(i, 1), .TextMatrix(i, 15))
+            If encontrado = False Then
+                ing_pes_thno_fb .TextMatrix(i, 1), .TextMatrix(i, 2), .TextMatrix(i, 3), .TextMatrix(i, 4), .TextMatrix(i, 5), .TextMatrix(i, 6), .TextMatrix(i, 7), .TextMatrix(i, 8), .TextMatrix(i, 9), .TextMatrix(i, 10), .TextMatrix(i, 11), .TextMatrix(i, 12), .TextMatrix(i, 13), .TextMatrix(i, 14), .TextMatrix(i, 15), .TextMatrix(i, 16), .TextMatrix(i, 17), .TextMatrix(i, 18)
+                cont_psje = cont_psje + 1
+            End If
+        Next
+    End With
+    desconectarBD
+    MsgBox "Se importaron " & cont_psje & " pesajes exitosamente", vbInformation, "Validación"
+End If
+
+
+End Sub
+
+Private Sub btn_imp_inf_cte_Click()
+Dim opcion As Integer
+If opc_pla_cte.Value Then
+   opcion = 1
+ElseIf opc_stgo_cte.Value Then
+   opcion = 2
+ElseIf opc_thno_cte.Value Then
+   opcion = 3
+End If
+ IMP_INF_EXCEL grilla_inf_cte, fecha_desde_cte, fecha_hasta_cte, opcion
+End Sub
+
+Private Sub btn_impr_inf_jcramm_Click()
+  IMP_INF_JCRAMM grilla_det_psjes, grilla_res_psjes, txt_total_kilos_det.Text, txt_res_kilos.Text
+  With grilla_det_psjes
+  conectarBD
+    del_last_folio
+    ing_last_folio .TextMatrix(.Rows - 1, 2), .TextMatrix(.Rows - 1, 1)
+  desconectarBD
+  End With
+End Sub
+
+Private Sub btn_ingresar_precio_Click()
+Dim encontrado As Boolean
+conectarBD
+If opc_placilla_mant.Value Then
+   encontrado = comprobar_precio_prov_pl(txt_rut_prov.Text, txt_cod_prod.Text)
+   If encontrado Then
+      MsgBox "El precio ya esta asociado al proveedor y al material", vbExclamation, "Validacion"
+   Else
+      ing_precio_prov_pl txt_cod_prod.Text, txt_rut_prov.Text, txt_nom_prov.Text, txt_precio.Text
+      MsgBox "Precio Ingresado Satisfactoriamente!!!", vbInformation, "Validacion"
+      Limpiar_campos
+   End If
+Else
+   encontrado = comprobar_precio_prov_stgo(txt_rut_prov.Text, txt_cod_prod.Text)
+   If encontrado Then
+      MsgBox "El precio ya esta asociado al proveedor y al material", vbExclamation, "Validacion"
+   Else
+      ing_precio_prov_stgo txt_cod_prod.Text, txt_rut_prov.Text, txt_nom_prov.Text, txt_precio.Text
+      MsgBox "Precio Ingresado!!!", vbInformation, "Validacion"
+   End If
+End If
+desconectarBD
+End Sub
+
+Private Sub btn_limpiar_precios_Click()
+  Limpiar_campos
+End Sub
+
+Private Sub btnBuscar_inf_Click()
+  Dim lugar As Boolean
+  conectarBD
+  If opc_placilla.Value Then
+    CARGAR_INF_PLACILLA grilla_inf_compras, fecha_inicio, fecha_termino
+    CARGAR_INF_TRAS_Pl grilla_inf_tras, fecha_inicio, fecha_termino
+    lbl_pes.Caption = "DETALLE COMPRAS PLACILLA"
+    lbl_pes_detalle.Caption = "TRASLADOS BODEGA SANTIAGO"
+    Principal.grilla_inf_res.TextMatrix(3, 1) = "TOTAL GENERAL"
+    Principal.grilla_inf_res.TextMatrix(3, 2) = FormatNumber(CDbl(Principal.grilla_inf_res.TextMatrix(1, 2)) + CDbl(Principal.grilla_inf_res.TextMatrix(2, 2)), 0)
+  ElseIf opc_stgo.Value Then
+    CARGAR_INF_STGO grilla_inf_compras, fecha_inicio, fecha_termino
+    CARGAR_INF_STGO_TRAS grilla_inf_tras, fecha_inicio, fecha_termino
+    lbl_pes_detalle.Caption = "TRASLADOS SCRAP SANTIAGO"
+    lbl_pes.Caption = "DETALLE COMPRAS SANTIAGO"
+    Principal.grilla_inf_res.TextMatrix(3, 1) = ""
+    Principal.grilla_inf_res.TextMatrix(3, 2) = ""
+  ElseIf opc_thno.Value Then 'SI LA OPCION ESCOGIDA ES TALCAHUANO
+  CARGAR_INF_THNO grilla_inf_compras, fecha_inicio, fecha_termino, grilla_inf_tras 'EL CARGAR_INF... CARGARA DE DATOS LA GRILLA "grilla_inf_compras" segun la fecha inicio y la fecha de termino
+  'CARGAR_INF_STGO_TRAS grilla_inf_tras, fecha_inicio, fecha_termino 'EL CARGAR_INF... CARGARA DE DATOS LA GRILLA "grilla_inf_tras" segun la fecha inicio y la fecha de termino
+  lbl_pes.Caption = "DETALLES COMPRAS TALCAHUANO"
+  lbl_pes_detalle.Caption = "TRASLADOS A SANTIAGO" 'TRANSFORMARA EL VALOR DEL LABEL AL TEXTO "TRASLADOS A SANTIAGO" EL CUAL SE LE PUEDE ASIGNAR CUALQUIER VALOR
+  Principal.grilla_inf_res.TextMatrix(3, 1) = "" 'EL TEXT MATRIX PERMITE MOVERSE DENTRO DEL GRIDVIEW Y SE LA ASIGNA LA FILA(ROW) Y LUEGO LA COLUMNA(COL), ES DECIR, LE ASIGNA UN CAMPO VACIO A LA FILA 3 COLUMNA 1
+  Principal.grilla_inf_res.TextMatrix(3, 2) = ""
+  End If
+desconectarBD
+End Sub
+
+Private Sub btnBuscarDatos_Click()
+conectarBD
+If opc_semanal.Value Then
+ CARGAR_INF_GRP_MATERIAL_PL_2 grilla_pes_pl_mat, fecha_desde, fecha_hasta
+ CARGAR_INF_GRP_MATERIAL_STGO_2 grilla_pes_stgo_mat, fecha_desde, fecha_hasta
+ CARGAR_INF_GRP_MATERIAL_THNO_2 grilla_pes_thno_mat, fecha_desde, fecha_hasta 'MIO!!!
+Else
+ CARGAR_INF_GRP_MATERIAL_PL grilla_pes_pl_mat, fecha_desde, fecha_hasta
+ CARGAR_INF_GRP_MATERIAL_STGO grilla_pes_stgo_mat, fecha_desde, fecha_hasta
+ CARGAR_INF_GRP_MATERIAL_THNO grilla_pes_thno_mat, fecha_desde, fecha_hasta 'MIO!!!
+End If
+desconectarBD
+End Sub
+Private Sub btnEjecutarProcesosPA_Click()
+    Call EjecutarProcedimientosConCommit
+End Sub
+
+Private Sub btnGenerar_inf_Click()
+If opc_placilla.Value Then
+   EXPORTAR_EXCEL_PLACILLA grilla_inf_compras, grilla_inf_tras, fecha_inicio, fecha_termino
+ElseIf opc_stgo.Value Then
+   EXPORTAR_EXCEL_STGO grilla_inf_compras, fecha_inicio, fecha_termino
+ElseIf opc_thno.Value Then
+    EXPORTAR_EXCEL_THNO grilla_inf_compras, fecha_inicio, fecha_termino
+End If
+End Sub
+
+Private Sub btnLimpiarTablas_Click()
+    ' Llama al procedimiento que está en el módulo Conexion
+    Call LimpiarTablasDePesaje
+End Sub
+
+Private Sub cmb_filtro_inf_precio_Change()
+
+End Sub
+
+Private Sub CommandButton1_Click()
+conectarBD
+
+Dim sql As String
+ sql = "INSERT INTO clientes_placilla(CPV_RUT,CPV_RAZONSOCIAL) VALUES('76218764','Sociedad Agricola Galea Ltda.');"
+ cnt.Execute sql
+ desconectarBD
+End Sub
+
+
+Private Sub CommandButton2_Click()
+
+End Sub
+
+Private Sub grilla_psjes_precios_Click()
+
+End Sub
+
+Private Sub grilla_psjes_precios_DblClick()
+   With grilla_psjes_precios
+      Act_precios.lbl_folio.Caption = .TextMatrix(.row, 1)
+      Act_precios.lbl_cod_prod.Caption = .TextMatrix(.row, 2)
+      Act_precios.lbl_desc_prod.Caption = .TextMatrix(.row, 3)
+      Act_precios.lbl_nom_prov.Caption = .TextMatrix(.row, 4)
+      Act_precios.txt_precio_act.Text = CInt(.TextMatrix(.row, 6))
+   End With
+   Act_precios.Show
+End Sub
+
+Private Sub LimpiarTodoAccess_Click()
+ ' Mostrar un mensaje de confirmación al usuario
+  If MsgBox("¿Estás seguro de que quieres eliminar todos los datos de las tablas?", vbYesNo + vbCritical, "Confirmación") = vbYes Then
+
+    ' Conectar a la base de datos
+    conectarBD
+
+    ' Eliminar los datos de las tablas
+    Dim tablas As Variant
+    tablas = Array("PESAJE_TALCAHUANO", "PESAJE_PLACILLA_2", "PESAJE_SANTIAGO", "PESAJE_PLACILLA")
+
+    On Error Resume Next ' Ignorar errores si alguna tabla no existe
+    For Each tabla In tablas
+      CurrentDb.Execute "DELETE * FROM " & tabla & ";"
+    Next tabla
+    On Error GoTo 0 ' Restaurar el manejo de errores normal
+
+    ' Desconectar de la base de datos
+    desconectarBD
+
+    ' Mostrar un mensaje de éxito al usuario
+    MsgBox "Se eliminaron todos los datos de las tablas.", vbInformation, "Eliminación completa"
+
+  End If
+
+End Sub
+
+Private Sub MultiPage1_Change()
+Select Case MultiPage1.Value
+  Case 0
+     fecha_desde.Value = Date
+     fecha_hasta.Value = Date
+     grilla_pes_pl_mat.Clear
+     grilla_pes_stgo_mat.Clear
+     grilla_pes_thno_mat.Clear '***************** LIMPIA LA GRILLA
+     FORMATO_GRILLA grilla_pes_pl_mat
+     FORMATO_GRILLA grilla_pes_stgo_mat
+     FORMATO_GRILLA grilla_pes_thno_mat '**************************Esto llama al metodo o funcion que permite dar formato a la grilla de informe de grupo por material
+     opc_semanal.Value = True
+  Case 1
+     fecha_inicio.Value = Date
+     fecha_termino.Value = Date
+     grilla_inf_compras.Clear
+     grilla_inf_tras.Clear
+     grilla_inf_res.Clear
+     FORMATO_GRILLA grilla_inf_compras
+     FORMATO_GRILLA grilla_inf_tras
+     FORMATO_GRILLA grilla_inf_res
+     opc_placilla.Value = True
+  Case 2
+     FORMATO_GRILLA grilla_inf_cte
+     fecha_desde_cte.Value = Date
+     fecha_hasta_cte.Value = Date
+     lbl_rut.Visible = False
+     txt_rut_cte.Visible = False
+     lbl_folio.Visible = False
+     txt_folio.Visible = False
+     opc_pla_cte.Value = True
+  Case 3
+     FORMATO_GRILLA grilla_grp_agr
+     FORMATO_GRILLA grilla_grp_pes
+     FORMATO_GRILLA grilla_grp_ret_stgo
+     FORMATO_GRILLA grilla_grp_ret_emp
+     FORMATO_GRILLA grilla_mix_stgo
+     FORMATO_GRILLA grilla_mix_placilla
+     FORMATO_GRILLA grilla_grp_ret_reg
+     fecha_desde_grp.Value = Date
+     fecha_fin_grp.Value = Date
+  Case 4
+     grilla_det_psjes.Clear
+     grilla_res_psjes.Clear
+     Principal.txt_last_folio.Text = ""
+     Principal.txt_total_kilos_det.Text = ""
+     Principal.txt_res_kilos.Text = ""
+     FORMATO_GRILLA grilla_det_psjes
+     FORMATO_GRILLA grilla_res_psjes
+     conectarBD
+     Principal.txt_last_folio.Text = buscar_last_folio
+     desconectarBD
+  Case 5
+     grilla_psjes_precios.Clear
+     grilla_res_mat_precio.Clear
+     FORMATO_GRILLA grilla_psjes_precios
+     FORMATO_GRILLA grilla_res_mat_precio
+     opc_placilla_3.Value = True
+     fecha_desde_pes_pr = Date
+     fecha_hasta_pes_pr = Date
+     cmb_filtro_inf_precio.AddItem "Todos"
+     cmb_filtro_inf_precio.AddItem "Resumen"
+  Case 6
+     opc_placilla_mant.Value = True
+     opc_precio_teo.Value = True
+     fecha_act_precio = Date
+     
+  Case 7
+     opc_placilla_imp.Value = True
+     fecha_desde_imp.Value = Date
+     fecha_hasta_imp.Value = Date
+End Select
+End Sub
+
+Private Sub Opc_folio_Click()
+  lbl_folio.Visible = True
+  txt_folio.Visible = True
+  lbl_rut.Visible = False
+  txt_rut_cte.Visible = False
+  txt_rut_cte.Text = ""
+End Sub
+
+Private Sub opc_rut_cte_Click()
+  lbl_folio.Visible = False
+  txt_folio.Visible = False
+  txt_folio.Text = ""
+  lbl_rut.Visible = True
+  txt_rut_cte.Visible = True
+End Sub
+
+Private Sub opc_stgo_imp_Click()
+
+End Sub
+
+Private Sub opc_thno_imp_Click()
+
+End Sub
+
+Private Sub txt_cod_prod_KeyDown(ByVal KeyCode As MSForms.ReturnInteger, ByVal Shift As Integer)
+   If KeyCode = 13 Then
+      Productos.Show
+   End If
+End Sub
+
+Private Sub txt_rut_cte_KeyPress(ByVal KeyAscii As MSForms.ReturnInteger)
+  If KeyAscii = 32 Then Clientes.Show
+End Sub
+
+Private Sub txt_rut_prov_KeyDown(ByVal KeyCode As MSForms.ReturnInteger, ByVal Shift As Integer)
+   If KeyCode = 13 Then Clientes.Show
+End Sub
+
+Private Sub txt_total_thno_Change()
+
+End Sub
+
+Private Sub UserForm_Initialize()
+   Call FormatUserForm(Principal.Caption)
+   Principal.MultiPage1.Value = 0
+   FECHA = Format(Date, "Long Date")
+   fecha_hasta.Value = Date
+   fecha_desde.Value = Date
+   FORMATO_GRILLA grilla_pes_pl_mat
+   FORMATO_GRILLA grilla_pes_stgo_mat
+   FORMATO_GRILLA grilla_pes_thno_mat '*************CREO QUE ESTO PERMITE TERMINAR DE FORMAR LA GRILLA O INICIALIZAR
+   MultiPage1.Style = fmTabStyleButtons
+End Sub
+
+Private Sub grilla_productos_DblClick()
+With Productos.grilla_productos
+  Select Case Principal.MultiPage1.Value
+     Case 6
+       Principal.txt_cod_prod = .TextMatrix(.row, 1)
+  End Select
+End With
+End Sub
+Private Sub UserForm_Initialize()
+FORMATO_GRILLA grilla_productos
+  conectarBD
+    crg_grilla_prod grilla_productos
+  desconectarBD
+End Sub
+
+
+
+Public Function crg_inf_cte_stgo(grilla As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date, rut As String) As String
+Dim rst As ADODB.Recordset
+Dim indiceSec As Integer
+Dim row As Integer
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+row = 1
+total_kilos = 0
+sql = "SELECT FOLIO,PATENTE,NOM_PRODUCTO,FECHA_INGRESO,FECHA_SALIDA,PESO_BRUTO,PESO_TARA,PESO_NETO FROM PESAJE_SANTIAGO WHERE FECHA_INGRESO>=#" & Format(fecha_desde, "yyyy-mm-dd") & "# And FECHA_INGRESO<=#" & Format(fecha_hasta, "yyyy-mm-dd") & "# AND RUT_CLIENTE='" & rut & "' AND tipo_pesaje ='Recepcion de carga' ORDER BY folio"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+'    grilla.Redraw = False
+      Do While Not rst.EOF
+        With grilla
+            .Rows = row + 1
+            .TextMatrix(row, 0) = row
+            If Not IsNull(rst!folio) Then .TextMatrix(row, 1) = rst!folio
+            If Not IsNull(rst!patente) Then .TextMatrix(row, 2) = rst!patente
+            If Not IsNull(rst!nom_producto) Then .TextMatrix(row, 3) = rst!nom_producto
+            If Not IsNull(rst!fecha_ingreso) Then .TextMatrix(row, 4) = rst!fecha_ingreso
+            If Not IsNull(rst!fecha_salida) Then .TextMatrix(row, 5) = rst!fecha_salida
+            If Not IsNull(rst!peso_bruto) Then .TextMatrix(row, 6) = rst!peso_bruto
+            If Not IsNull(rst!peso_tara) Then .TextMatrix(row, 7) = rst!peso_tara
+            If Not IsNull(rst!peso_neto) Then .TextMatrix(row, 8) = rst!peso_neto
+            total_kilos = total_kilos + rst!peso_neto
+        End With
+        row = row + 1
+        rst.MoveNext
+        Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+Principal.txt_kilos.Text = total_kilos
+End Function
+Public Function crg_inf_cte_placilla(grilla As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date, rut As String) As String
+Dim rst As ADODB.Recordset
+Dim row As Integer
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+row = 1
+total_kilos = 0
+sql = "SELECT folio,patente,nom_producto,fecha_ingreso,fecha_salida,peso_bruto,peso_tara,peso_neto FROM pesaje_placilla_2 WHERE fecha_ingreso >= #" & Format(fecha_desde, "yyyy-mm-dd HH:mm") & "# And fecha_ingreso <= #" & Format(fecha_hasta, "yyyy-mm-dd HH:mm") & "# and rut_cliente='" & rut & "'and tipo_pesaje = 'Recepcion de carga' ORDER BY folio"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+'    grilla.Redraw = False
+      Do While Not rst.EOF
+        With grilla
+            .Rows = row + 1
+            .TextMatrix(row, 0) = row
+            If Not IsNull(rst!folio) Then .TextMatrix(row, 1) = rst!folio
+            If Not IsNull(rst!patente) Then .TextMatrix(row, 2) = rst!patente
+            If Not IsNull(rst!nom_producto) Then .TextMatrix(row, 3) = rst!nom_producto
+            If Not IsNull(rst!fecha_ingreso) Then .TextMatrix(row, 4) = rst!fecha_ingreso
+            If Not IsNull(rst!fecha_salida) Then .TextMatrix(row, 5) = rst!fecha_salida
+            If Not IsNull(rst!peso_bruto) Then .TextMatrix(row, 6) = rst!peso_bruto
+            If Not IsNull(rst!peso_tara) Then .TextMatrix(row, 7) = rst!peso_tara
+            If Not IsNull(rst!peso_neto) Then .TextMatrix(row, 8) = rst!peso_neto
+            total_kilos = total_kilos + rst!peso_neto
+        End With
+        row = row + 1
+        rst.MoveNext
+        Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+Principal.txt_kilos.Text = total_kilos
+End Function
+
+Public Function crg_inf_cte_thno(grilla As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date, rut As String) As String '***************************************************************************
+Dim rst As ADODB.Recordset
+Dim row As Integer
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+Dim valorGrilla As String
+Dim valorSQL As String
+Dim fila As Integer
+
+row = 1
+total_kilos = 0
+sql = "SELECT IDPSJ, FECHA, CDGPRODUCTO  FROM PESAJES_ITEMS WHERE FECHA >='" & form_fecha(CStr(fecha_desde)) & "' and FECHA  <='" & form_fecha(CStr(fecha_hasta)) & "' and Rut='" & rut & "' ORDER BY IDPSJ"
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+'    grilla.Redraw = False
+     fila = 0
+      Do While Not rst.EOF
+      
+      valorGrilla = grilla.TextMatrix(fila, 1)
+      valorSQL = rst!idpsj
+      If valorGrilla <> valorSQL Then
+      
+        With grilla
+             .Rows = row + 1
+             .TextMatrix(row, 0) = row
+             
+             If Not IsNull(rst!idpsj) Then .TextMatrix(row, 1) = get_folio_thno(rst!idpsj)
+             If Not IsNull(rst!idpsj) Then .TextMatrix(row, 2) = get_patente_thno(rst!idpsj)
+             If Not IsNull(rst!CDGPRODUCTO) Then .TextMatrix(row, 3) = get_productoTHNO(rst!CDGPRODUCTO)
+             If Not IsNull(rst!FECHA) Then .TextMatrix(row, 4) = rst!FECHA
+             If Not IsNull(rst!FECHA) Then .TextMatrix(row, 5) = rst!FECHA
+             If Not IsNull(rst!idpsj) Then .TextMatrix(row, 6) = "0"
+             If Not IsNull(rst!idpsj) Then .TextMatrix(row, 7) = "0"
+             If Not IsNull(rst!idpsj) Then .TextMatrix(row, 8) = get_peso_thno(rst!idpsj)
+             total_kilos = total_kilos + CInt(get_peso_thno(rst!idpsj))
+             'IMPORTANTE ULTILIZO EL IDPSJ PARA PODER INICIALIZARLO EN 0 DEBIDO A QUE NO TENGO LOS DATOS ESPECIFICADOS EN EL GRID
+             fila = fila + 1
+             
+        End With
+        
+        row = row + 1
+        End If
+        rst.MoveNext
+        
+        
+        Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+Principal.txt_kilos.Text = total_kilos
+
+End Function
+Public Function crg_datos_cte_stgo(rut As String) As String
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+row = 1
+sql = "SELECT rut,digito,nombre FROM clientes WHERE rut='" & rut & "'"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+Principal.txt_rut_cte_2.Text = rst!rut & "-" & rst!digito
+Principal.txt_nom_cte_2.Text = rst!nombre
+rst.Close
+Set rst = Nothing
+End Function
+Public Function crg_datos_cte_placilla(rut As String) As String
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+row = 1
+sql = "SELECT cpv_rut,cpv_razonsocial FROM clientes_placilla WHERE cpv_rut='" & rut & "'"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+Principal.txt_rut_cte_2.Text = rst!cpv_rut
+Principal.txt_nom_cte_2.Text = rst!cpv_razonsocial
+rst.Close
+Set rst = Nothing
+End Function
+
+Public Function crg_datos_cte_thno(rut As String) As String
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+row = 1
+sql = "SELECT RUT FROM PESAJES_ITEMS WHERE rut='" & rut & "'"
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+Principal.txt_rut_cte_2.Text = rst!rut
+Principal.txt_nom_cte_2.Text = get_clienteTHNO(rst!rut)
+rst.Close
+Set rst = Nothing
+End Function
+
+Public Function CARGAR_INF_STGO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim fila As Integer
+Dim total_kilos As Long
+
+sql = "SELECT COD_PRODUCTO,DESC_PRODUCTO,NOM_CLIENTE, Sum(PESO_NETO)AS Kilos FROM vista_psjes_stgo WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# GROUP BY COD_PRODUCTO,DESC_PRODUCTO,NOM_CLIENTE"
+row = 1
+total_kilos = 0
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+grilla.Clear
+FORMATO_GRILLA grilla
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+        With grilla
+            .Rows = row + 1
+            .TextMatrix(row, 0) = row
+            If Not IsNull(rst!cod_producto) Then .TextMatrix(row, 1) = rst!cod_producto
+            If Not IsNull(rst!desc_producto) Then .TextMatrix(row, 2) = rst!desc_producto
+            If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 3) = rst!nom_cliente
+            If Not IsNull(rst!kilos) Then .TextMatrix(row, 4) = rst!kilos
+            total_kilos = total_kilos + rst!kilos
+        End With
+        row = row + 1
+        rst.MoveNext
+      Loop
+    grilla.Redraw = True
+    End If
+Principal.grilla_inf_res.TextMatrix(1, 1) = "COMPRAS SANTIAGO"
+Principal.grilla_inf_res.TextMatrix(1, 2) = FormatNumber(total_kilos, 0)
+rst.Close
+Set rst = Nothing
+End Function
+
+Public Function CARGAR_INF_THNO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date, grillaTraslados As MSHFlexGrid)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim fila As Integer
+Dim total_kilos As Long
+
+sql = "SELECT COD_PRODUCTO,NOM_PRODUCTO,NOM_CLIENTE, Sum(PESO_NETO)AS Kilos FROM PESAJE_TALCAHUANO WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY COD_PRODUCTO,NOM_PRODUCTO,NOM_CLIENTE"
+row = 1
+total_kilos = 0
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+grilla.Clear
+FORMATO_GRILLA grilla
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+        With grilla
+            .Rows = row + 1
+            .TextMatrix(row, 0) = row
+            If Not IsNull(rst!cod_producto) Then .TextMatrix(row, 1) = rst!cod_producto
+            If Not IsNull(rst!nom_producto) Then .TextMatrix(row, 2) = rst!nom_producto
+            If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 3) = rst!nom_cliente
+            If Not IsNull(rst!kilos) Then .TextMatrix(row, 4) = rst!kilos
+            total_kilos = total_kilos + rst!kilos
+        End With
+        row = row + 1
+        rst.MoveNext
+      Loop
+    grilla.Redraw = True
+    End If
+Principal.grilla_inf_res.TextMatrix(1, 1) = "COMPRAS TALCAHUANO"
+Principal.grilla_inf_res.TextMatrix(1, 2) = FormatNumber(total_kilos, 0)
+Principal.grilla_inf_res.TextMatrix(2, 1) = ""
+Principal.grilla_inf_res.TextMatrix(2, 2) = ""
+grillaTraslados.Clear
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_STGO_TRAS(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql As String
+Dim total_kilos As Long
+
+sql = "SELECT folio,patente,nom_producto,fecha_ingreso,fecha_salida,peso_bruto,peso_tara,peso_neto FROM VISTA_PSJES_SCRAP_STGO WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "#"
+row = 1
+total_kilos = 0
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+grilla.Clear
+FORMATO_GRILLA grilla
+    If rst.EOF <> True Then
+      grilla.Redraw = False
+      Do While Not rst.EOF
+        With grilla
+            .Rows = row + 1
+            .TextMatrix(row, 0) = row
+            If Not IsNull(rst!folio) Then .TextMatrix(row, 1) = rst!folio
+            If Not IsNull(rst!patente) Then .TextMatrix(row, 2) = rst!patente
+            If Not IsNull(rst!nom_producto) Then .TextMatrix(row, 3) = rst!nom_producto
+            If Not IsNull(rst!fecha_ingreso) Then .TextMatrix(row, 4) = rst!fecha_ingreso
+            If Not IsNull(rst!fecha_salida) Then .TextMatrix(row, 5) = rst!fecha_salida
+            If Not IsNull(rst!peso_bruto) Then .TextMatrix(row, 6) = rst!peso_bruto
+            If Not IsNull(rst!peso_tara) Then .TextMatrix(row, 7) = rst!peso_tara
+            If Not IsNull(rst!peso_neto) Then .TextMatrix(row, 8) = rst!peso_neto
+            total_kilos = total_kilos + rst!peso_neto
+        End With
+        row = row + 1
+        rst.MoveNext
+      Loop
+      grilla.Redraw = True
+    End If
+Principal.grilla_inf_res.TextMatrix(2, 1) = "TRASLADOS A PLACILLA"
+Principal.grilla_inf_res.TextMatrix(2, 2) = FormatNumber(total_kilos, 0)
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_RET_STGO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim fila As Integer
+
+'CONSULTA RETAIL STGO
+sql = "SELECT NOM_CLIENTE, Sum(PESO_NETO) AS Total_kilos FROM VISTA_RETAIL_STGO WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY NOM_CLIENTE"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+        With grilla
+            .Rows = row + 1
+            .TextMatrix(row, 0) = row
+            If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 1) = rst!nom_cliente
+            If Not IsNull(rst!total_kilos) Then .TextMatrix(row, 2) = FormatNumber(rst!total_kilos, 0)
+        End With
+        row = row + 1
+        rst.MoveNext
+      Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_RET_EMP(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim fila As Integer
+
+'CONSULTA RETAIL EMPRESAS
+sql = "SELECT NOM_CLIENTE, Sum(PESO_NETO) AS Total_kilos FROM VISTA_RETAIL_EMPRESAS WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY NOM_CLIENTE"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+        With grilla
+            .Rows = row + 1
+            .TextMatrix(row, 0) = row
+            If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 1) = rst!nom_cliente
+            If Not IsNull(rst!total_kilos) Then .TextMatrix(row, 2) = FormatNumber(rst!total_kilos, 0)
+        End With
+        row = row + 1
+        rst.MoveNext
+      Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_PLACILLA(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql As String
+Dim total_kilos As Long
+
+sql = "SELECT cod_producto,desc_producto,nom_cliente,sum(peso_neto)as Kilos FROM vista_psjes_placilla_entrada WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# GROUP BY cod_producto,desc_producto,nom_cliente"
+total_kilos = 0
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+grilla.Clear
+FORMATO_GRILLA grilla
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!cod_producto) Then .TextMatrix(row, 1) = UCase(rst!cod_producto)
+          If Not IsNull(rst!desc_producto) Then .TextMatrix(row, 2) = UCase(rst!desc_producto)
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 3) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 4) = UCase(rst!kilos)
+          total_kilos = total_kilos + rst!kilos
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+Principal.grilla_inf_res.TextMatrix(1, 1) = "COMPRAS PLACILLA"
+Principal.grilla_inf_res.TextMatrix(1, 2) = FormatNumber(total_kilos, 0)
+End Function
+Public Function CARGAR_INF_TRAS_Pl(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql As String
+Dim total_kilos As Long
+
+sql = "SELECT folio,patente,nom_producto,fecha_ingreso,fecha_salida,peso_bruto,peso_tara,peso_neto FROM vista_psjes_bodega_stgo WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# ORDER BY folio"
+total_kilos = 0
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+grilla.Clear
+FORMATO_GRILLA grilla
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!folio) Then .TextMatrix(row, 1) = UCase(rst!folio)
+          If Not IsNull(rst!patente) Then .TextMatrix(row, 2) = UCase(rst!patente)
+          If Not IsNull(rst!nom_producto) Then .TextMatrix(row, 3) = UCase(rst!nom_producto)
+          If Not IsNull(rst!fecha_ingreso) Then .TextMatrix(row, 4) = UCase(rst!fecha_ingreso)
+          If Not IsNull(rst!fecha_salida) Then .TextMatrix(row, 5) = UCase(rst!fecha_salida)
+          If Not IsNull(rst!peso_bruto) Then .TextMatrix(row, 6) = UCase(rst!peso_bruto)
+          If Not IsNull(rst!peso_tara) Then .TextMatrix(row, 7) = UCase(rst!peso_tara)
+          If Not IsNull(rst!peso_neto) Then .TextMatrix(row, 8) = UCase(rst!peso_neto)
+          total_kilos = total_kilos + rst!peso_neto
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+Principal.grilla_inf_res.TextMatrix(2, 1) = "RECEPCION DESDE SANTIAGO"
+Principal.grilla_inf_res.TextMatrix(2, 2) = FormatNumber(total_kilos, 0)
+End Function
+Public Function CARGAR_INF_AGROSUPER(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes AGROSUPER
+sql = "SELECT nom_cliente,sum(peso_neto)as Kilos FROM VISTA_PSJES_AGROSUPER_PL WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY nom_cliente"
+row = grilla.Rows
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 1) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_PESQUERA(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes PESQUERA
+sql = "SELECT nom_cliente,sum(peso_neto)as Kilos FROM CONSULTA_GRUPO_PESQUERA WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY nom_cliente"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 1) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+End Function
+
+Public Function CARGAR_INF_AGRICOLA(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes grupo agricola
+sql = "SELECT nom_cliente,sum(peso_neto)as Kilos FROM CONSULTA_GRUPO_AGRICOLA WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY nom_cliente"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+    If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 1) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_MIX_STGO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes MIX SUPERMERCADO STGO
+sql = "SELECT nom_cliente,sum(PESO_NETO)as Kilos FROM VISTA_MIX_SUPERMERCADO_STGO WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY NOM_CLIENTE"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 1) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_MIX_PLACILLA(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes MIX SUPERMERCADO PLACILLA
+sql = "SELECT nom_cliente,sum(peso_neto)as Kilos FROM VISTA_MIX_SUPERMERCADO_PLACILLA WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY nom_cliente"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 1) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_RET_REGIONES_STGO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst, rst2, rst3 As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes RETAIL REGIONES STGO
+sql = "SELECT nom_cliente,sum(PESO_NETO)as Kilos FROM VISTA_RETAIL_REGIONES_STGO WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY NOM_CLIENTE"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 1) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(rst!kilos, 0)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+End If
+rst.Close
+Set rst = Nothing
+
+'***************************************************************************************************************************************************************************************************************************************
+
+sql = ""
+Set rst2 = New ADODB.Recordset
+'VISTA RETAIL REGIONES CHRISTIAN MARTINO Y SOS
+sql = "SELECT nom_cliente,sum(peso_neto)as Kilos FROM CONSULTA_REG_MARTINO_SOS WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY nom_cliente"
+rst2.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst2.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst2.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst2!nom_cliente) Then .TextMatrix(row, 1) = UCase(rst2!nom_cliente)
+          If Not IsNull(rst2!kilos) Then .TextMatrix(row, 2) = rst2!kilos
+      End With
+      row = row + 1
+      rst2.MoveNext
+    Loop
+    grilla.Redraw = True
+End If
+rst2.Close
+Set rst2 = Nothing
+
+'***************************************************************************************************************************************************************************************************************************************
+sql = ""
+Set rst3 = New ADODB.Recordset
+'VISTA jaqueline johnson
+sql = "SELECT nom_cliente,sum(peso_neto)as Kilos FROM VISTA_JAC_JOHNSON_PLAC WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY nom_cliente"
+rst3.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst3.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst3.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst3!nom_cliente) Then .TextMatrix(row, 1) = UCase(rst3!nom_cliente)
+          If Not IsNull(rst3!kilos) Then .TextMatrix(row, 2) = rst3!kilos
+      End With
+      row = row + 1
+      rst3.MoveNext
+    Loop
+    grilla.Redraw = True
+End If
+rst3.Close
+Set rst3 = Nothing
+End Function
+Public Function crg_grilla_cte_stgo(grilla As MSHFlexGrid)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'funcion buscar cliente stgo
+sql = "SELECT rut,nombre FROM clientes ORDER BY nombre"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!rut) Then .TextMatrix(row, 1) = UCase(rst!rut)
+          If Not IsNull(rst!nombre) Then .TextMatrix(row, 2) = UCase(rst!nombre)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function crg_grilla_cte_placilla(grilla As MSHFlexGrid)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'funcion buscar cliente placilla
+sql = "SELECT cpv_rut,cpv_razonsocial FROM clientes_placilla ORDER BY cpv_razonsocial"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!cpv_rut) Then .TextMatrix(row, 1) = UCase(rst!cpv_rut)
+          If Not IsNull(rst!cpv_razonsocial) Then .TextMatrix(row, 2) = UCase(rst!cpv_razonsocial)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_GRP_MATERIAL_PL(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes GRUPOS DE MATERIAL PLACILLA
+sql = "SELECT grupo,sum(peso_neto)as Kilos FROM VISTA_PSJES_GRUPO_PLACILLA_2 WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY grupo"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!grupo) Then .TextMatrix(row, 1) = UCase(rst!grupo)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0, , , vbUseDefault)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function CARGAR_INF_GRP_MATERIAL_STGO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes GRUPOS DE MATERIAL SANTIAGO
+sql = "SELECT grupo,sum(PESO_NETO)as Kilos FROM VISTA_PSJES_GRUPO_STGO_2 WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY grupo"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!grupo) Then .TextMatrix(row, 1) = UCase(rst!grupo)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0, , , vbUseDefault)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+End Function
+'*********************************************ESTE ES TALCAHUANO CON LOS DATOS DE SANTIAGO SE DEBE MODIFICAR YA QUE NO CONOSCO LA TABLA TALCAHUANO**********************************
+Public Function CARGAR_INF_GRP_MATERIAL_THNO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes GRUPOS DE MATERIAL TALCAHUANO
+sql = "SELECT grupo,sum(peso_neto)as Kilos FROM VISTA_PSJES_GRUPO_PLACILLA WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY grupo"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!grupo) Then .TextMatrix(row, 1) = UCase(rst!grupo)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+'************************************************************************************************************************************************************************************
+End Function
+
+Public Function CARGAR_INF_GRP_MATERIAL_PL_2(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Long
+
+'pesajes GRUPOS DE MATERIAL PLACILLA
+sql = "SELECT grupo,sum(peso_neto)as Kilos FROM VISTA_PSJES_GRUPO_PLACILLA WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY grupo"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!grupo) Then .TextMatrix(row, 1) = UCase(rst!grupo)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0)
+          total_kilos = total_kilos + rst!kilos
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+Principal.txt_total_plc.Text = total_kilos
+End Function
+Public Function CARGAR_INF_GRP_MATERIAL_STGO_2(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Long
+
+'pesajes GRUPOS DE MATERIAL SANTIAGO
+sql = "SELECT grupo,sum(PESO_NETO)as Kilos FROM PSJES_POR_MATERIAL_STGO WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY grupo "
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!grupo) Then .TextMatrix(row, 1) = UCase(rst!grupo)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0, , , vbUseDefault)
+          total_kilos = total_kilos + rst!kilos
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+Principal.txt_total_stgo.Text = total_kilos
+End Function
+
+Public Function CARGAR_INF_GRP_MATERIAL_THNO_2(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Long
+
+'pesajes GRUPOS DE MATERIAL TALCAHUANO
+sql = "SELECT grupo,sum(peso_neto)as Kilos FROM VISTA_PSJES_GRUPO_THNO_2 WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY grupo"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!grupo) Then .TextMatrix(row, 1) = UCase(rst!grupo)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = FormatNumber(UCase(rst!kilos), 0, , , vbUseDefault)
+          total_kilos = total_kilos + rst!kilos
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+Principal.txt_total_thno.Text = total_kilos
+
+End Function '**********************************************************************************************************
+
+Public Function CARGAR_INF_IMPORTADAS_STGO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst, rst2 As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+Dim total_kilos As Double
+
+'pesajes IMPORTADAS SANTIAGO
+sql = "SELECT nom_producto,sum(PESO_NETO)as Kilos FROM VISTA_IMPORTADAS_STGO WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY nom_producto"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!nom_producto) Then .TextMatrix(row, 1) = UCase(rst!nom_producto)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 2) = UCase(rst!kilos)
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+
+'se ejecuta la consulta de pesajes alta color y alta trans.correspondiente a santiago
+'-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+sql2 = "SELECT grupo,sum(PESO_NETO)as Kilos FROM VISTA_PSJES_ALTA_STGO WHERE FECHA_INGRESO >= #" & Format(fecha_ini, "yyyy-mm-dd") & "# And FECHA_INGRESO <= #" & Format(fecha_term, "yyyy-mm-dd") & "# GROUP BY grupo"
+Set rst2 = New ADODB.Recordset
+rst2.Open sql2, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst2.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst2.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst2!grupo) Then .TextMatrix(row, 1) = UCase(rst2!grupo)
+          If Not IsNull(rst2!kilos) Then .TextMatrix(row, 2) = UCase(rst2!kilos)
+      End With
+      row = row + 1
+      rst2.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst2.Close
+Set rst2 = Nothing
+End Function
+Public Function crg_det_psjes_jcramm(grilla As Object, last_folio As String) As String
+Dim rst As ADODB.Recordset
+Dim row As Integer
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+row = 1
+total_kilos = 0
+sql = "SELECT pes_fecha,pes_num,prd_codigo,prd_descripcion,cam_patente,cpv_razonsocial,cpv_ciudad,pes_pesobruto FROM vista_pjes_det_inf_jcramm WHERE pes_num > " & CDbl(last_folio) & ""
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+    grilla.Redraw = False
+      Do While Not rst.EOF
+        With grilla
+            .Rows = row + 1
+            .TextMatrix(row, 0) = row
+            If Not IsNull(rst.Fields(0)) Then .TextMatrix(row, 1) = rst.Fields(0)
+            If Not IsNull(rst.Fields(1)) Then .TextMatrix(row, 2) = rst.Fields(1)
+            If Not IsNull(rst.Fields(3)) Then .TextMatrix(row, 3) = rst.Fields(3)
+            If Not IsNull(rst.Fields(4)) Then .TextMatrix(row, 4) = rst.Fields(4)
+            If Not IsNull(rst.Fields(5)) Then .TextMatrix(row, 5) = rst.Fields(5)
+            If Not IsNull(rst.Fields(6)) Then .TextMatrix(row, 6) = rst.Fields(6)
+            If Not IsNull(rst.Fields(7)) Then .TextMatrix(row, 7) = FormatNumber(rst.Fields(7), 0, vbUseDefault, vbUseDefault, vbUseDefault)
+            total_kilos = total_kilos + rst.Fields(7)
+            ing_tmp_res_jcramm rst.Fields(2), rst.Fields(3), rst.Fields(7)
+        End With
+        row = row + 1
+        rst.MoveNext
+        Loop
+    grilla.Redraw = True
+    End If
+rst.Close
+Set rst = Nothing
+Principal.txt_total_kilos_det = FormatNumber(total_kilos, 0, vbUseDefault, vbUseDefault, vbUseDefault)
+End Function
+Public Function crg_res_psjes(grilla As MSHFlexGrid)
+Dim rst As ADODB.Recordset
+Dim row As Integer
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+row = 1
+total_kilos = 0
+sql = "SELECT desc_producto,total_kilos FROM vista_tmp_res_jcramm"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+  grilla.Redraw = False
+  Do While Not rst.EOF
+     With grilla
+        .Rows = row + 1
+        .TextMatrix(row, 0) = row
+        If Not IsNull(rst.Fields(0)) Then .TextMatrix(row, 1) = rst.Fields(0)
+        If Not IsNull(rst.Fields(1)) Then .TextMatrix(row, 2) = FormatNumber(rst.Fields(1), 0, vbUseDefault, vbUseDefault, vbUseDefault)
+        total_kilos = total_kilos + rst.Fields(1)
+     End With
+     row = row + 1
+     rst.MoveNext
+  Loop
+  grilla.Redraw = True
+End If
+rst.Close
+Set rst = Nothing
+Principal.txt_res_kilos = FormatNumber(total_kilos, 0, vbUseDefault, vbUseDefault, vbUseDefault)
+End Function
+Public Function buscar_last_folio() As String
+Dim rst As ADODB.Recordset
+Dim row As Integer
+Set rst = New ADODB.Recordset
+Dim sql, total_kilos As String
+row = 1
+total_kilos = 0
+sql = "SELECT folio FROM ultimo_folio"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+  buscar_last_folio = rst.Fields(0)
+  Exit Function
+Else
+  bsucar_last_folio = ""
+End If
+End Function
+Public Function CARGAR_INF_PRECIOS_TEO_PL(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql, precio As String
+Dim total_kilos, total_pesos As Double
+Dim kilos_recam, kilos_super_basulip, kilos_alta As Double
+Dim precio_recam, total_pesos_super_basulip, precio_alta As Double
+Dim total_pesos_sup_bas, precio_prom_sup_bas As Double
+
+sql = "SELECT folio,cod_producto,desc_producto,rut_cliente,nom_cliente,peso_neto as kilos,grupo FROM vista_psjes_precios_placilla_2 WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# ORDER BY folio"
+total_kilos = 0
+precio = 0
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   grilla.Redraw = False
+   Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!folio) Then .TextMatrix(row, 1) = UCase(rst!folio)
+          If Not IsNull(rst!cod_producto) Then .TextMatrix(row, 2) = UCase(rst!cod_producto)
+          If Not IsNull(rst!desc_producto) Then .TextMatrix(row, 3) = UCase(rst!desc_producto)
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 4) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 5) = FormatNumber(UCase(rst!kilos), 0)
+          precio = buscar_precio_pl(rst!rut_cliente, rst!cod_producto)
+          .TextMatrix(row, 6) = FormatCurrency(precio, 0)
+          total_pesos = CDbl(rst!kilos) * precio
+          .TextMatrix(row, 7) = FormatCurrency(total_pesos, 0)
+          .TextMatrix(row, 8) = rst!grupo
+      End With
+      Select Case rst!grupo
+         Case Is = "RECAM"
+             kilos_recam = kilos_recam + rst!kilos
+             total_pesos_recam = total_pesos_recam + total_pesos
+         Case Is = "ALTA"
+             kilos_alta = kilos_alta + rst!kilos
+             total_pesos_alta = total_pesos_alta + total_pesos
+         Case Is = "SUPER-BASULIP"
+             kilos_super_basulip = kilos_super_basulip + rst!kilos
+             total_pesos_super_basulip = total_pesos_super_basulip + total_pesos
+      End Select
+      row = row + 1
+      rst.MoveNext
+      total_pesos = 0
+   Loop
+   grilla.Redraw = True
+End If
+rst.Close
+Set rst = Nothing
+With Principal.grilla_res_mat_precio
+    .TextMatrix(1, 1) = "SUPER BASULIP"
+    .TextMatrix(1, 2) = FormatNumber(kilos_super_basulip, 0)
+    If kilos_super_basulip > 0 Then
+      .TextMatrix(1, 3) = FormatCurrency(total_pesos_super_basulip / kilos_super_basulip, 2)
+    Else
+      .TextMatrix(1, 3) = 0
+    End If
+    .TextMatrix(2, 1) = "RECAM"
+    .TextMatrix(2, 2) = FormatNumber(kilos_recam, 0)
+    If kilos_recam > 0 Then
+       .TextMatrix(2, 3) = FormatCurrency(total_pesos_recam / kilos_recam, 2)
+    Else
+       .TextMatrix(2, 3) = 0
+    End If
+    .TextMatrix(3, 1) = "ALTA"
+    .TextMatrix(3, 2) = FormatNumber(kilos_alta, 0)
+    If kilos_alta > 0 Then
+      .TextMatrix(3, 3) = FormatCurrency(total_pesos_alta / kilos_alta, 2)
+    Else
+      .TextMatrix(3, 3) = 0
+    End If
+End With
+End Function
+Public Function CARGAR_INF_PRECIOS_REALES_PL(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql, precio As String
+Dim total_kilos, total_pesos As Double
+Dim kilos_recam, kilos_super_basulip, kilos_alta As Double
+Dim precio_recam, total_pesos_super_basulip, precio_alta As Double
+Dim total_pesos_sup_bas, precio_prom_sup_bas As Double
+
+sql = "SELECT folio,cod_producto,desc_producto,rut_cliente,nom_cliente,peso_neto as kilos,grupo FROM vista_psjes_precios_placilla_2 WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# ORDER BY folio"
+total_kilos = 0
+precio = 0
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   grilla.Redraw = False
+   Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!folio) Then .TextMatrix(row, 1) = UCase(rst!folio)
+          If Not IsNull(rst!cod_producto) Then .TextMatrix(row, 2) = UCase(rst!cod_producto)
+          If Not IsNull(rst!desc_producto) Then .TextMatrix(row, 3) = UCase(rst!desc_producto)
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 4) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 5) = FormatNumber(UCase(rst!kilos), 0)
+          precio = buscar_precio_pl_2(rst!folio)
+          .TextMatrix(row, 6) = FormatCurrency(precio, 0)
+          total_pesos = CDbl(rst!kilos) * precio
+          .TextMatrix(row, 7) = FormatCurrency(total_pesos, 0)
+          .TextMatrix(row, 8) = rst!grupo
+      End With
+      Select Case rst!grupo
+         Case Is = "RECAM"
+             kilos_recam = kilos_recam + rst!kilos
+             total_pesos_recam = total_pesos_recam + total_pesos
+         Case Is = "ALTA"
+             kilos_alta = kilos_alta + rst!kilos
+             total_pesos_alta = total_pesos_alta + total_pesos
+         Case Is = "SUPER-BASULIP"
+             kilos_super_basulip = kilos_super_basulip + rst!kilos
+             total_pesos_super_basulip = total_pesos_super_basulip + total_pesos
+      End Select
+      row = row + 1
+      rst.MoveNext
+      total_pesos = 0
+   Loop
+   grilla.Redraw = True
+End If
+rst.Close
+Set rst = Nothing
+With Principal.grilla_res_mat_precio
+    .TextMatrix(1, 1) = "SUPER BASULIP"
+    .TextMatrix(1, 2) = FormatNumber(kilos_super_basulip, 0)
+    If kilos_super_basulip > 0 Then
+       .TextMatrix(1, 3) = FormatCurrency(total_pesos_super_basulip / kilos_super_basulip, 2)
+    Else
+       .TextMatrix(1, 3) = 0
+    End If
+    .TextMatrix(2, 1) = "RECAM"
+    .TextMatrix(2, 2) = FormatNumber(kilos_recam, 0)
+    If kilos_recam > 0 Then
+       .TextMatrix(2, 3) = FormatCurrency(total_pesos_recam / kilos_recam, 2)
+    Else
+       .TextMatrix(2, 3) = 0
+    End If
+    .TextMatrix(3, 1) = "ALTA"
+    .TextMatrix(3, 2) = FormatNumber(kilos_alta, 0)
+    If kilos_alta > 0 Then
+       .TextMatrix(3, 3) = FormatCurrency(total_pesos_alta / kilos_alta, 2)
+    Else
+       .TextMatrix(3, 3) = 0
+    End If
+End With
+End Function
+Public Function CARGAR_INF_PRECIOS_REALES_PL_2(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Dim row, fila As Integer
+Dim sql, sql2, precio As String
+Dim total_kilos, total_pesos As Double
+Dim kilos_recam, kilos_super_basulip, kilos_alta As Double
+Dim precio_recam, total_pesos_super_basulip, precio_alta As Double
+Dim total_pesos_sup_bas, precio_prom_sup_bas As Double
+
+Set rst = New ADODB.Recordset
+sql = "SELECT folio,cod_producto,desc_producto,rut_cliente,nom_cliente,peso_neto as kilos,grupo FROM vista_psjes_precios_placilla_2 WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# And fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# ORDER BY folio"
+total_kilos = 0
+precio = 0
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   Do While Not rst.EOF
+      ing_tmp_precio_prov rst!cod_producto, rst!desc_producto, rst!nom_cliente, rst!kilos, buscar_precio_pl_2(rst!folio), rst!grupo
+      rst.MoveNext
+   Loop
+End If
+
+rst.Close
+Set rst = Nothing
+
+'############################################################################################################################################################
+
+Set rst = New ADODB.Recordset
+sql = "SELECT cod_prod,nom_prod,nom_prov,sum(kilos)as t_kilos,precio,grupo FROM tmp_inf_precio_prov_res GROUP BY cod_prod,nom_prod,nom_prov,precio,grupo"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+
+If rst.EOF <> True Then
+   frm_grilla_psjes_precios_2
+   grilla.Redraw = False
+   Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!cod_prod) Then .TextMatrix(row, 1) = UCase(rst!cod_prod)
+          If Not IsNull(rst!nom_prod) Then .TextMatrix(row, 2) = UCase(rst!nom_prod)
+          If Not IsNull(rst!nom_prov) Then .TextMatrix(row, 3) = UCase(rst!nom_prov)
+          If Not IsNull(rst!t_kilos) Then .TextMatrix(row, 4) = FormatNumber(UCase(rst!t_kilos), 0)
+          If Not IsNull(rst!precio) Then .TextMatrix(row, 5) = FormatCurrency(rst!precio, 0)
+          precio = rst!precio
+          total_pesos = CDbl(rst!t_kilos) * precio
+          .TextMatrix(row, 6) = FormatCurrency(total_pesos, 0)
+          .TextMatrix(row, 7) = rst!grupo
+      End With
+      Select Case rst!grupo
+         Case Is = "RECAM"
+             kilos_recam = kilos_recam + rst!t_kilos
+             total_pesos_recam = total_pesos_recam + total_pesos
+         Case Is = "ALTA"
+             kilos_alta = kilos_alta + rst!t_kilos
+             total_pesos_alta = total_pesos_alta + total_pesos
+         Case Is = "SUPER-BASULIP"
+             kilos_super_basulip = kilos_super_basulip + rst!t_kilos
+             total_pesos_super_basulip = total_pesos_super_basulip + total_pesos
+      End Select
+      row = row + 1
+      rst.MoveNext
+      total_pesos = 0
+   Loop
+   grilla.Redraw = True
+End If
+rst.Close
+Set rst = Nothing
+With Principal.grilla_res_mat_precio
+    .TextMatrix(1, 1) = "SUPER BASULIP"
+    .TextMatrix(1, 2) = FormatNumber(kilos_super_basulip, 0)
+    .TextMatrix(1, 3) = FormatCurrency(total_pesos_super_basulip / kilos_super_basulip, 2)
+    .TextMatrix(2, 1) = "RECAM"
+    .TextMatrix(2, 2) = FormatNumber(kilos_recam, 0)
+    .TextMatrix(2, 3) = FormatCurrency(total_pesos_recam / kilos_recam, 2)
+    .TextMatrix(3, 1) = "ALTA"
+    .TextMatrix(3, 2) = FormatNumber(kilos_alta, 0)
+    .TextMatrix(3, 3) = FormatCurrency(total_pesos_alta / kilos_alta, 2)
+End With
+End Function
+Public Function CARGAR_INF_PRECIOS_TEO_STGO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql, precio As String
+Dim total_kilos, total_pesos As Double
+Dim kilos_recam, kilos_super_basulip, kilos_alta As Double
+Dim precio_recam, total_pesos_super_basulip, precio_alta As Double
+Dim total_pesos_sup_bas, precio_prom_sup_bas As Double
+
+sql = "SELECT folio,cod_producto,nom_producto,rut_cliente,nom_cliente,peso_neto,grupo FROM vista_psjes_precios_stgo_2 WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# AND fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# ORDER BY folio"
+total_kilos = 0
+precio = 0
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+total_pesos_alta = 0
+If rst.EOF <> True Then
+   grilla.Redraw = False
+   Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!folio) Then .TextMatrix(row, 1) = UCase(rst!folio)
+          If Not IsNull(rst!cod_producto) Then .TextMatrix(row, 2) = UCase(rst!cod_producto)
+          If Not IsNull(rst!nom_producto) Then .TextMatrix(row, 3) = UCase(rst!nom_producto)
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 4) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!peso_neto) Then .TextMatrix(row, 5) = FormatNumber(UCase(rst!peso_neto), 0)
+          precio = buscar_precio_stgo(rst!rut_cliente, rst!cod_producto)
+          .TextMatrix(row, 6) = FormatCurrency(precio, 0)
+          total_pesos = CDbl(rst!peso_neto) * precio
+          .TextMatrix(row, 7) = FormatCurrency(total_pesos, 0)
+          .TextMatrix(row, 8) = rst!grupo
+      End With
+      Select Case rst!grupo
+         Case Is = "RECAM"
+             kilos_recam = kilos_recam + rst!peso_neto
+             total_pesos_recam = total_pesos_recam + total_pesos
+         Case Is = "ALTA"
+             kilos_alta = kilos_alta + rst!peso_neto
+             total_pesos_alta = total_pesos_alta + total_pesos
+         Case Is = "SUPER-BASULIP"
+             kilos_super_basulip = kilos_super_basulip + rst!peso_neto
+             total_pesos_super_basulip = total_pesos_super_basulip + total_pesos
+      End Select
+      row = row + 1
+      rst.MoveNext
+      total_pesos = 0
+   Loop
+   grilla.Redraw = True
+End If
+rst.Close
+Set rst = Nothing
+With Principal.grilla_res_mat_precio
+    .TextMatrix(1, 1) = "SUPER BASULIP"
+    .TextMatrix(1, 2) = FormatNumber(kilos_super_basulip, 0)
+    .TextMatrix(1, 3) = FormatCurrency(total_pesos_super_basulip / kilos_super_basulip, 2)
+    .TextMatrix(2, 1) = "RECAM"
+    .TextMatrix(2, 2) = FormatNumber(kilos_recam, 0)
+    .TextMatrix(2, 3) = FormatCurrency(total_pesos_recam / kilos_recam, 2)
+    .TextMatrix(3, 1) = "ALTA"
+    .TextMatrix(3, 2) = FormatNumber(kilos_alta, 0)
+    If total_pesos_alta = 0 Or kilos_alta = 0 Then
+       .TextMatrix(3, 3) = 0
+    Else
+       .TextMatrix(3, 3) = FormatCurrency(total_pesos_alta / kilos_alta, 2)
+    End If
+End With
+End Function
+Public Function CARGAR_INF_PRECIOS_REALES_STGO(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql, precio As String
+Dim total_kilos, total_pesos As Double
+Dim kilos_recam, kilos_super_basulip, kilos_alta As Double
+Dim precio_recam, total_pesos_super_basulip, precio_alta As Double
+Dim total_pesos_sup_bas, precio_prom_sup_bas As Double
+
+sql = "SELECT folio,cod_producto,nom_producto,rut_cliente,nom_cliente,peso_neto as kilos,grupo FROM vista_psjes_precios_stgo_2 WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# AND fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# ORDER BY folio"
+total_kilos = 0
+precio = 0
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   grilla.Redraw = False
+   Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!folio) Then .TextMatrix(row, 1) = UCase(rst!folio)
+          If Not IsNull(rst!cod_producto) Then .TextMatrix(row, 2) = UCase(rst!cod_producto)
+          If Not IsNull(rst!nom_producto) Then .TextMatrix(row, 3) = UCase(rst!nom_producto)
+          If Not IsNull(rst!nom_cliente) Then .TextMatrix(row, 4) = UCase(rst!nom_cliente)
+          If Not IsNull(rst!kilos) Then .TextMatrix(row, 5) = FormatNumber(UCase(rst!kilos), 0)
+          precio = buscar_precio_stgo_2(rst!folio)
+          .TextMatrix(row, 6) = FormatCurrency(precio, 0)
+          total_pesos = CDbl(rst!kilos) * precio
+          .TextMatrix(row, 7) = FormatCurrency(total_pesos, 0)
+          .TextMatrix(row, 8) = rst!grupo
+      End With
+      Select Case rst!grupo
+         Case Is = "RECAM"
+             kilos_recam = kilos_recam + rst!kilos
+             total_pesos_recam = total_pesos_recam + total_pesos
+         Case Is = "ALTA"
+             kilos_alta = kilos_alta + rst!kilos
+             total_pesos_alta = total_pesos_alta + total_pesos
+         Case Is = "SUPER-BASULIP"
+             kilos_super_basulip = kilos_super_basulip + rst!kilos
+             total_pesos_super_basulip = total_pesos_super_basulip + total_pesos
+      End Select
+      row = row + 1
+      rst.MoveNext
+      total_pesos = 0
+   Loop
+   grilla.Redraw = True
+End If
+rst.Close
+Set rst = Nothing
+With Principal.grilla_res_mat_precio
+    .TextMatrix(1, 1) = "SUPER BASULIP"
+    .TextMatrix(1, 2) = FormatNumber(kilos_super_basulip, 0)
+    .TextMatrix(1, 3) = FormatCurrency(total_pesos_super_basulip / kilos_super_basulip, 2)
+    .TextMatrix(2, 1) = "RECAM"
+    .TextMatrix(2, 2) = FormatNumber(kilos_recam, 0)
+    .TextMatrix(2, 3) = FormatCurrency(total_pesos_recam / kilos_recam, 2)
+    .TextMatrix(3, 1) = "ALTA"
+    .TextMatrix(3, 2) = FormatNumber(kilos_alta, 0)
+    If total_pesos_alta = 0 Or kilos_alta = 0 Then
+       .TextMatrix(3, 3) = 0
+    Else
+       .TextMatrix(3, 3) = FormatCurrency(total_pesos_alta / kilos_alta, 2)
+    End If
+End With
+End Function
+Public Function CARGAR_INF_PRECIOS_REALES_STGO_2(grilla As MSHFlexGrid, fecha_ini As Date, fecha_term As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row, fila As Integer
+Dim sql, precio As String
+Dim total_kilos, total_pesos As Double
+Dim kilos_recam, kilos_super_basulip, kilos_alta As Double
+Dim precio_recam, total_pesos_super_basulip, precio_alta As Double
+Dim total_pesos_sup_bas, precio_prom_sup_bas As Double
+
+sql = "SELECT folio,cod_producto,nom_producto,rut_cliente,nom_cliente,peso_neto,grupo FROM vista_psjes_precios_stgo_2 WHERE fecha_ingreso >= #" & Format(fecha_ini, "yyyy-mm-dd HH:mm") & "# AND fecha_ingreso <= #" & Format(fecha_term, "yyyy-mm-dd HH:mm") & "# ORDER BY folio"
+total_kilos = 0
+precio = 0
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+
+If rst.EOF <> True Then
+   Do While Not rst.EOF
+      ing_tmp_precio_prov rst!cod_producto, rst!nom_producto, rst!nom_cliente, rst!peso_neto, buscar_precio_stgo_2(rst!folio), rst!grupo
+      rst.MoveNext
+   Loop
+End If
+
+rst.Close
+Set rst = Nothing
+
+'###################################################################################################################################################################################################################################################################################
+Set rst = New ADODB.Recordset
+sql = "SELECT cod_prod,nom_prod,nom_prov,sum(kilos)as t_kilos,precio,grupo FROM tmp_inf_precio_prov_res GROUP BY cod_prod,nom_prod,nom_prov,precio,grupo"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+
+If rst.EOF <> True Then
+   frm_grilla_psjes_precios_2
+   grilla.Redraw = False
+   Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst!cod_prod) Then .TextMatrix(row, 1) = UCase(rst!cod_prod)
+          If Not IsNull(rst!nom_prod) Then .TextMatrix(row, 2) = UCase(rst!nom_prod)
+          If Not IsNull(rst!nom_prov) Then .TextMatrix(row, 3) = UCase(rst!nom_prov)
+          If Not IsNull(rst!t_kilos) Then .TextMatrix(row, 4) = FormatNumber(UCase(rst!t_kilos), 0)
+          precio = rst!precio
+          .TextMatrix(row, 5) = FormatCurrency(precio, 0)
+          total_pesos = CDbl(rst!t_kilos) * precio
+          .TextMatrix(row, 6) = FormatCurrency(total_pesos, 0)
+          .TextMatrix(row, 7) = rst!grupo
+      End With
+      Select Case rst!grupo
+         Case Is = "RECAM"
+             kilos_recam = kilos_recam + rst!t_kilos
+             total_pesos_recam = total_pesos_recam + total_pesos
+         Case Is = "ALTA"
+             kilos_alta = kilos_alta + rst!t_kilos
+             total_pesos_alta = total_pesos_alta + total_pesos
+         Case Is = "SUPER-BASULIP"
+             kilos_super_basulip = kilos_super_basulip + rst!t_kilos
+             total_pesos_super_basulip = total_pesos_super_basulip + total_pesos
+      End Select
+      row = row + 1
+      rst.MoveNext
+      total_pesos = 0
+   Loop
+   grilla.Redraw = True
+End If
+rst.Close
+Set rst = Nothing
+With Principal.grilla_res_mat_precio
+    .TextMatrix(1, 1) = "SUPER BASULIP"
+    .TextMatrix(1, 2) = FormatNumber(kilos_super_basulip, 0)
+    .TextMatrix(1, 3) = FormatCurrency(total_pesos_super_basulip / kilos_super_basulip, 2)
+    .TextMatrix(2, 1) = "RECAM"
+    .TextMatrix(2, 2) = FormatNumber(kilos_recam, 0)
+    .TextMatrix(2, 3) = FormatCurrency(total_pesos_recam / kilos_recam, 2)
+    .TextMatrix(3, 1) = "ALTA"
+    .TextMatrix(3, 2) = FormatNumber(kilos_alta, 0)
+    If total_pesos_alta = 0 Or kilos_alta = 0 Then
+       .TextMatrix(3, 3) = 0
+    Else
+       .TextMatrix(3, 3) = FormatCurrency(total_pesos_alta / kilos_alta, 2)
+    End If
+End With
+End Function
+Public Function buscar_precio_pl(rut As String, cod_prod As String) As String
+Dim rst As ADODB.Recordset
+Dim row As Integer
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT precio FROM precios_proveedor_placilla WHERE cpv_rut='" & rut & "' and prd_codigo='" & cod_prod & "'"
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+  buscar_precio_pl = rst.Fields(0)
+  Exit Function
+Else
+  buscar_precio_pl = 0
+End If
+End Function
+Public Function buscar_precio_pl_2(folio As String) As String
+Dim rst As ADODB.Recordset
+Dim row As Integer
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT pes_numcor FROM index_pesaje_placilla WHERE pes_num=" & folio & " "
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+  buscar_precio_pl_2 = rst.Fields(0)
+  Exit Function
+Else
+  buscar_precio_pl_2 = 0
+End If
+End Function
+Public Function buscar_precio_stgo(rut As String, cod_prod As String) As String
+  Dim rst As ADODB.Recordset
+  Dim row As Integer
+  Set rst = New ADODB.Recordset
+  Dim sql As String
+
+  sql = "SELECT precio FROM precios_proveedor_stgo WHERE cpv_rut='" & rut & "' and prd_codigo='" & cod_prod & "'"
+  rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+  If rst.EOF <> True Then
+     buscar_precio_stgo = rst.Fields(0)
+     Exit Function
+  Else
+     buscar_precio_stgo = 0
+  End If
+End Function
+Public Function buscar_precio_stgo_2(folio As String) As String
+  Dim rst As ADODB.Recordset
+  Dim row As Integer
+  Set rst = New ADODB.Recordset
+  Dim sql As String
+
+  sql = "SELECT pes_numcor FROM index_pesaje_santiago WHERE pes_num=" & folio & ""
+  rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+  If rst.EOF <> True Then
+     buscar_precio_stgo_2 = rst.Fields(0)
+     Exit Function
+  Else
+     buscar_precio_stgo_2 = 0
+  End If
+End Function
+Public Function crg_grilla_prod(grilla As MSHFlexGrid)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+
+
+sql = "SELECT prd_codigo,prd_descripcion FROM producto ORDER BY prd_codigo"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst.Fields(0)) Then .TextMatrix(row, 1) = UCase(rst.Fields(0))
+          If Not IsNull(rst.Fields(1)) Then .TextMatrix(row, 2) = UCase(rst.Fields(1))
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+End Function
+Public Function crg_precio_prod(grilla As MSHFlexGrid)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+
+
+sql = "SELECT prd_codigo,prd_descripcion FROM producto ORDER BY prd_codigo"
+row = 1
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+ If rst.EOF <> True Then
+    grilla.Redraw = False
+    Do While Not rst.EOF
+      With grilla
+          .Rows = row + 1
+          .TextMatrix(row, 0) = row
+          If Not IsNull(rst.Fields(0)) Then .TextMatrix(row, 1) = UCase(rst.Fields(0))
+          If Not IsNull(rst.Fields(1)) Then .TextMatrix(row, 2) = UCase(rst.Fields(1))
+      End With
+      row = row + 1
+      rst.MoveNext
+    Loop
+    grilla.Redraw = True
+ End If
+rst.Close
+Set rst = Nothing
+End Function
+
+Public Sub CRG_INF_PES_IMP_PL(grilla As MSHFlexGrid, fecha_ini As Date, FECHA_FIN As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+
+row = 1
+
+sql = "select flpesaje, tpesaje, patente, bruto, tara, neto, producto, cliente, origen, destino, gdespacho, fechaing, horaing, fechasal, horasal, observa1 FROM dbpesajes WHERE fechaing >='" & form_fecha(CStr(fecha_ini)) & "' and fechaing <='" & form_fecha(CStr(FECHA_FIN)) & "' ORDER BY flpesaje"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+    If rst.EOF <> True Then
+      FORMATO_GRILLA grilla
+      grilla.Redraw = False
+        Do While Not rst.EOF
+           With grilla
+              .Rows = row + 1
+              .TextMatrix(row, 0) = row
+              If Not IsNull(rst!flpesaje) Then .TextMatrix(row, 1) = rst!flpesaje
+              If Not IsNull(rst!tpesaje) Then .TextMatrix(row, 2) = get_tipo_pesaje2(rst!tpesaje)
+              If Not IsNull(rst!patente) Then .TextMatrix(row, 3) = rst!patente
+              If Not IsNull(rst!BRUTO) Then .TextMatrix(row, 4) = rst!BRUTO
+              If Not IsNull(rst!tara) Then .TextMatrix(row, 5) = rst!tara
+              If Not IsNull(rst!neto) Then .TextMatrix(row, 6) = rst!neto
+              If Not IsNull(rst!producto) Then .TextMatrix(row, 7) = rst!producto
+              If Not IsNull(rst!producto) Then .TextMatrix(row, 8) = get_producto(rst!producto)
+              If Not IsNull(rst!cliente) Then .TextMatrix(row, 9) = rst!cliente
+              If Not IsNull(rst!cliente) Then .TextMatrix(row, 10) = get_cliente(rst!cliente)
+              If Not IsNull(rst!origen) Then .TextMatrix(row, 11) = get_origen(rst!origen)
+              If Not IsNull(rst!destino) Then .TextMatrix(row, 12) = get_destino(rst!destino)
+              If Not IsNull(rst!gdespacho) Then .TextMatrix(row, 13) = rst!gdespacho
+              If Not IsNull(rst!fechaing) Then .TextMatrix(row, 14) = rst!fechaing
+              If Not IsNull(rst!horaing) Then .TextMatrix(row, 15) = rst!horaing
+              If Not IsNull(rst!fechasal) Then .TextMatrix(row, 16) = rst!fechasal
+              If Not IsNull(rst!horasal) Then .TextMatrix(row, 17) = rst!horasal
+              If Not IsNull(rst!observa1) Then .TextMatrix(row, 18) = rst!observa1
+           End With
+           row = row + 1
+           rst.MoveNext
+        Loop
+        grilla.Redraw = True
+    Else
+        MsgBox "No se han encontrado datos", vbExclamation, "Validación"
+    End If
+rst.Close
+End Sub
+'****************************** MIO PROBANDO :s************************************
+Public Sub CRG_INF_PES_IMP_THNO(grilla As MSHFlexGrid, fecha_ini As Date, FECHA_FIN As Date)
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim row As Integer
+Dim sql As String
+
+row = 1
+
+sql = "select IDPSJ, ITEM, FECHA, RUT, CDGDIRECCION, CDGPRODUCTO, GUIA, BRUTO, CDGCONTENEDOR, TARACONTENEDOR, LOTE, IDBULTO, ESTADO, CANTIDADCONTENEDORES, UNIDAD FROM PESAJES_ITEMS WHERE FECHA >='" & form_fecha(CStr(fecha_ini)) & "' and FECHA  <='" & form_fecha(CStr(FECHA_FIN)) & "' ORDER BY IDPSJ"
+'sql2 = "select PATENTE FROM PESAJES WHERE CONDUCTOR = '" & get_cliente(rst!rut) & "'"
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+    If rst.EOF <> True Then
+      FORMATO_GRILLA grilla
+      grilla.Redraw = False
+        Do While Not rst.EOF
+           With grilla
+              .Rows = row + 1
+              .TextMatrix(row, 0) = row
+              If Not IsNull(rst!idpsj) Then .TextMatrix(row, 1) = rst!idpsj
+              If Not IsNull(rst!Item) Then .TextMatrix(row, 2) = get_tipo_pesajeTHNO("R")
+               If Not IsNull(get_clienteTHNO(rst!rut)) Then .TextMatrix(row, 3) = "" '
+              If Not IsNull(rst!BRUTO) Then .TextMatrix(row, 4) = ""
+              If Not IsNull(rst!BRUTO) Then .TextMatrix(row, 5) = ""
+              If Not IsNull(rst!BRUTO) Then .TextMatrix(row, 6) = rst!BRUTO
+              If Not IsNull(rst!CDGPRODUCTO) Then .TextMatrix(row, 7) = rst!CDGPRODUCTO
+              If Not IsNull(rst!CDGPRODUCTO) Then .TextMatrix(row, 8) = get_productoTHNO(rst!CDGPRODUCTO)
+              If Not IsNull(rst!rut) Then .TextMatrix(row, 9) = rst!rut
+              If Not IsNull(rst!rut) Then .TextMatrix(row, 10) = get_clienteTHNO(rst!rut)
+              If Not IsNull(rst!rut) Then .TextMatrix(row, 11) = ""
+              If Not IsNull(rst!rut) Then .TextMatrix(row, 12) = ""
+              If Not IsNull(rst!rut) Then .TextMatrix(row, 13) = ""
+              If Not IsNull(rst!FECHA) Then .TextMatrix(row, 14) = Format(rst!FECHA, "dd-MM-yyyy")
+              If Not IsNull(rst!FECHA) Then .TextMatrix(row, 15) = Format(rst!FECHA, "hh:mm:ss")
+              If Not IsNull(rst!rut) Then .TextMatrix(row, 16) = ""
+              If Not IsNull(rst!rut) Then .TextMatrix(row, 17) = ""
+              If Not IsNull(rst!rut) Then .TextMatrix(row, 18) = ""
+              'IMPORTANTE UTILIZO EL RUT EN LOS CAMPOS PARA PODER DEJARLOS EN BLANCO DEBIDO A QUE NO TENGO EL VALOR DE LOS DATOS
+           End With
+           row = row + 1
+           rst.MoveNext
+        Loop
+        grilla.Redraw = True
+    Else
+        MsgBox "No se han encontrado datos", vbExclamation, "Validación"
+    End If
+rst.Close
+End Sub
+
+Public cnt As ADODB.Connection
+Public cntfb As ADODB.Connection
+Public rst As ADODB.Recordset
+Public rstfb As ADODB.Recordset
+Public conexion As String
+Option Explicit
+Private Declare Function FindWindowA Lib "user32" (ByVal lpClassName As String, ByVal lpWindowName As String) As Long
+Private Declare Function GetWindowLongA Lib "user32" (ByVal hwnd As Long, ByVal nIndex As Long) As Long
+Private Declare Function SetWindowLongA Lib "user32" (ByVal hwnd As Long, ByVal nIndex As Long, ByVal dwNewLong As Long) As Long
+Public Declare Function LockWindowUpdate Lib "user32" (ByVal hWndLock As Long) As Long
+Public Const WS_MINIMIZE As Long = &H20000
+Public Const WS_MAXIMIZE As Long = &H10000
+Public Const GWL_STYLE As Long = (-16)
+Public Const RUTA_BD_FIREBIRD As String = "192.168.2.56:\BDWM\placilla2\WMDBSPC.GDB"
+
+Sub FormatUserForm(UserFormCaption As String) 'funcion para aplicar propiedades de minimizar y maximizar al formulario
+    Dim lngMyHandle As Long, lngCurrentStyle As Long, lngNewStyle As Long
+    
+'   'Obtenemos el "Handle" del Userform
+    lngMyHandle = FindWindowA(vbNullString, UserFormCaption)
+'   'Obtenemos el estilo actual del UserForm
+    lngCurrentStyle = GetWindowLongA(lngMyHandle, GWL_STYLE)
+'   'Creamos un nuevo estilo de titulo con los botones deseados
+    lngNewStyle = lngCurrentStyle Or WS_MINIMIZE Or WS_MAXIMIZE
+'   'Aplicamos las nuevas propiedades al UserForm
+    SetWindowLongA lngMyHandle, GWL_STYLE, lngNewStyle
+End Sub
+Public Sub conectarBD()
+Dim ruta As String
+ruta = ThisWorkbook.Path & "\conexionBD_Scrap.udl"
+Set cnt = New ADODB.Connection
+With cnt
+    .CursorLocation = adUseClient
+    .ConnectionString = "FILE NAME=" & ruta
+    .Open cnt
+    Set rst = New Recordset
+End With
+End Sub
+Public Sub conectarBdFirebird(ruta As String)
+  Set cntfb = New ADODB.Connection
+  Dim usuario As String
+  Dim Password As String
+  Dim Driver As String
+  Dim cmd As ADODB.Command
+
+  Driver = "Firebird/InterBase(r) driver"
+  usuario = "SYSDBA"
+  Password = "masterkey"
+  
+
+  conexion = "DRIVER=" & Driver & "; UID=" & usuario & "; PWD=" & Password & "; DBNAME=" & ruta & ";"
+  cntfb.Open conexion ' conectamos la BD
+End Sub
+Public Sub desconectarBD()
+  Set cnt = Nothing
+  Set rst = Nothing
+End Sub
+Public Sub desconectarBdFirebird()
+  Set cntfb = Nothing
+  Set rstfb = Nothing
+End Sub
+Public Function form_fecha(FECHA As String) As String
+Dim f As String
+
+f = Left(FECHA, 2) & "." & Right(Left(FECHA, 5), 2) & "." & Right(FECHA, 4)
+
+form_fecha = f
+End Function
+Public Sub FORMATO_GRILLA(grilla As Object) 'procedimiento que da formato a las grillas
+   With grilla
+       .Redraw = False
+            Select Case LCase(grilla.Name)
+                Case Is = "grilla_inf_compras"
+                   .Rows = 2
+                   .Cols = 4
+                   .FormatString = "N°|CODIGO|DESCRIPCION|RAZON SOCIAL|TOTAL KILOS"
+                   .TextMatrix(1, 0) = "1"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .ColAlignment(3) = 0
+                   .ColAlignment(4) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 350
+                   .ColWidth(1) = 1000
+                   .ColWidth(2) = 3500
+                   .ColWidth(3) = 3000
+                   .ColWidth(4) = 1200
+                 Case Is = "grilla_inf_tras"
+                   .Rows = 2
+                   .Cols = 8
+                   .FormatString = "N°|FOLIO|PATENTE|PRODUCTO|FECHA ENTRADA|FECHA SALIDA|PESO ENTRADA|PESO SALIDA|TOTAL KILOS"
+                   .TextMatrix(1, 0) = "1"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .ColAlignment(3) = 0
+                   .ColAlignment(4) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 350
+                   .ColWidth(1) = 800
+                   .ColWidth(2) = 800
+                   .ColWidth(3) = 2800
+                   .ColWidth(4) = 1400
+                   .ColWidth(5) = 1200
+                   .ColWidth(6) = 1300
+                   .ColWidth(7) = 1100
+                   .ColWidth(8) = 1100
+                 Case Is = "grilla_inf_cte"
+                   .Rows = 2
+                   .Cols = 8
+                   .FormatString = "N°|N°FOLIO|PATENTE|PRODUCTO|FECHA ENT.|FECHA SAL.|PESO ENT.|PESO.SAL|PESO NETO"
+                   .TextMatrix(1, 0) = "1"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .ColAlignment(3) = 0
+                   .ColAlignment(4) = 0
+                   .ColAlignment(5) = 0
+                   .ColAlignment(6) = 0
+                   .ColAlignment(7) = 0
+                   .ColAlignment(8) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 350
+                   .ColWidth(1) = 800
+                   .ColWidth(2) = 800
+                   .ColWidth(3) = 3000
+                   .ColWidth(4) = 1000
+                   .ColWidth(5) = 1000
+                   .ColWidth(6) = 1000
+                   .ColWidth(7) = 1000
+                   .ColWidth(8) = 1000
+                 Case Is = "grilla_inf_res"
+                   .Rows = 4
+                   .Cols = 3
+                   .FormatString = "n°|DESCRIPCION|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .RowHeight(2) = 270
+                   .RowHeight(3) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2500
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_grp_agr"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|CLIENTE|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2800
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_grp_pes"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|CLIENTE|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2800
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_grp_ret_stgo"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|CLIENTE|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2800
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_mix_stgo"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|CLIENTE|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2800
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_grp_ret_emp"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|CLIENTE|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2800
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_mix_placilla"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|CLIENTE|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2800
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_grp_ret_reg"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|CLIENTE|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2800
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_buscar_cte"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|RUT|NOMBRE CLIENTE"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 1000
+                   .ColWidth(2) = 3500
+                 Case Is = "grilla_psjes_mat_pl"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|GRUPO|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2000
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_psjes_mat_stgo"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|GRUPO|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2000
+                   .ColWidth(2) = 1100
+                 Case Is = "grilla_pes_stgo_mat"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|GRUPO|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2200
+                   .ColWidth(2) = 1300
+                 Case Is = "grilla_pes_pl_mat"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|GRUPO|TOTAL KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2200
+                   .ColWidth(2) = 1300
+                 Case Is = "grilla_pes_thno_mat" '************************************************ ESTO SIRVE PARA CREAR EL FORMATO DE LA GRILLA CON GRUPO Y TOTAL KILOS
+                    .Rows = 2
+                    .Cols = 3
+                    .FormatString = "Nº|GRUPO|TOTAL KILOS"
+                    .ColAlignment(1) = 0
+                    .ColAlignment(2) = 0
+                    .RowHeight(1) = 270
+                    .ColWidth(0) = 0
+                    .ColWidth(1) = 2200
+                    .ColWidth(2) = 1300 '******************************************************************************
+                 Case Is = "grilla_det_psjes"
+                   .Rows = 2
+                   .Cols = 7
+                   .FormatString = "N°|FECHA|FOLIO|DESCRIPCION PRODUCTO|PATENTE|PROVEEDOR|CIUDAD|KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 350
+                   .ColWidth(1) = 1000
+                   .ColWidth(2) = 700
+                   .ColWidth(3) = 2800
+                   .ColWidth(4) = 800
+                   .ColWidth(5) = 3000
+                   .ColWidth(6) = 1200
+                   .ColWidth(7) = 800
+                 Case Is = "grilla_res_psjes"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|PRODUCTO|KILOS"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 2800
+                   .ColWidth(2) = 800
+                 Case Is = "grilla_psjes_precios"
+                   .Rows = 2
+                   .Cols = 8
+                   .FormatString = "N°|FOLIO|CODIGO PROD.|DESCRIPCION PRODUCTO|PROVEEDOR|KILOS|PRECIO|TOTAL|FAMILIA"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 350
+                   .ColWidth(3) = 3200
+                   .ColWidth(4) = 3000
+                   .ColWidth(5) = 800
+                   .ColWidth(7) = 1200
+                   .ColWidth(8) = 0
+                Case Is = "grilla_res_mat_precio"
+                   .Rows = 4
+                   .Cols = 3
+                   .FormatString = "N°|GRUPO|TOTAL KILOS|PRECIO PROM."
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 1500
+                   .ColWidth(2) = 1200
+                Case Is = "grilla_productos"
+                   .Rows = 2
+                   .Cols = 3
+                   .FormatString = "N°|CÓDIGO|DESCRIPCIÓN PRODUCTO"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 0
+                   .ColWidth(1) = 1000
+                   .ColWidth(2) = 3500
+                   
+                 Case Is = "grilla_imp_pesajes"
+                   .Rows = 2
+                   .Cols = 18
+                   .FormatString = "N°|Folio|Tipo_Psje|Patente|Peso Bruto|Peso Tara|Peso Neto|Cod.Producto|Desc.Producto|Rut Cliente|Nombre Cliente|Origen|Destino|Guia Desp|Fecha Ingreso|Hora Ingreso|Fecha Salida|Hora Salida|Observacion"
+                   .ColAlignment(1) = 0
+                   .ColAlignment(2) = 0
+                   .RowHeight(1) = 270
+                   .ColWidth(0) = 400
+                   .ColWidth(1) = 700
+                   .ColWidth(2) = 1600
+                   .ColWidth(3) = 900
+                   .ColWidth(4) = 900
+                   .ColWidth(5) = 900
+                   .ColWidth(6) = 900
+                   .ColWidth(7) = 1200
+                   .ColWidth(8) = 3000
+                   .ColWidth(9) = 1000
+                   .ColWidth(10) = 3000
+                   .ColWidth(11) = 1800
+                   .ColWidth(12) = 1800
+                   .ColWidth(18) = 4500
+                   
+                   
+            End Select
+         .Redraw = True
+    End With
+End Sub
+Public Sub frm_grilla_psjes_precios_2()
+With Principal.grilla_psjes_precios
+   .Rows = 2
+   .Cols = 8
+   .FormatString = "N°|CODIGO PROD.|DESCRIPCION PRODUCTO|PROVEEDOR|KILOS|PRECIO|TOTAL|FAMILIA"
+   .ColAlignment(1) = 0
+   .ColAlignment(2) = 0
+   .RowHeight(1) = 270
+   .ColWidth(0) = 350
+   .ColWidth(2) = 3200
+   .ColWidth(3) = 3000
+   .ColWidth(4) = 1000
+   .ColWidth(6) = 1200
+   .ColWidth(7) = 0
+End With
+End Sub
+Public Function buscarfila_agricola(grilla As Object)
+Dim fila As Integer
+Dim cuentafila As Integer
+ For fila = 1 To grilla.Rows - 1
+  If grilla.TextMatrix(fila, 1) <> " " Then
+    cuentafila = fila + 0
+  End If
+  Next fila
+buscarfila_agricola = cuentafila
+End Function
+Public Function comprobar_precio_prov_pl(rut As String, cod_material As String) As Boolean
+  Dim rst As ADODB.Recordset
+  Dim row As Integer
+  Dim sql As String
+  
+  Set rst = New ADODB.Recordset
+  sql = "SELECT precio FROM precios_proveedor_placilla WHERE cpv_rut='" & rut & "' and prd_codigo='" & cod_material & "'"
+  rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+  
+  If rst.EOF <> True Then
+     comprobar_precio_prov_pl = True
+     Exit Function
+  Else
+     comprobar_precio_prov_pl = False
+  End If
+End Function
+Public Function comprobar_precio_prov_stgo(rut As String, cod_material As String) As Boolean
+  Dim rst As ADODB.Recordset
+  Dim row As Integer
+  Dim sql As String
+  
+  Set rst = New ADODB.Recordset
+  sql = "SELECT precio FROM precios_proveedor_stgo WHERE cpv_rut='" & rut & "' and prd_codigo='" & cod_material & "'"
+  rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+  
+  If rst.EOF <> True Then
+     comprobar_precio_prov_stgo = True
+     Exit Function
+  Else
+     comprobar_precio_prov_stgo = False
+  End If
+End Function
+Public Sub Limpiar_campos()
+  With Principal
+     .txt_cod_prod.Text = ""
+     .txt_nom_prov.Text = ""
+     .txt_rut_prov.Text = ""
+     .txt_precio.Text = ""
+  End With
+End Sub
+Public Function buscar_index_precio_real_pl(folio As String) As Boolean
+  Dim rst As ADODB.Recordset
+  Dim row As Integer
+  Dim sql As String
+  
+  Set rst = New ADODB.Recordset
+  sql = "SELECT pes_num,pes_numcor FROM index_pesaje_placilla WHERE pes_num=" & CDbl(folio) & " "
+  rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+  
+  If rst.EOF <> True Then
+     buscar_index_precio_real_pl = True
+     Exit Function
+  Else
+     buscar_index_precio_real_pl = False
+  End If
+End Function
+Public Function buscar_index_precio_real_stgo(folio As String) As Boolean
+  Dim rst As ADODB.Recordset
+  Dim row As Integer
+  Dim sql As String
+  
+  Set rst = New ADODB.Recordset
+  sql = "SELECT pes_num,pes_numcor FROM index_pesaje_santiago WHERE pes_num=" & CDbl(folio) & " "
+  rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+  
+  If rst.EOF <> True Then
+     buscar_index_precio_real_stgo = True
+     Exit Function
+  Else
+     buscar_index_precio_real_stgo = False
+  End If
+End Function
+
+Public Function buscar_index_precio_prov_pl() As Double
+  Dim rst As ADODB.Recordset
+  Dim row As Integer
+  Dim sql As String
+  
+  Set rst = New ADODB.Recordset
+  sql = "SELECT max(index_precio)as indice FROM precios_proveedor_placilla"
+  rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+  
+  If rst.EOF <> True Then
+     buscar_index_precio_prov_pl = rst!indice + 1
+     Exit Function
+  Else
+     buscar_index_precio_prov_pl = 0
+  End If
+End Function
+Public Function get_producto(cod_prod As String) As String
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT descrip FROM dbproductos WHERE producto='" & cod_prod & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_producto = rst.Fields(0)
+Else
+   get_producto = 0
+End If
+End Function
+Public Function get_productoTHNO(cod_prod As String) As String ' BUSCA EL NOMBRE DEL PRODUCTO
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT PRODUCTO FROM PRODUCTOS WHERE CDGPRODUCTO='" & cod_prod & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_productoTHNO = rst.Fields(0)
+Else
+   get_productoTHNO = 0
+End If
+End Function
+Public Function get_folio_thno(folio As String) As String ' BUSCA la folio de nuevo para que no se repita
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT IDPSJ FROM PESAJES WHERE IDPSJ='" & folio & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_folio_thno = rst.Fields(0)
+Else
+   get_folio_thno = 0
+End If
+End Function
+
+Public Function get_patente_thno(folio As String) As String ' BUSCA la patente
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT PATENTE FROM PESAJES WHERE IDPSJ='" & folio & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_patente_thno = rst.Fields(0)
+Else
+   get_patente_thno = 0
+End If
+End Function
+
+Public Function get_peso_thno(folio As String) As String ' BUSCA la totalneto
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT TOTALNETO FROM PESAJES WHERE IDPSJ='" & folio & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_peso_thno = rst.Fields(0)
+Else
+   get_peso_thno = 0
+End If
+End Function
+
+Public Function get_cliente(rut_cte As String) As String
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT nombre FROM dbclientes WHERE rut='" & rut_cte & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_cliente = rst.Fields(0)
+Else
+   get_cliente = ""
+End If
+End Function
+Public Function get_clienteTHNO(rut_cte As String) As String 'BUSCA EL CLIENTE EN LA BD DE THNO
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT nombre FROM CLI_PROV WHERE rut='" & rut_cte & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_clienteTHNO = rst.Fields(0)
+Else
+   get_clienteTHNO = ""
+End If
+End Function
+Public Function get_patenteTHNO(rut_cte As String) As String 'BUSCA LA PATENTE EN LA BD DE THNO
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT PATENTE FROM PESAJES WHERE CONDUCTOR='" & rut_cte & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_patenteTHNO = rst.Fields(0)
+Else
+   get_patenteTHNO = ""
+End If
+End Function '***************************************************************************************************************************************
+
+Public Function get_tipo_pesaje(tipo As String) As Integer
+Select Case tipo
+   Case Is = "Recepcion de carga"
+      get_tipo_pesaje = 1
+      Exit Function
+   Case Is = "Despacho de Carga"
+      get_tipo_pesaje = 2
+      Exit Function
+   Case Is = "Movimiento Interno"
+      get_tipo_pesaje = 3
+      Exit Function
+End Select
+End Function
+
+Public Function get_tipo_pesaje2(tipo As Integer) As String
+Select Case tipo
+   Case Is = 1
+      get_tipo_pesaje2 = "Recepcion de carga"
+      Exit Function
+   Case Is = 2
+      get_tipo_pesaje2 = "Despacho de Carga"
+      Exit Function
+   Case Is = 3
+      get_tipo_pesaje2 = "Movimiento Interno"
+      Exit Function
+End Select
+End Function
+Public Function get_tipo_pesajeTHNO(tipo As String) As String ' BUSCA EL TIPO DE PESAJE EN TALCAHUANO QUE SOLO ES UNO
+Select Case tipo
+   Case Is = "R"
+      get_tipo_pesajeTHNO = "Recepcion de carga"
+      Exit Function
+End Select
+End Function
+Public Sub CRG_CMB_MATERIAL(cmb As ComboBox)
+Dim rst As ADODB.Recordset
+Dim sql As String
+
+Set rst = New ADODB.Recordset
+sql = "SELECT descrip FROM dbproductos"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+Do While Not rst.EOF = True
+   With cmb
+     .AddItem rst!descrip
+   End With
+   rst.MoveNext
+Loop
+rst.Close
+Set rst = Nothing
+End Sub
+Public Function get_origen(cod_origen As String) As String
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT descrip FROM dborigen WHERE origen ='" & cod_origen & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_origen = rst.Fields(0)
+   Exit Function
+Else
+   get_origen = ""
+End If
+End Function
+Public Function get_destino(cod_destino As String) As String
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT descrip FROM dbdestinos WHERE destino ='" & cod_destino & "'"
+
+rst.Open sql, cntfb, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_destino = rst.Fields(0)
+   Exit Function
+Else
+   get_destino = ""
+End If
+End Function
+
+Public Function get_pesaje_placilla(folio As String) As Boolean
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT folio FROM pesaje_placilla_2 WHERE folio =" & CLng(folio) & ""
+
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_pesaje_placilla = True
+   Exit Function
+Else
+   get_pesaje_placilla = False
+End If
+End Function
+
+Public Function get_pesaje_stgo(folio As String) As Boolean
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT folio FROM pesaje_santiago WHERE folio =" & CLng(folio) & ""
+
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_pesaje_stgo = True
+   Exit Function
+Else
+   get_pesaje_stgo = False
+End If
+End Function
+Public Function get_pesaje_THNO(folio As String, horaing As String) As Boolean ' MICHAEL*************************************************************************
+Dim rst As ADODB.Recordset
+Set rst = New ADODB.Recordset
+Dim sql As String
+
+sql = "SELECT FOLIO FROM PESAJE_TALCAHUANO WHERE folio =" & CLng(folio) & " AND hora_ingreso =#" & horaing & "#"
+
+rst.Open sql, cnt, adOpenForwardOnly, adLockReadOnly
+If rst.EOF <> True Then
+   get_pesaje_THNO = True
+   Exit Function
+Else
+   get_pesaje_THNO = False
+End If
+End Function
+
+Public Sub LimpiarTablasDePesaje()
+    ' Pide confirmación al usuario
+    If MsgBox("¿Estás seguro de que deseas borrar TODOS los registros de las tablas de pesaje?" & vbCrLf & _
+              "Esta acción es irreversible.", _
+              vbYesNo + vbCritical, "Confirmar Borrado de Datos") <> vbYes Then
+        MsgBox "Operación cancelada.", vbExclamation
+        Exit Sub
+    End If
+    
+    On Error GoTo ManejoDeErrores
+
+    ' Define las tablas a limpiar
+    Dim tablas As Variant
+    tablas = Array("PESAJE_PLACILLA", "PESAJE_PLACILLA_2", "PESAJE_SANTIAGO", "PESAJE_TALCAHUANO")
+    Dim tabla As Variant
+
+    conectarBD ' Llama a tu función de conexión existente
+
+    ' Bucle que limpia cada tabla
+    For Each tabla In tablas
+        cnt.Execute "DELETE * FROM " & tabla & ";", , dbFailOnError
+    Next tabla
+
+    ' --- CORREGIDO AQUÍ ---
+    desconectarBD ' Llama a tu función para desconectar
+
+    MsgBox "Se ha eliminado el contenido de las 4 tablas de pesaje exitosamente.", vbInformation, "Proceso Completado"
+    
+    Exit Sub
+
+ManejoDeErrores:
+    MsgBox "Ocurrió un error al limpiar las tablas:" & vbCrLf & "Error: " & Err.Description, vbCritical, "Operación Fallida"
+    
+    ' --- Y CORREGIDO AQUÍ ---
+    desconectarBD
+End Sub
+
+Public Sub EjecutarProcedimientosConCommit()
+    ' Pide confirmación al usuario
+    If MsgBox("¿Deseas ejecutar el proceso completo de inserción (Proveedores y SAP)?", _
+              vbYesNo + vbQuestion, "Confirmar Proceso") <> vbYes Then
+        MsgBox "Proceso cancelado.", vbExclamation
+        Exit Sub
+    End If
+
+    On Error GoTo ManejoDeErrores
+    
+    Application.StatusBar = "Conectando al servidor..."
+    DoEvents
+
+    ' Conecta y empieza la transacción
+    conectarBdFirebird RUTA_BD_FIREBIRD
+    If cntfb Is Nothing Then Exit Sub ' Sale si la conexión falló
+    
+    cntfb.BeginTrans
+
+    ' Configura y ejecuta los comandos
+    Dim cmd As New ADODB.Command
+    With cmd
+        .ActiveConnection = cntfb
+        .CommandType = adCmdStoredProc
+        
+        ' Ejecuta el primer PA
+        Application.StatusBar = "Paso 1 de 2: Ejecutando Inserción de Proveedores..."
+        DoEvents
+        .CommandText = "PA_INS_PROV_STGO"
+        .Execute
+        
+        ' Ejecuta el segundo PA
+        Application.StatusBar = "Paso 2 de 2: Ejecutando Inserción Masiva SAP..."
+        DoEvents
+        .CommandText = "PA_INS_MASIVO_EXP_SAP"
+        .Execute
+    End With
+    
+    ' Confirma los cambios si todo funcionó
+    Application.StatusBar = "Confirmando cambios (COMMIT)..."
+    DoEvents
+    cntfb.CommitTrans
+
+    ' Limpia y notifica
+    Application.StatusBar = False
+    desconectarBdFirebird
+    MsgBox "El proceso completo se ejecutó y confirmó exitosamente.", vbInformation, "Proceso Terminado"
+    
+    Set cmd = Nothing
+    Exit Sub
+
+ManejoDeErrores:
+    Application.StatusBar = False
+    ' El mensaje de error detallado ya lo da la función de conexión si falla
+    ' Este mensaje es para errores durante la ejecución de los PA
+    If Not cntfb Is Nothing Then
+         MsgBox "Ocurrió un error durante la ejecución:" & vbCrLf & Err.Description & vbCrLf & vbCrLf & _
+           "¡IMPORTANTE! No se guardó ningún cambio.", vbCritical, "Operación Fallida"
+        
+        If cntfb.State = adStateOpen Then cntfb.RollbackTrans
+        desconectarBdFirebird
+    End If
+    Set cmd = Nothing
+End Sub
+
+
+Public Sub EXPORTAR_EXCEL_PLACILLA(grilla1 As MSHFlexGrid, grilla2 As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date)
+Dim xlaplica As Excel.Application
+Dim xllibro As Excel.Workbook
+Dim xlhoja1, xlhoja2 As Excel.Worksheet
+Dim row As Integer
+Dim fila_excel, fila_excel2 As Integer
+
+fila_excel = 7
+Application.ScreenUpdating = False
+Set xlaplica = Excel.Application
+
+  Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\INFORME SCRAP PLACILLA.xls")
+  Set xlhoja1 = xllibro.Worksheets(1)
+ 
+  xlhoja1.Cells(3, 4).Value = Format(fecha_desde, "d mmm yyyy")
+  xlhoja1.Cells(4, 4).Value = Format(fecha_hasta, "d mmm yyyy")
+  xllibro.Worksheets(1).Select
+    For row = 1 To grilla1.Rows - 1
+        If grilla1.TextMatrix(row, 2) <> " " Then
+           With xlhoja1
+             .Cells(fila_excel, 1).Value = grilla1.TextMatrix(row, 1)
+             .Cells(fila_excel, 2).Value = grilla1.TextMatrix(row, 2)
+             .Cells(fila_excel, 3).Value = grilla1.TextMatrix(row, 3)
+             .Cells(fila_excel, 4).Value = grilla1.TextMatrix(row, 4)
+              fila_excel = fila_excel + 1
+           End With
+        End If
+    Next row
+    fila_excel2 = 19
+    Set xlhoja2 = xllibro.Worksheets(2)
+    xlhoja2.Cells(8, 10).Value = Format(fecha_desde, "d mmm yyyy")
+    xlhoja2.Cells(9, 10).Value = Format(fecha_hasta, "d mmm yyyy")
+    For row = 1 To grilla2.Rows - 1
+        If grilla2.TextMatrix(row, 2) <> " " Then
+           With xlhoja2
+             .Cells(fila_excel2, 1).Value = grilla2.TextMatrix(row, 1)
+             .Cells(fila_excel2, 2).Value = grilla2.TextMatrix(row, 2)
+             .Cells(fila_excel2, 3).Value = grilla2.TextMatrix(row, 3)
+             .Cells(fila_excel2, 8).Value = Format(grilla2.TextMatrix(row, 4), "yyyy-mm-dd")
+             .Cells(fila_excel2, 9).Value = Format(grilla2.TextMatrix(row, 5), "yyyy-mm-dd")
+             .Cells(fila_excel2, 10).Value = grilla2.TextMatrix(row, 6)
+             .Cells(fila_excel2, 11).Value = grilla2.TextMatrix(row, 7)
+             .Cells(fila_excel2, 12).Value = grilla2.TextMatrix(row, 8)
+             fila_excel2 = fila_excel2 + 1
+           End With
+        End If
+    Next row
+    xlhoja2.Cells(fila_excel2 + 2, 11).Value = "Total Kilos"
+    xlhoja2.Cells(fila_excel2 + 2, 11).Font.Bold = True
+    xlhoja2.Cells(fila_excel2 + 2, 12).Value = CLng(Principal.grilla_inf_res.TextMatrix(2, 2))
+    xlhoja2.Cells(fila_excel2 + 2, 12).Font.Bold = True
+    xlaplica.Visible = True
+End Sub
+Public Sub EXP_EXCEL_PL_PRECIO(grilla1 As MSHFlexGrid, grilla2 As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date)
+Dim xlaplica As Excel.Application
+Dim xllibro As Excel.Workbook
+Dim xlhoja1 As Excel.Worksheet
+Dim row As Integer
+Dim fila_excel, fila_excel2 As Integer
+
+fila_excel = 12
+Application.ScreenUpdating = False
+Set xlaplica = Excel.Application
+
+  Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\INFORME SCRAP PLACILLA 2.xls")
+  Set xlhoja1 = xllibro.Worksheets(1)
+ 
+  xlhoja1.Cells(3, 4).Value = Format(fecha_desde, "d mmm yyyy")
+  xlhoja1.Cells(4, 4).Value = Format(fecha_hasta, "d mmm yyyy")
+  xllibro.Worksheets(1).Select
+  
+  For row = 1 To grilla2.Rows - 1
+    With xlhoja1
+       .Cells(fila_excel, 3).Value = grilla2.TextMatrix(row, 1)
+       .Cells(fila_excel, 4).Value = grilla2.TextMatrix(row, 2)
+       .Cells(fila_excel, 5).Value = grilla2.TextMatrix(row, 3)
+       fila_excel = fila_excel + 1
+       .Rows(fila_excel).EntireRow.Insert
+    End With
+  Next row
+  
+  fila_excel = 7
+    For row = 1 To grilla1.Rows - 1
+        If grilla1.TextMatrix(row, 2) <> " " Then
+           With xlhoja1
+             .Cells(fila_excel, 1).Value = grilla1.TextMatrix(row, 1)
+             .Cells(fila_excel, 2).Value = grilla1.TextMatrix(row, 2)
+             .Cells(fila_excel, 3).Value = grilla1.TextMatrix(row, 3)
+             .Cells(fila_excel, 4).Value = grilla1.TextMatrix(row, 4)
+             .Cells(fila_excel, 5).Value = grilla1.TextMatrix(row, 5)
+             .Cells(fila_excel, 6).Value = grilla1.TextMatrix(row, 6)
+              fila_excel = fila_excel + 1
+             .Rows(fila_excel).EntireRow.Insert
+           End With
+        End If
+    Next row
+    xlaplica.Visible = True
+End Sub
+
+Public Sub EXP_EXCEL_STGO_PRECIO(grilla1 As MSHFlexGrid, grilla2 As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date)
+Dim xlaplica As Excel.Application
+Dim xllibro As Excel.Workbook
+Dim xlhoja1 As Excel.Worksheet
+Dim row As Integer
+Dim fila_excel, fila_excel2 As Integer
+
+fila_excel = 12
+Application.ScreenUpdating = False
+Set xlaplica = Excel.Application
+
+  Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\INFORME SCRAP STGO 2.xls")
+  Set xlhoja1 = xllibro.Worksheets(1)
+ 
+  xlhoja1.Cells(3, 4).Value = Format(fecha_desde, "d mmm yyyy")
+  xlhoja1.Cells(4, 4).Value = Format(fecha_hasta, "d mmm yyyy")
+  xllibro.Worksheets(1).Select
+  
+  For row = 1 To grilla2.Rows - 1
+    With xlhoja1
+       .Cells(fila_excel, 3).Value = grilla2.TextMatrix(row, 1)
+       .Cells(fila_excel, 4).Value = grilla2.TextMatrix(row, 2)
+       .Cells(fila_excel, 5).Value = grilla2.TextMatrix(row, 3)
+       fila_excel = fila_excel + 1
+       .Rows(fila_excel).EntireRow.Insert
+    End With
+  Next row
+  
+  fila_excel = 7
+    For row = 1 To grilla1.Rows - 1
+        If grilla1.TextMatrix(row, 2) <> " " Then
+           With xlhoja1
+             .Cells(fila_excel, 1).Value = grilla1.TextMatrix(row, 1)
+             .Cells(fila_excel, 2).Value = grilla1.TextMatrix(row, 2)
+             .Cells(fila_excel, 3).Value = grilla1.TextMatrix(row, 3)
+             .Cells(fila_excel, 4).Value = grilla1.TextMatrix(row, 4)
+             .Cells(fila_excel, 5).Value = grilla1.TextMatrix(row, 5)
+             .Cells(fila_excel, 6).Value = grilla1.TextMatrix(row, 6)
+              fila_excel = fila_excel + 1
+             .Rows(fila_excel).EntireRow.Insert
+           End With
+        End If
+    Next row
+   xlaplica.Visible = True
+End Sub
+Public Sub EXPORTAR_EXCEL_STGO(grilla As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date)
+Dim xlaplica As Excel.Application
+Dim xllibro As Excel.Workbook
+Dim xlhoja1 As Excel.Worksheet
+Dim row As Integer
+Dim fila_excel As Integer
+Dim FECHA As String
+
+fila_excel = 7
+Application.ScreenUpdating = False
+Set xlaplica = Excel.Application
+
+  Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\INFORME SCRAP STGO.xls")
+  Set xlhoja1 = xllibro.Worksheets(1)
+  xlhoja1.Cells(3, 4).Value = Format(fecha_desde, "d mmm yyyy")
+  xlhoja1.Cells(4, 4).Value = Format(fecha_hasta, "d mmm yyyy")
+  xllibro.Worksheets(1).Select
+    For row = 1 To grilla.Rows - 1
+        If grilla.TextMatrix(row, 2) <> " " Then
+           With xlhoja1
+             .Cells(fila_excel, 1).Value = grilla.TextMatrix(row, 1)
+             .Cells(fila_excel, 2).Value = grilla.TextMatrix(row, 2)
+             .Cells(fila_excel, 3).Value = grilla.TextMatrix(row, 3)
+             .Cells(fila_excel, 4).Value = grilla.TextMatrix(row, 4)
+              fila_excel = fila_excel + 1
+           End With
+        End If
+    Next row
+   xlaplica.Visible = True
+End Sub
+'***********************************************************EXPORTAR EXCEL DE TALCAHUANO.... SE DEBE MODIFICAR YA QUE COMO ALMACENA LOS DATOS DE SANTIAGO EXPORTARA DATOS DE SANTIAGO
+Public Sub EXPORTAR_EXCEL_THNO(grilla As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date)
+Dim xlaplica As Excel.Application 'VARIABLE PARA LA APLICACION EXCEL
+Dim xllibro As Excel.Workbook
+Dim xlhoja1 As Excel.Worksheet
+Dim row As Integer
+Dim fila_excel As Integer
+Dim FECHA As String
+
+fila_excel = 7
+Application.ScreenUpdating = False
+Set xlaplica = Excel.Application
+
+  Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\INFORME SCRAP THNO.xls")
+  Set xlhoja1 = xllibro.Worksheets(1)
+  xlhoja1.Cells(3, 4).Value = Format(fecha_desde, "d mmm yyyy")
+  xlhoja1.Cells(4, 4).Value = Format(fecha_hasta, "d mmm yyyy")
+  xllibro.Worksheets(1).Select
+    For row = 1 To grilla.Rows - 1
+        If grilla.TextMatrix(row, 2) <> " " Then
+           With xlhoja1
+             .Cells(fila_excel, 1).Value = grilla.TextMatrix(row, 1)
+             .Cells(fila_excel, 2).Value = grilla.TextMatrix(row, 2)
+             .Cells(fila_excel, 3).Value = grilla.TextMatrix(row, 3)
+             .Cells(fila_excel, 4).Value = grilla.TextMatrix(row, 4)
+              fila_excel = fila_excel + 1
+           End With
+        End If
+    Next row
+   xlaplica.Visible = True
+   '**********************************************************************************************************************************************************************************
+End Sub
+
+Public Sub EXP_EXCEL_GRUPO_MAT_PL(grilla As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date)
+Dim xlaplica As Excel.Application
+Dim xllibro As Excel.Workbook
+Dim xlhoja1 As Excel.Worksheet
+Dim row As Integer
+Dim fila_excel As Integer
+Dim FECHA As String
+
+fila_excel = 7
+Application.ScreenUpdating = False
+Set xlaplica = Excel.Application
+Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\Resumen grupos de material.xls")
+Set xlhoja1 = xllibro.Worksheets(1)
+  xlhoja1.Cells(3, 9).Value = Format(fecha_desde, "d mmm yyyy")
+  xlhoja1.Cells(4, 9).Value = Format(fecha_hasta, "d mmm yyyy")
+  xllibro.Worksheets(1).Select
+    For row = 1 To grilla.Rows - 1
+        If grilla.TextMatrix(row, 2) <> " " Then
+           With xlhoja1
+             .Cells(fila_excel, 1).Value = grilla.TextMatrix(row, 1)
+             .Cells(fila_excel, 2).Value = grilla.TextMatrix(row, 2)
+             .Cells(fila_excel, 3).Value = grilla.TextMatrix(row, 3)
+             .Cells(fila_excel, 4).Value = grilla.TextMatrix(row, 4)
+              fila_excel = fila_excel + 1
+           End With
+        End If
+    Next row
+   xllibro.SaveAs Filename:="E:\Proyectos\Nuevas Funciones\informes Srta. Paula\RECEPCION SCRAP STGO.xls", FileFormat:=xlNormal
+End Sub
+Public Sub IMP_INF_EXCEL(grilla As MSHFlexGrid, fecha_desde As Date, fecha_hasta As Date, opcion As Integer)
+Dim xlaplica As Excel.Application
+Dim xllibro As Excel.Workbook
+Dim xlhoja1 As Excel.Worksheet
+Dim row As Integer
+Dim fila_excel As Integer
+Dim FECHA As String
+
+fila_excel = 20
+Application.ScreenUpdating = False
+FECHA = Format(fecha_hasta, "d mmm yyyy")
+Set xlaplica = Excel.Application
+If opcion = 1 Then
+  Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\Ticket_Pes_Placilla.xls")
+ElseIf opcion = 2 Then
+  Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\Ticket_Pes_Stgo.xls")
+  ElseIf opcion = 3 Then
+  Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\Ticket_Pes_Thno.xls")
+End If
+Set xlhoja1 = xllibro.Worksheets(1)
+  xlhoja1.Cells(8, 10).Value = Format(fecha_desde, "d mmm yyyy")
+  xlhoja1.Cells(9, 10).Value = Format(fecha_hasta, "d mmm yyyy")
+  xlhoja1.Cells(14, 2).Value = Principal.txt_rut_cte_2
+  xlhoja1.Cells(15, 2).Value = Principal.txt_nom_cte_2
+  xllibro.Worksheets(1).Select
+    For row = 1 To grilla.Rows - 1
+        If grilla.TextMatrix(row, 2) <> " " Then
+           With xlhoja1
+             .Cells(fila_excel, 1).Value = grilla.TextMatrix(row, 1)
+             .Cells(fila_excel, 2).Value = grilla.TextMatrix(row, 2)
+             .Cells(fila_excel, 3).Value = grilla.TextMatrix(row, 3)
+             .Cells(fila_excel, 8).Value = Format(grilla.TextMatrix(row, 4), "yyyy-mm-dd")
+             .Cells(fila_excel, 9).Value = Format(grilla.TextMatrix(row, 5), "yyyy-mm-dd")
+             .Cells(fila_excel, 10).Value = grilla.TextMatrix(row, 6)
+             .Cells(fila_excel, 11).Value = grilla.TextMatrix(row, 7)
+             .Cells(fila_excel, 12).Value = grilla.TextMatrix(row, 8)
+             fila_excel = fila_excel + 1
+             .Rows(fila_excel).EntireRow.Insert
+             .Range("C" & fila_excel, "G" & fila_excel).Select
+             xlaplica.Selection.MergeCells = True
+          End With
+        End If
+    Next row
+    xlhoja1.Cells(fila_excel, 11).Value = "TOTAL KILOS"
+    xlhoja1.Cells(fila_excel, 11).Font.Bold = True
+    xlhoja1.Cells(fila_excel, 12).Value = CDbl(Principal.txt_kilos)
+    xlhoja1.Cells(fila_excel, 12).Font.Bold = True
+xllibro.Worksheets(1).Select
+End Sub
+Public Sub IMP_INF_JCRAMM(grilla1 As MSHFlexGrid, grilla2 As MSHFlexGrid, kilos_det As String, kilos_res As String)
+Dim xlaplica As Excel.Application
+Dim xllibro As Excel.Workbook
+Dim xlhoja1 As Excel.Worksheet
+Dim row As Integer
+Dim row_excel As Integer
+Dim FECHA As String
+
+
+Application.ScreenUpdating = False
+Set xlaplica = Excel.Application
+Set xllibro = xlaplica.Workbooks.Add(ThisWorkbook.Path & "\Informe_JCRAMM.xls")
+Set xlhoja1 = xllibro.Worksheets(1)
+xllibro.Worksheets(1).Select
+
+'impresion de resumen por material
+row_excel = 14
+With xlhoja1
+  For row = 1 To grilla2.Rows - 1
+    .Cells(row_excel, 3).Value = grilla2.TextMatrix(row, 1)
+    .Cells(row_excel, 4).Value = grilla2.TextMatrix(row, 2)
+    row_excel = row_excel + 1
+    .Rows(row_excel).EntireRow.Insert
+  Next row
+  .Cells(row_excel, 3) = "Total Kilos"
+  .Cells(row_excel, 3).Font.Bold = True
+  .Cells(row_excel, 4) = kilos_res
+  .Cells(row_excel, 4).Font.Bold = True
+  
+'impresion de detalle pesajes
+row_excel = 8
+  For row = 1 To grilla1.Rows - 1
+    .Cells(row_excel, 1).Value = Format(grilla1.TextMatrix(row, 1), "yyyy-MM-dd")
+    .Cells(row_excel, 2).Value = grilla1.TextMatrix(row, 2)
+    .Cells(row_excel, 3).Value = grilla1.TextMatrix(row, 3)
+    .Cells(row_excel, 4).Value = grilla1.TextMatrix(row, 4)
+    .Cells(row_excel, 5).Value = grilla1.TextMatrix(row, 5)
+    .Cells(row_excel, 6).Value = grilla1.TextMatrix(row, 6)
+    .Cells(row_excel, 7).Value = grilla1.TextMatrix(row, 7)
+    row_excel = row_excel + 1
+    .Rows(row_excel).EntireRow.Insert
+  Next row
+  .Cells(row_excel, 6) = "Total Kilos"
+  .Cells(row_excel, 6).Font.Bold = True
+  .Cells(row_excel, 7) = kilos_det
+  .Cells(row_excel, 7).Font.Bold = True
+  .Cells(4, 5) = Format(grilla1.TextMatrix(1, 1), "dd-MMM-yyyy") & " al " & Format(grilla1.TextMatrix(grilla1.Rows - 1, 1), "dd-MMM-yyyy")
+End With
+xllibro.Worksheets(1).Select
+End Sub
+
+Public Sub ing_tmp_res_jcramm(id_producto As String, desc_producto As String, kilos As String)
+ Dim sql As String
+ sql = "INSERT INTO tmp_res_psjes_jcramm(ID_PRODUCTO,DESC_PRODUCTO,KILOS) VALUES('" & id_producto & "','" & desc_producto & "'," & CDbl(kilos) & ");"
+ cnt.Execute sql
+End Sub
+Public Sub del_tmp_res_jcramm()
+ Dim sql As String
+ sql = "DELETE FROM tmp_res_psjes_jcramm"
+ cnt.Execute sql
+End Sub
+Public Sub ing_last_folio(folio As String, FECHA As Date)
+  Dim sql As String
+  sql = "INSERT INTO ultimo_folio(FOLIO,FECHA) VALUES(" & CDbl(folio) & ",#" & Format(FECHA, "yyyy-mm-dd ") & "#);"
+  cnt.Execute sql
+End Sub
+Public Sub del_last_folio()
+  Dim sql As String
+  sql = "DELETE FROM ultimo_folio"
+  cnt.Execute sql
+End Sub
+Public Sub ing_precio_prov_pl(cod_prod As String, rut As String, nombre_prov As String, precio As String)
+  Dim sql As String
+  Dim indice As Double
+  indice = buscar_index_precio_prov_pl
+  sql = "INSERT INTO precios_proveedor_placilla(INDEX_PRECIO,CPV_RUT,CPV_RAZONSOCIAL,PRD_CODIGO,FECHA_ACTUALIZACION,PRECIO) VALUES(" & indice & ",'" & rut & "','" & nombre_prov & "','" & cod_prod & "',#" & Format(Date, "yyyy-mm-dd") & "#,'" & precio & "');"
+  cnt.Execute sql
+End Sub
+Public Sub ing_precio_prov_stgo(cod_prod As String, rut As String, nombre_prov As String, precio As String)
+  Dim sql As String
+  sql = "INSERT INTO precios_proveedor_stgo(CPV_RUT,CPV_RAZONSOCIAL,PRD_CODIGO,FECHA_ACTUALIZACION,PRECIO) VALUES('" & rut & "','" & nombre_prov & "','" & cod_prod & "',#" & Format(Date, "yyyy-mm-dd") & "#,'" & precio & "');"
+  cnt.Execute sql
+End Sub
+Public Sub upd_precio_prov_stgo(cod_prod As String, rut As String, nombre_prov As String, precio As String, indice As Integer)
+  Dim sql As String
+  sql = "INSERT INTO precios_proveedor_stgo(CPV_RUT,CPV_RAZONSOCIAL,PRD_CODIGO,FECHA_ACTUALIZACION,PRECIO) VALUES('" & rut & "','" & nombre_prov & "','" & cod_prod & "',#" & Format(Date, "yyyy-mm-dd") & "#,'" & precio & "');"
+  cnt.Execute sql
+End Sub
+Public Sub upd_precio_prov_pl(cod_prod As String, rut As String, nombre_prov As String, precio As String, indice As Integer)
+  Dim sql As String
+  sql = "INSERT INTO precios_proveedor_placilla(CPV_RUT,CPV_RAZONSOCIAL,PRD_CODIGO,FECHA_ACTUALIZACION,PRECIO) VALUES('" & rut & "','" & nombre_prov & "','" & cod_prod & "',#" & Format(Date, "yyyy-mm-dd") & "#,'" & precio & "');"
+  cnt.Execute sql
+End Sub
+Public Sub ing_index_precio_prov_pl(folio As String, precio As String, familia As String)
+  Dim sql As String
+  sql = "INSERT INTO index_pesaje_placilla(pes_num,pes_numcor,prd_familia) VALUES(" & CDbl(folio) & "," & CDbl(precio) & ",'" & familia & "');"
+  cnt.Execute sql
+End Sub
+Public Sub ing_index_precio_prov_stgo(folio As String, precio As String, familia As String)
+  Dim sql As String
+  sql = "INSERT INTO index_pesaje_santiago(pes_num,pes_numcor,prd_familia) VALUES(" & CDbl(folio) & "," & CDbl(precio) & ",'" & familia & "');"
+  cnt.Execute sql
+End Sub
+Public Sub upd_index_precio_prov_pl(folio As String, precio As String)
+  Dim sql As String
+  
+  sql = "UPDATE index_pesaje_placilla set pes_numcor=" & CDbl(precio) & " WHERE pes_num=" & CDbl(folio) & ""
+  cnt.Execute sql
+End Sub
+Public Sub upd_index_precio_prov_stgo(folio As String, precio As String)
+  Dim sql As String
+  sql = "UPDATE index_pesaje_santiago set pes_numcor=" & CDbl(precio) & " WHERE pes_num=" & CDbl(folio) & ""
+  cnt.Execute sql
+End Sub
+Public Sub ing_tmp_precio_prov(cod_prod As String, nom_prod As String, nombre_prov As String, kilos As String, precio As String, grupo As String)
+  Dim sql As String
+  Dim indice As Double
+  
+  sql = "INSERT INTO tmp_inf_precio_prov_res(COD_PROD,NOM_PROD,NOM_PROV,KILOS,PRECIO,GRUPO) VALUES('" & cod_prod & "','" & nom_prod & "','" & nombre_prov & "'," & kilos & "," & precio & ",'" & grupo & "');"
+  cnt.Execute sql
+End Sub
+Public Sub del_tmp_inf_precio_prov()
+  Dim sql As String
+  sql = "DELETE FROM tmp_inf_precio_prov_res"
+  cnt.Execute sql
+End Sub
+Public Sub ing_pes_pl_fb(folio As String, tipo_psje As String, patente As String, peso_bruto As String, peso_tara As String, peso_neto As String, cod_prod As String, nom_prod As String, rut_cte As String, nombre_cte As String, origen As String, destino As String, guia_desp As String, fecha_ing As String, hora_ing As String, fecha_salida As String, hora_salida As String, observacion As String)
+ Dim sql1 As String
+ Dim sql2 As String
+ Dim sql_completo As String
+ 
+ sql1 = "INSERT INTO pesaje_placilla_2(FOLIO, TIPO_PESAJE, PATENTE, PESO_BRUTO, PESO_TARA, PESO_NETO, COD_PRODUCTO, NOM_PRODUCTO, RUT_CLIENTE, NOM_CLIENTE, ORIGEN, DESTINO, GUIA_DESP, FECHA_INGRESO, HORA_INGRESO, FECHA_SALIDA, HORA_SALIDA, OBSERVACION)"
+ sql2 = " VALUES(" & CLng(folio) & ",'" & tipo_psje & "','" & patente & "'," & CLng(peso_bruto) & "," & CLng(peso_tara) & "," & CLng(peso_neto) & ",'" & cod_prod & "','" & nom_prod & "','" & rut_cte & "','" & nombre_cte & "','" & origen & "','" & destino & "','" & guia_desp & "',#" & Format(fecha_ing, "yyyy-mm-dd") & "#,#" & Format(hora_ing, "HH:mm:ss") & "#,#" & Format(fecha_salida, "yyyy-mm-dd") & "#,#" & Format(hora_salida, "HH:mm:ss") & "#,'" & observacion & "');"
+ sql_completo = sql1 & sql2
+ cnt.Execute sql_completo
+End Sub
+Public Sub ing_pes_stgo_fb(folio As String, tipo_psje As String, patente As String, peso_bruto As String, peso_tara As String, peso_neto As String, cod_prod As String, nom_prod As String, rut_cte As String, nombre_cte As String, origen As String, destino As String, guia_desp As String, fecha_ing As String, hora_ing As String, fecha_salida As String, hora_salida As String, observacion As String)
+ Dim sql1 As String
+ Dim sql2 As String
+ Dim sql_completo As String
+ 
+ sql1 = "INSERT INTO pesaje_santiago(FOLIO, TIPO_PESAJE, PATENTE, PESO_BRUTO, PESO_TARA, PESO_NETO, COD_PRODUCTO, NOM_PRODUCTO, RUT_CLIENTE, NOM_CLIENTE, ORIGEN, DESTINO, GUIA_DESP, FECHA_INGRESO, HORA_INGRESO, FECHA_SALIDA, HORA_SALIDA, OBSERVACION)"
+ sql2 = " VALUES(" & CLng(folio) & ",'" & tipo_psje & "','" & patente & "'," & CLng(peso_bruto) & "," & CLng(peso_tara) & "," & CLng(peso_neto) & ",'" & cod_prod & "','" & nom_prod & "','" & rut_cte & "','" & nombre_cte & "','" & origen & "','" & destino & "','" & guia_desp & "',#" & Format(fecha_ing, "yyyy-mm-dd") & "#,#" & Format(hora_ing, "HH:mm:ss") & "#,#" & Format(fecha_salida, "yyyy-mm-dd") & "#,#" & Format(hora_salida, "HH:mm:ss") & "#,'" & observacion & "');"
+ sql_completo = sql1 & sql2
+ cnt.Execute sql_completo
+End Sub
+Public Sub ing_pes_thno_fb(folio As String, tipo_psje As String, patente As String, peso_bruto As String, peso_tara As String, peso_neto As String, cod_prod As String, nom_prod As String, rut_cte As String, nombre_cte As String, origen As String, destino As String, guia_desp As String, fecha_ing As String, hora_ing As String, fecha_salida As String, hora_salida As String, observacion As String)
+ Dim sql1 As String
+ Dim sql2 As String
+ Dim sql_completo As String
+ 
+ sql1 = "INSERT INTO PESAJE_TALCAHUANO(FOLIO, TIPO_PESAJE, PESO_NETO, COD_PRODUCTO, NOM_PRODUCTO, RUT_CLIENTE, NOM_CLIENTE, FECHA_INGRESO, HORA_INGRESO)"
+ sql2 = " VALUES(" & CLng(folio) & ",'" & tipo_psje & "'," & CLng(peso_neto) & ",'" & cod_prod & "','" & nom_prod & "','" & rut_cte & "','" & nombre_cte & "',#" & Format(fecha_ing, "yyyy-mm-dd") & "#,#" & Format(hora_ing, "HH:mm:ss") & "#)"
+ sql_completo = sql1 & sql2
+ cnt.Execute sql_completo
+End Sub
+

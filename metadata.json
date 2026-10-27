@@ -1,0 +1,6 @@
+{
+  "name": "Sistema de Pesajes e Informes P. Cambiaso",
+  "description": "Migración moderna y escalable del sistema legacy VBA/Excel 'Informes P.Cambiaso 2.5.xlsm' a arquitectura empresarial con gestión de pesajes, control de precios, sincronización Firebird y exportación de informes.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
