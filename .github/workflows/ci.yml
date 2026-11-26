@@ -1,0 +1,41 @@
+name: .NET 10 Build, Test & Installer CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore dependencies
+        run: dotnet restore GestionScrap.sln
+
+      - name: Build Debug & Release (Zero Warnings)
+        run: |
+          dotnet build GestionScrap.sln -c Debug --no-restore
+          dotnet build GestionScrap.sln -c Release --no-restore
+
+      - name: Run Automated Tests
+        run: dotnet test GestionScrap.sln -c Release --no-build --verbosity normal
+
+      - name: Publish Release x64
+        run: |
+          dotnet publish src/GestionScrap.Desktop/GestionScrap.Desktop.csproj -c Release -r win-x64 --self-contained true -p:DebugType=none -p:DebugSymbols=false -o publish/win-x64
+
+      - name: Upload Published Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: GestionScrap-win-x64
+          path: publish/win-x64

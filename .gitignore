@@ -1,8 +1,45 @@
-node_modules/
-build/
-dist/
-coverage/
+# Build outputs
+bin/
+obj/
+out/
+publish/
+artifacts/
+Instalador/
+TestResults/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# IDE / OS
+.vs/
+.vscode/
+.idea/
 .DS_Store
+Thumbs.db
+
+# Databases, legacy binary files & sensitive configs
+*.mdb
+*.accdb
+*.gdb
+*.fdb
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+*.udl
+*.xlsm
+*.xls
+!installer/templates/*.xls
+appsettings.local.json
+settings.json
 *.log
-.env*
+
+# Secrets / Environment
+.env
+.env.*
 !.env.example
+*.pfx
+*.snk
+*.key
