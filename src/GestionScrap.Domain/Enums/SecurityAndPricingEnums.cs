@@ -1,44 +1,26 @@
 namespace GestionScrap.Domain.Enums;
 
 /// <summary>
-/// Perfiles de seguridad y roles operativos del sistema.
-/// </summary>
-public enum RolUsuario
-{
-    Administrador = 1,
-    Supervisor = 2,
-    Operador = 3,
-    Auditor = 4
-}
-
-/// <summary>
-/// Permisos granulares validados tanto en interfaz como en capa de aplicación.
+/// Permisos granulares del sistema validados en interfaz gráfica y capa de aplicación.
 /// </summary>
 public enum PermisoSistema
 {
-    VerDashboard = 1,
-    ConsultarInformes = 2,
-    ExportarExcel = 3,
-    EditarPreciosReales = 4,
-    CongelarPreciosTeoricos = 5,
-    AdministrarMantenedorPrecios = 6,
-    CerrarFolioJcramm = 7,
-    ImportarFirebird = 8,
-    EjecutarProcedimientosFirebird = 9,
-    PurgarTablasPesaje = 10,
-    MigrarDesdeMdb = 11,
-    AdministrarSeguridad = 12,
-    VerAuditoria = 13
+    VerInformeResumen = 1,
+    VerGrupoMaterial = 2,
+    AdministrarGrupoMaterial = 3,
+    VerAnalisisProveedores = 4,
+    ImportarDatos = 5,
+    ExportarExcel = 6,
+    AdministrarSeguridadPerfiles = 7,
+    VerAuditoria = 8,
+    MantenimientoBaseDatos = 9
 }
 
-public enum ModoPrecio
+/// <summary>
+/// Tipo de nodo dentro de la jerarquía editable de Grupos de Material.
+/// </summary>
+public enum NodoGrupoTipo
 {
-    Teoricos = 1,
-    Reales = 2
-}
-
-public enum FiltroInformePrecio
-{
-    Todos = 1,
-    Resumen = 2
+    CarpetaGrupo = 1,
+    ProductoAsignado = 2
 }

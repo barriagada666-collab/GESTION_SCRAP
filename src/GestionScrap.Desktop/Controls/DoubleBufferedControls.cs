@@ -1,12 +1,13 @@
 using System.Drawing.Drawing2D;
 using System.Drawing.Text;
+using System.Globalization;
 using GestionScrap.Application.DTOs;
 using GestionScrap.Desktop.Theme;
 
 namespace GestionScrap.Desktop.Controls;
 
 /// <summary>
-/// DataGridView optimizado con doble búfer para evitar parpadeos y acelerar el desplazamiento con miles de filas.
+/// DataGridView optimizado con doble búfer para evitar parpadeos y desplazamiento fluido con miles de filas.
 /// </summary>
 public sealed class DoubleBufferedDataGridView : DataGridView
 {
@@ -25,24 +26,27 @@ public enum ChartRenderMode
 }
 
 /// <summary>
-/// Control gráfico vectorial GDI+ con doble búfer para el Dashboard operativo.
+/// Control gráfico vectorial GDI+ con doble búfer estilizado con paleta corporativa Cambiaso.
 /// </summary>
 public sealed class DashboardChartControl : Control
 {
+    private static readonly CultureInfo EsCl = CultureInfo.GetCultureInfo("es-CL");
+
     private ChartRenderMode _mode;
     private IReadOnlyList<WeekComparisonDto> _weekData = [];
-    private IReadOnlyList<GrupoEspecialItemDto> _barData = [];
+    private IReadOnlyList<BarChartItemDto> _barData = [];
     private IReadOnlyList<GrupoKilosItem> _donutData = [];
     private string _title = string.Empty;
 
     private static readonly Color[] Palette =
     [
-        Color.FromArgb(8, 145, 178),
-        Color.FromArgb(217, 119, 6),
-        Color.FromArgb(5, 150, 105),
-        Color.FromArgb(79, 70, 229),
-        Color.FromArgb(219, 39, 119),
-        Color.FromArgb(100, 116, 139)
+        Color.FromArgb(8, 145, 178),   // Cian técnico
+        Color.FromArgb(201, 164, 110), // Dorado Cambiaso
+        Color.FromArgb(11, 60, 93),    // Azul petróleo
+        Color.FromArgb(5, 150, 105),   // Esmeralda
+        Color.FromArgb(37, 99, 235),   // Azul cobalto
+        Color.FromArgb(217, 119, 6),   // Ámbar
+        Color.FromArgb(100, 116, 139)  // Pizarra
     ];
 
     public DashboardChartControl()
@@ -59,7 +63,7 @@ public sealed class DashboardChartControl : Control
         Invalidate();
     }
 
-    public void SetBarData(string title, IReadOnlyList<GrupoEspecialItemDto> data)
+    public void SetBarData(string title, IReadOnlyList<BarChartItemDto> data)
     {
         _mode = ChartRenderMode.HorizontalBars;
         _title = title;
@@ -123,7 +127,7 @@ public sealed class DashboardChartControl : Control
             float y = plot.Bottom - plot.Height * (i / 4f);
             g.DrawLine(gridPen, plot.Left, y, plot.Right, y);
             long tick = maxVal * i / 4;
-            g.DrawString($"{tick / 1000.0:N0}k", axisFont, labelBrush, 8, y - 7);
+            g.DrawString(string.Create(EsCl, $"{tick / 1000.0:N0}t"), axisFont, labelBrush, 8, y - 7);
         }
 
         int count = _weekData.Count;
@@ -139,7 +143,7 @@ public sealed class DashboardChartControl : Control
             ptsPrev[i] = new PointF(x, yP);
 
             using StringFormat sf = new() { Alignment = StringAlignment.Center };
-            g.DrawString(_weekData[i].Semana, axisFont, labelBrush, x, plot.Bottom + 6, sf);
+            g.DrawString(_weekData[i].Periodo, axisFont, labelBrush, x, plot.Bottom + 6, sf);
         }
 
         if (count >= 2)
@@ -149,7 +153,7 @@ public sealed class DashboardChartControl : Control
             g.FillPolygon(areaBrush, [.. areaPts]);
         }
 
-        using Pen prevPen = new(Color.FromArgb(148, 163, 184), 2f) { DashStyle = DashStyle.Dash };
+        using Pen prevPen = new(AppTheme.AccentGold, 2f) { DashStyle = DashStyle.Dash };
         using Pen actPen = new(AppTheme.AccentCyan, 2.5f);
         if (count >= 2)
         {
@@ -158,18 +162,17 @@ public sealed class DashboardChartControl : Control
         }
 
         using SolidBrush dotAct = new(AppTheme.AccentCyan);
-        using SolidBrush dotPrev = new(Color.FromArgb(148, 163, 184));
+        using SolidBrush dotPrev = new(AppTheme.AccentGold);
         for (int i = 0; i < count; i++)
         {
             g.FillEllipse(dotPrev, ptsPrev[i].X - 3.5f, ptsPrev[i].Y - 3.5f, 7, 7);
             g.FillEllipse(dotAct, ptsActual[i].X - 4f, ptsActual[i].Y - 4f, 8, 8);
         }
 
-        // Legend
         g.FillRectangle(dotAct, Width - 210, 14, 10, 10);
-        g.DrawString("Mes actual", axisFont, labelBrush, Width - 196, 12);
-        g.FillRectangle(dotPrev, Width - 110, 14, 10, 10);
-        g.DrawString("Mes anterior", axisFont, labelBrush, Width - 96, 12);
+        g.DrawString("Período actual", axisFont, labelBrush, Width - 196, 12);
+        g.FillRectangle(dotPrev, Width - 108, 14, 10, 10);
+        g.DrawString("Anterior", axisFont, labelBrush, Width - 94, 12);
     }
 
     private void DrawHorizontalBars(Graphics g)
@@ -180,11 +183,11 @@ public sealed class DashboardChartControl : Control
             return;
         }
 
-        long maxVal = Math.Max(1, _barData.Max(b => b.Kilos));
+        long maxVal = Math.Max(1, _barData.Max(b => b.Value));
         int top = 46;
-        int rowH = Math.Min(34, Math.Max(22, (Height - 64) / _barData.Count));
-        int labelW = Math.Min(170, Width / 3);
-        int barMaxW = Math.Max(50, Width - labelW - 95);
+        int rowH = Math.Min(32, Math.Max(20, (Height - 60) / _barData.Count));
+        int labelW = Math.Min(175, Width / 3);
+        int barMaxW = Math.Max(48, Width - labelW - 105);
 
         using Font f = new("Segoe UI", 8.5F);
         using SolidBrush textBrush = new(AppTheme.TextPrimary);
@@ -193,13 +196,13 @@ public sealed class DashboardChartControl : Control
         for (int i = 0; i < _barData.Count; i++)
         {
             int y = top + i * rowH;
-            string name = _barData[i].Cliente.Length > 24 ? _barData[i].Cliente[..22] + "…" : _barData[i].Cliente;
+            string name = _barData[i].Label.Length > 25 ? _barData[i].Label[..23] + "…" : _barData[i].Label;
             g.DrawString(name, f, textBrush, 14, y + 3);
 
-            int bw = Math.Max(4, (int)(_barData[i].Kilos * (double)barMaxW / maxVal));
+            int bw = Math.Max(4, (int)(_barData[i].Value * (double)barMaxW / maxVal));
             using SolidBrush barBrush = new(Palette[i % Palette.Length]);
-            g.FillRectangle(barBrush, labelW + 16, y + 3, bw, rowH - 10);
-            g.DrawString($"{_barData[i].Kilos:N0} Kg", f, subBrush, labelW + 22 + bw, y + 3);
+            g.FillRectangle(barBrush, labelW + 16, y + 3, bw, rowH - 9);
+            g.DrawString(string.Create(EsCl, $"{_barData[i].Value:N0} Kg"), f, subBrush, labelW + 22 + bw, y + 3);
         }
     }
 
@@ -235,12 +238,13 @@ public sealed class DashboardChartControl : Control
         using SolidBrush textBrush = new(AppTheme.TextPrimary);
         int lx = rect.Right + 20;
         int ly = 54;
-        for (int i = 0; i < Math.Min(6, _donutData.Count); i++)
+        for (int i = 0; i < Math.Min(7, _donutData.Count); i++)
         {
             using SolidBrush swatch = new(Palette[i % Palette.Length]);
             g.FillRectangle(swatch, lx, ly + 3, 10, 10);
             double pct = _donutData[i].Kilos * 100.0 / total;
-            g.DrawString($"{_donutData[i].Grupo} ({pct:N1}%)", f, textBrush, lx + 15, ly);
+            string lbl = _donutData[i].Grupo.Length > 20 ? _donutData[i].Grupo[..18] + "…" : _donutData[i].Grupo;
+            g.DrawString(string.Create(EsCl, $"{lbl} ({pct:N1}%)"), f, textBrush, lx + 15, ly);
             ly += 22;
         }
     }
@@ -249,6 +253,6 @@ public sealed class DashboardChartControl : Control
     {
         using SolidBrush muted = new(AppTheme.TextSecondary);
         using StringFormat sf = new() { Alignment = StringAlignment.Center, LineAlignment = StringAlignment.Center };
-        g.DrawString("Sin datos en el periodo", AppTheme.FontBody, muted, ClientRectangle, sf);
+        g.DrawString("Sin datos en el período seleccionado", AppTheme.FontBody, muted, ClientRectangle, sf);
     }
 }

@@ -12,9 +12,7 @@ using GestionScrap.Domain.Interfaces;
 namespace GestionScrap.Infrastructure.Migration;
 
 /// <summary>
-/// Servicio de importación y migración desde bases heredadas Microsoft Access (.mdb / .accdb) hacia SQLite.
-/// Intenta lectura directa con OleDb en el proceso actual (x64) y, si solo existe el proveedor ACE/Jet de 32 bits,
-/// delega automáticamente la extracción de solo lectura a Windows PowerShell x86 (SysWOW64).
+/// Migrador histórico desde Microsoft Access (.mdb/.accdb) con soporte automático para drivers x86 (SysWOW64).
 /// </summary>
 public sealed class MdbMigrationService(IScrapRepository repository) : IMdbMigrationService
 {
@@ -33,404 +31,278 @@ public sealed class MdbMigrationService(IScrapRepository repository) : IMdbMigra
         "PESAJE_PLACILLA_2",
         "PESAJE_SANTIAGO",
         "PESAJE_TALCAHUANO",
-        "PESAJE_PLACILLA",
-        "PRECIOS_PROVEEDOR_PLACILLA",
-        "PRECIOS_PROVEEDOR_STGO",
-        "INDEX_PESAJE_PLACILLA",
-        "INDEX_PESAJE_SANTIAGO",
-        "ULTIMO_FOLIO"
+        "PESAJE_PLACILLA"
     ];
 
-    public async Task<(int PesajesImported, int ClientesImported, int ProductosImported, int PreciosImported, int IndexPreciosImported, IReadOnlyList<string> Warnings)>
+    public async Task<(int PesajesImported, int ClientesImported, int ProductosImported, IReadOnlyList<string> Warnings)>
         ImportFromMdbAsync(string mdbPath, string usuario, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(mdbPath) || !File.Exists(mdbPath))
         {
-            throw new FileNotFoundException("No se encontró el archivo de base de datos Access (.mdb/.accdb) especificado.", mdbPath);
+            throw new FileNotFoundException("No se encontró el archivo Microsoft Access especificado.", mdbPath);
         }
 
         List<string> warnings = [];
-        Dictionary<string, List<Dictionary<string, string>>> rawTables =
-            await ReadTablesWithAutoFallbackAsync(mdbPath, warnings, ct).ConfigureAwait(false);
+        Dictionary<string, List<Dictionary<string, object?>>> extracted;
 
-        // 1. Productos y mapeo de grupos
-        Dictionary<string, Producto> productosMap = new(StringComparer.OrdinalIgnoreCase);
-        void LoadCatalogTable(string tableName, string codeCol, string descCol, string? grpCol)
+        try
         {
-            if (!rawTables.TryGetValue(tableName, out var rows))
-            {
-                return;
-            }
-
-            foreach (var r in rows)
-            {
-                string code = GetStr(r, codeCol).ToUpperInvariant();
-                if (string.IsNullOrWhiteSpace(code))
-                {
-                    continue;
-                }
-
-                string desc = GetStr(r, descCol).ToUpperInvariant();
-                string grp = grpCol is not null ? GetStr(r, grpCol).ToUpperInvariant() : string.Empty;
-                if (string.IsNullOrWhiteSpace(grp))
-                {
-                    grp = BusinessRules.ClassifyGrupoMaterial(code, desc);
-                }
-
-                productosMap[code] = new Producto
-                {
-                    Codigo = code,
-                    Descripcion = string.IsNullOrWhiteSpace(desc) ? code : desc,
-                    Grupo = grp,
-                    UnidadMedida = "KG"
-                };
-            }
+            extracted = await ExtractWithNativeOleDbAsync(mdbPath, warnings, ct).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or PlatformNotSupportedException)
+        {
+            warnings.Add("Proveedor ACE/Jet de 64 bits no instalado; ejecutando extractor seguro vía Windows PowerShell 32 bits.");
+            extracted = await ExtractViaWow64PowerShellAsync(mdbPath, warnings, ct).ConfigureAwait(false);
         }
 
-        LoadCatalogTable("PRODUCTO", "PRD_CODIGO", "PRD_DESCRIPCION", null);
-        LoadCatalogTable("PRODUCTOS_CONS", "ID_PRODUCTO", "DESC_PRODUCTO", "grupo");
-        LoadCatalogTable("PRODUCTO_GRUPOTHNO", "prd_codigo", "prd_descripcion", "grupo");
-        LoadCatalogTable("PRODUCTO_GRUPO", "prd_codigo", "prd_descripcion", "grupo");
+        Dictionary<string, Producto> productos = new(StringComparer.OrdinalIgnoreCase);
+        CollectProductos(extracted, "PRODUCTO_GRUPO", productos);
+        CollectProductos(extracted, "PRODUCTO_GRUPO2", productos);
+        CollectProductos(extracted, "PRODUCTO_GRUPO3", productos);
+        CollectProductos(extracted, "PRODUCTO_GRUPOTHNO", productos);
+        CollectProductos(extracted, "PRODUCTOS_CONS", productos);
 
-        if (productosMap.Count > 0)
+        if (productos.Count > 0)
         {
-            await _repository.UpsertProductosAsync(productosMap.Values, usuario, ct).ConfigureAwait(false);
+            await _repository.UpsertProductosAsync(productos.Values, usuario, ct).ConfigureAwait(false);
         }
 
-        Dictionary<string, string> groupLookup = productosMap.ToDictionary(kv => kv.Key, kv => kv.Value.Grupo, StringComparer.OrdinalIgnoreCase);
-
-        // 2. Clientes
-        List<Cliente> clientes = [];
-        if (rawTables.TryGetValue("CLIENTES", out var stgoClients))
-        {
-            foreach (var r in stgoClients)
-            {
-                string rut = GetStr(r, "RUT");
-                if (string.IsNullOrWhiteSpace(rut))
-                {
-                    continue;
-                }
-
-                clientes.Add(new Cliente
-                {
-                    Rut = rut,
-                    Digito = GetStr(r, "DIGITO"),
-                    Nombre = GetStr(r, "NOMBRE"),
-                    RazonSocial = GetStr(r, "NOMBRE"),
-                    Ciudad = GetStr(r, "CIUDAD"),
-                    Direccion = GetStr(r, "DIRECCION"),
-                    PlantaAsociada = Planta.Santiago
-                });
-            }
-        }
-
-        if (rawTables.TryGetValue("CLIENTES_PLACILLA", out var plClients))
-        {
-            foreach (var r in plClients)
-            {
-                string rut = GetStr(r, "CPV_RUT");
-                if (string.IsNullOrWhiteSpace(rut))
-                {
-                    continue;
-                }
-
-                string rs = GetStr(r, "CPV_RAZONSOCIAL");
-                clientes.Add(new Cliente
-                {
-                    Rut = rut,
-                    Digito = string.Empty,
-                    Nombre = rs,
-                    RazonSocial = rs,
-                    Ciudad = GetStr(r, "CPV_CIUDAD"),
-                    Direccion = GetStr(r, "CPV_DIRECCION"),
-                    PlantaAsociada = Planta.Placilla
-                });
-            }
-        }
-
+        Dictionary<string, Cliente> clientes = new(StringComparer.OrdinalIgnoreCase);
+        CollectClientes(extracted, "CLIENTES", Planta.Santiago, clientes);
+        CollectClientes(extracted, "CLIENTES_PLACILLA", Planta.Placilla, clientes);
         if (clientes.Count > 0)
         {
-            await _repository.UpsertClientesAsync(clientes, usuario, ct).ConfigureAwait(false);
+            await _repository.UpsertClientesAsync(clientes.Values, usuario, ct).ConfigureAwait(false);
         }
 
-        // 3. Pesajes por planta
+        IReadOnlyList<MaterialGroupNode> nodes = await _repository.GetMaterialNodesAsync(ct).ConfigureAwait(false);
+        Dictionary<string, string> prodGroups = BusinessRules.BuildProductToRootGroupMap(nodes);
+        foreach (Producto pr in productos.Values)
+        {
+            prodGroups.TryAdd(pr.Codigo, pr.Grupo);
+        }
+
         int totalPesajes = 0;
-        totalPesajes += await ImportStandardPesajeTableAsync("PESAJE_PLACILLA_2", Planta.Placilla, rawTables, groupLookup, usuario, ct).ConfigureAwait(false);
-        totalPesajes += await ImportStandardPesajeTableAsync("PESAJE_SANTIAGO", Planta.Santiago, rawTables, groupLookup, usuario, ct).ConfigureAwait(false);
-        totalPesajes += await ImportStandardPesajeTableAsync("PESAJE_TALCAHUANO", Planta.Talcahuano, rawTables, groupLookup, usuario, ct).ConfigureAwait(false);
+        totalPesajes += await ImportPlantPesajesAsync(extracted, "PESAJE_PLACILLA_2", Planta.Placilla, prodGroups, usuario, ct).ConfigureAwait(false);
+        totalPesajes += await ImportPlantPesajesAsync(extracted, "PESAJE_SANTIAGO", Planta.Santiago, prodGroups, usuario, ct).ConfigureAwait(false);
+        totalPesajes += await ImportPlantPesajesAsync(extracted, "PESAJE_TALCAHUANO", Planta.Talcahuano, prodGroups, usuario, ct).ConfigureAwait(false);
 
-        // 4. Precios proveedor
-        int preciosCount = 0;
-        preciosCount += await ImportPreciosProveedorTableAsync("PRECIOS_PROVEEDOR_PLACILLA", Planta.Placilla, rawTables, usuario, ct).ConfigureAwait(false);
-        preciosCount += await ImportPreciosProveedorTableAsync("PRECIOS_PROVEEDOR_STGO", Planta.Santiago, rawTables, usuario, ct).ConfigureAwait(false);
-
-        // 5. Index precios reales
-        List<IndexPrecioPesaje> indexItems = [];
-        CollectIndexPrecios("INDEX_PESAJE_PLACILLA", Planta.Placilla, rawTables, indexItems);
-        CollectIndexPrecios("INDEX_PESAJE_SANTIAGO", Planta.Santiago, rawTables, indexItems);
-        int idxCount = 0;
-        if (indexItems.Count > 0)
+        if (totalPesajes == 0 && extracted.ContainsKey("PESAJE_PLACILLA"))
         {
-            idxCount = await _repository.BulkFreezeIndexPreciosAsync(indexItems, usuario, ct).ConfigureAwait(false);
-        }
-
-        // 6. Último folio JCRAMM
-        if (rawTables.TryGetValue("ULTIMO_FOLIO", out var ufRows) && ufRows.Count > 0)
-        {
-            long f = ParseLong(GetStr(ufRows[0], "FOLIO"));
-            DateOnly dt = ParseDate(GetStr(ufRows[0], "FECHA"));
-            if (f > 0)
-            {
-                await _repository.SetUltimoFolioJcrammAsync(f, dt, usuario, ct).ConfigureAwait(false);
-            }
+            totalPesajes += await ImportPlantPesajesAsync(extracted, "PESAJE_PLACILLA", Planta.Placilla, prodGroups, usuario, ct).ConfigureAwait(false);
         }
 
         await _repository.AddAuditLogAsync(new AuditLogEntry
         {
             Usuario = usuario,
             Accion = "MIGRACION_MDB",
-            Entidad = "ACCESS_MDB",
-            RegistroId = Path.GetFileName(mdbPath),
-            Detalle = $"Migración Access completada: {totalPesajes} pesajes, {clientes.Count} clientes, {productosMap.Count} productos, {preciosCount} precios."
+            Entidad = "ACCESS",
+            Detalle = $"Migración desde '{Path.GetFileName(mdbPath)}': {totalPesajes} pesajes, {clientes.Count} clientes, {productos.Count} productos."
         }, ct).ConfigureAwait(false);
 
-        return (totalPesajes, clientes.Count, productosMap.Count, preciosCount, idxCount, warnings);
+        return (totalPesajes, clientes.Count, productos.Count, warnings);
     }
 
-    private async Task<int> ImportStandardPesajeTableAsync(
+    private async Task<int> ImportPlantPesajesAsync(
+        Dictionary<string, List<Dictionary<string, object?>>> data,
         string tableName,
         Planta planta,
-        Dictionary<string, List<Dictionary<string, string>>> rawTables,
-        Dictionary<string, string> groupLookup,
+        Dictionary<string, string> groups,
         string usuario,
         CancellationToken ct)
     {
-        if (!rawTables.TryGetValue(tableName, out var rows) || rows.Count == 0)
+        if (!data.TryGetValue(tableName, out List<Dictionary<string, object?>>? rows) || rows.Count == 0)
         {
             return 0;
         }
 
-        List<Pesaje> items = [];
-        foreach (var r in rows)
+        List<Pesaje> list = new(rows.Count);
+        foreach (Dictionary<string, object?> row in rows)
         {
-            long folio = ParseLong(GetStr(r, "FOLIO"));
+            long folio = GetLong(row, "FOLIO");
             if (folio <= 0)
             {
                 continue;
             }
 
-            string codProd = GetStr(r, "COD_PRODUCTO").ToUpperInvariant();
-            string nomProd = GetStr(r, "NOM_PRODUCTO").ToUpperInvariant();
-            string rut = GetStr(r, "RUT_CLIENTE");
-            string tipoRaw = GetStr(r, "TIPO_PESAJE");
-            TipoPesaje tipo = TipoPesajeExtensions.FromLegacyValue(tipoRaw);
+            string cod = GetStr(row, "COD_PRODUCTO");
+            string nomProd = GetStr(row, "NOM_PRODUCTO");
+            string tipoStr = GetStr(row, "TIPO_PESAJE");
+            string rut = GetStr(row, "RUT_CLIENTE");
+            string nomCli = GetStr(row, "NOM_CLIENTE");
+            DateOnly fing = GetDate(row, "FECHA_INGRESO");
+            DateOnly fsal = GetDate(row, "FECHA_SALIDA", fing);
+            TimeOnly hing = GetTime(row, "HORA_INGRESO");
+            TimeOnly hsal = GetTime(row, "HORA_SALIDA");
+            int bruto = GetInt(row, "PESO_BRUTO");
+            int tara = GetInt(row, "PESO_TARA");
+            int neto = GetInt(row, "PESO_NETO");
+            if (neto <= 0 && bruto > tara) neto = bruto - tara;
 
-            int bruto = ParseInt(GetStr(r, "PESO_BRUTO"));
-            int tara = ParseInt(GetStr(r, "PESO_TARA"));
-            int neto = ParseInt(GetStr(r, "PESO_NETO"));
-            if (neto <= 0 && bruto > tara)
-            {
-                neto = bruto - tara;
-            }
+            string codeKey = cod.Trim().ToUpperInvariant();
+            string grupo = groups.TryGetValue(codeKey, out string? gName)
+                ? gName
+                : BusinessRules.ClassifyProductoDefaultGroup(cod, nomProd);
 
-            DateOnly fecIng = ParseDate(GetStr(r, "FECHA_INGRESO"));
-            DateOnly fecSal = ParseDate(GetStr(r, "FECHA_SALIDA"), fecIng);
-
-            Pesaje p = new()
+            TipoPesaje tipo = TipoPesajeExtensions.FromLegacyValue(tipoStr);
+            list.Add(new Pesaje
             {
                 Folio = folio,
                 Planta = planta,
                 TipoPesaje = tipo,
-                Patente = GetStr(r, "PATENTE").ToUpperInvariant(),
+                Patente = GetStr(row, "PATENTE"),
                 PesoBruto = bruto,
                 PesoTara = tara,
                 PesoNeto = neto,
-                CodProducto = codProd,
-                NomProducto = nomProd,
-                RutCliente = rut,
-                NomCliente = GetStr(r, "NOM_CLIENTE"),
-                Origen = GetStr(r, "ORIGEN"),
-                Destino = GetStr(r, "DESTINO"),
-                GuiaDespacho = GetStr(r, "GUIA_DESP"),
-                FechaIngreso = fecIng,
-                HoraIngreso = ParseTime(GetStr(r, "HORA_INGRESO")),
-                FechaSalida = fecSal,
-                HoraSalida = ParseTime(GetStr(r, "HORA_SALIDA")),
-                Observacion = GetStr(r, "OBSERVACION"),
-                GrupoMaterial = BusinessRules.ClassifyGrupoMaterial(codProd, nomProd, groupLookup),
+                CodProducto = codeKey,
+                NomProducto = nomProd.ToUpperInvariant(),
+                RutCliente = rut.ToUpperInvariant(),
+                NomCliente = string.IsNullOrWhiteSpace(nomCli) ? rut : nomCli,
+                Origen = GetStr(row, "ORIGEN"),
+                Destino = GetStr(row, "DESTINO"),
+                GuiaDespacho = GetStr(row, "GUIA_DESPACHO"),
+                FechaIngreso = fing,
+                HoraIngreso = hing,
+                FechaSalida = fsal,
+                HoraSalida = hsal,
+                Observacion = GetStr(row, "OBSERVACION"),
+                GrupoMaterial = grupo,
                 EsTraslado = tipo != TipoPesaje.RecepcionCarga
-            };
-
-            items.Add(new Pesaje
-            {
-                Folio = p.Folio,
-                Planta = p.Planta,
-                TipoPesaje = p.TipoPesaje,
-                Patente = p.Patente,
-                PesoBruto = p.PesoBruto,
-                PesoTara = p.PesoTara,
-                PesoNeto = p.PesoNeto,
-                CodProducto = p.CodProducto,
-                NomProducto = p.NomProducto,
-                RutCliente = p.RutCliente,
-                NomCliente = p.NomCliente,
-                Origen = p.Origen,
-                Destino = p.Destino,
-                GuiaDespacho = p.GuiaDespacho,
-                FechaIngreso = p.FechaIngreso,
-                HoraIngreso = p.HoraIngreso,
-                FechaSalida = p.FechaSalida,
-                HoraSalida = p.HoraSalida,
-                Observacion = p.Observacion,
-                GrupoMaterial = p.GrupoMaterial,
-                EsTraslado = p.EsTraslado || BusinessRules.IsExcludedInternalTransferClient(p)
             });
         }
 
-        (int imported, _) = await _repository.ImportPesajesAsync(items, planta, usuario, ct).ConfigureAwait(false);
+        (int imported, _) = await _repository.ImportPesajesAsync(list, planta, usuario, ct).ConfigureAwait(false);
         return imported;
     }
 
-    private async Task<int> ImportPreciosProveedorTableAsync(
-        string tableName,
-        Planta planta,
-        Dictionary<string, List<Dictionary<string, string>>> rawTables,
-        string usuario,
-        CancellationToken ct)
+    private static void CollectProductos(
+        Dictionary<string, List<Dictionary<string, object?>>> data,
+        string table,
+        Dictionary<string, Producto> target)
     {
-        if (!rawTables.TryGetValue(tableName, out var rows) || rows.Count == 0)
-        {
-            return 0;
-        }
-
-        int count = 0;
-        foreach (var r in rows)
-        {
-            string rut = GetStr(r, "CPV_RUT");
-            string cod = GetStr(r, "PRD_CODIGO").ToUpperInvariant();
-            decimal precio = ParseDecimal(GetStr(r, "PRECIO"));
-            if (string.IsNullOrWhiteSpace(rut) || string.IsNullOrWhiteSpace(cod) || precio <= 0)
-            {
-                continue;
-            }
-
-            await _repository.UpsertPrecioProveedorAsync(new PrecioProveedor
-            {
-                Planta = planta,
-                Rut = rut,
-                RazonSocial = GetStr(r, "CPV_RAZONSOCIAL"),
-                CodigoProducto = cod,
-                Precio = precio,
-                FechaActualizacion = ParseDate(GetStr(r, "FECHA_ACTUALIZACION"))
-            }, allowUpdate: true, usuario, ct).ConfigureAwait(false);
-            count++;
-        }
-
-        return count;
-    }
-
-    private static void CollectIndexPrecios(
-        string tableName,
-        Planta planta,
-        Dictionary<string, List<Dictionary<string, string>>> rawTables,
-        List<IndexPrecioPesaje> target)
-    {
-        if (!rawTables.TryGetValue(tableName, out var rows))
+        if (!data.TryGetValue(table, out List<Dictionary<string, object?>>? rows))
         {
             return;
         }
 
-        foreach (var r in rows)
+        foreach (Dictionary<string, object?> row in rows)
         {
-            long folio = ParseLong(GetStr(r, "PES_NUM"));
-            decimal precio = ParseDecimal(GetStr(r, "PES_NUMCOR"));
-            if (folio <= 0 || precio <= 0)
-            {
-                continue;
-            }
+            string cod = GetStr(row, "CODIGO", "PRD_CODIGO", "COD_PRODUCTO").Trim().ToUpperInvariant();
+            if (string.IsNullOrEmpty(cod)) continue;
 
-            target.Add(new IndexPrecioPesaje
+            string desc = GetStr(row, "DESCRIPCION", "PRD_DESCRIPCION", "NOM_PRODUCTO", "PRODUCTO").Trim();
+            string grupoRaw = GetStr(row, "GRUPO", "PRD_FAMILIA").Trim();
+            string grupo = !string.IsNullOrWhiteSpace(grupoRaw)
+                ? grupoRaw.ToUpperInvariant()
+                : BusinessRules.ClassifyProductoDefaultGroup(cod, desc);
+
+            target[cod] = new Producto
             {
-                Folio = folio,
-                Planta = planta,
-                Precio = precio,
-                Familia = GetStr(r, "prd_familia"),
-                ActualizadoEn = DateTime.UtcNow
-            });
+                Codigo = cod,
+                Descripcion = string.IsNullOrWhiteSpace(desc) ? cod : desc.ToUpperInvariant(),
+                Grupo = grupo,
+                UnidadMedida = "KG"
+            };
         }
     }
 
-    private static async Task<Dictionary<string, List<Dictionary<string, string>>>> ReadTablesWithAutoFallbackAsync(
+    private static void CollectClientes(
+        Dictionary<string, List<Dictionary<string, object?>>> data,
+        string table,
+        Planta planta,
+        Dictionary<string, Cliente> target)
+    {
+        if (!data.TryGetValue(table, out List<Dictionary<string, object?>>? rows))
+        {
+            return;
+        }
+
+        foreach (Dictionary<string, object?> row in rows)
+        {
+            string rut = GetStr(row, "RUT", "CPV_RUT").Trim();
+            if (string.IsNullOrEmpty(rut)) continue;
+
+            string dig = GetStr(row, "DIGITO").Trim();
+            string nombre = GetStr(row, "NOMBRE", "CPV_RAZONSOCIAL").Trim();
+            string ciudad = GetStr(row, "CIUDAD", "CPV_CIUDAD").Trim();
+            string dir = GetStr(row, "DIRECCION", "CPV_DIRECCION").Trim();
+
+            target[rut] = new Cliente
+            {
+                Rut = rut,
+                Digito = dig,
+                Nombre = string.IsNullOrEmpty(nombre) ? rut : nombre,
+                RazonSocial = string.IsNullOrEmpty(nombre) ? rut : nombre,
+                Ciudad = ciudad,
+                Direccion = dir,
+                PlantaAsociada = planta
+            };
+        }
+    }
+
+    private static async Task<Dictionary<string, List<Dictionary<string, object?>>>> ExtractWithNativeOleDbAsync(
         string mdbPath,
         List<string> warnings,
         CancellationToken ct)
     {
-        try
+        if (!OperatingSystem.IsWindows())
         {
-            return ReadTablesInProcess(mdbPath, warnings);
+            throw new PlatformNotSupportedException("OleDb solo disponible en Windows.");
         }
-        catch (InvalidOperationException ex) when (
-            ex.Message.Contains("registered", StringComparison.OrdinalIgnoreCase) ||
-            ex.Message.Contains("registrado", StringComparison.OrdinalIgnoreCase) ||
-            ex.Message.Contains("provider", StringComparison.OrdinalIgnoreCase) ||
-            ex.Message.Contains("proveedor", StringComparison.OrdinalIgnoreCase))
-        {
-            warnings.Add("Proveedor ACE/Jet de 64 bits no detectado; usando puente lector x86 compatible.");
-            return await ReadTablesViaWow64BridgeAsync(mdbPath, warnings, ct).ConfigureAwait(false);
-        }
-    }
 
-    private static Dictionary<string, List<Dictionary<string, string>>> ReadTablesInProcess(
-        string mdbPath,
-        List<string> warnings)
-    {
         string[] providers = ["Microsoft.ACE.OLEDB.16.0", "Microsoft.ACE.OLEDB.12.0", "Microsoft.Jet.OLEDB.4.0"];
         OleDbConnection? openConn = null;
-
         foreach (string prov in providers)
         {
             try
             {
                 OleDbConnection candidate = new($"Provider={prov};Data Source={mdbPath};");
-                candidate.Open();
+                await candidate.OpenAsync(ct).ConfigureAwait(false);
                 openConn = candidate;
                 break;
             }
-            catch (InvalidOperationException)
-            {
-                // Try next provider; rethrow below if none registered
-            }
             catch
             {
-                // Try next provider
+                // Prueba siguiente proveedor OLEDB
             }
         }
 
         if (openConn is null)
         {
-            throw new InvalidOperationException("No OLEDB provider is registered for Access MDB in this process architecture.");
+            throw new InvalidOperationException("No hay proveedores OleDb de 64 bits disponibles.");
         }
 
-        using (openConn)
+        await using (openConn)
         {
-            Dictionary<string, List<Dictionary<string, string>>> result = new(StringComparer.OrdinalIgnoreCase);
+            DataTable schema = openConn.GetSchema("Tables");
+            HashSet<string> tableNames = new(StringComparer.OrdinalIgnoreCase);
+            foreach (DataRow r in schema.Rows)
+            {
+                string? name = r["TABLE_NAME"]?.ToString();
+                if (!string.IsNullOrWhiteSpace(name))
+                {
+                    tableNames.Add(name);
+                }
+            }
+
+            Dictionary<string, List<Dictionary<string, object?>>> result = new(StringComparer.OrdinalIgnoreCase);
             foreach (string table in AllowedTables)
             {
+                if (!tableNames.Contains(table)) continue;
                 try
                 {
-                    using OleDbCommand cmd = openConn.CreateCommand();
-                    cmd.CommandText = $"SELECT * FROM [{table}]";
-                    using OleDbDataReader rd = cmd.ExecuteReader();
-                    List<Dictionary<string, string>> rows = [];
-                    while (rd.Read())
+                    await using OleDbCommand cmd = new($"SELECT * FROM [{table}]", openConn);
+                    await using var rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+                    List<Dictionary<string, object?>> rows = [];
+                    while (await rd.ReadAsync(ct).ConfigureAwait(false))
                     {
-                        Dictionary<string, string> row = new(StringComparer.OrdinalIgnoreCase);
+                        Dictionary<string, object?> dict = new(StringComparer.OrdinalIgnoreCase);
                         for (int i = 0; i < rd.FieldCount; i++)
                         {
-                            object val = rd.GetValue(i);
-                            row[rd.GetName(i)] = val is DBNull ? string.Empty : Convert.ToString(val, CultureInfo.InvariantCulture) ?? string.Empty;
+                            object v = rd.GetValue(i);
+                            dict[rd.GetName(i)] = v == DBNull.Value ? null : v;
                         }
-                        rows.Add(row);
+                        rows.Add(dict);
                     }
                     result[table] = rows;
                 }
@@ -439,165 +311,201 @@ public sealed class MdbMigrationService(IScrapRepository repository) : IMdbMigra
                     warnings.Add($"Tabla '{table}' omitida: {ex.Message}");
                 }
             }
+
             return result;
         }
     }
 
-    private static async Task<Dictionary<string, List<Dictionary<string, string>>>> ReadTablesViaWow64BridgeAsync(
+    private static async Task<Dictionary<string, List<Dictionary<string, object?>>>> ExtractViaWow64PowerShellAsync(
         string mdbPath,
         List<string> warnings,
         CancellationToken ct)
     {
         string ps86 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Windows),
-            "SysWOW64", "WindowsPowerShell", "v1.0", "powershell.exe");
+            @"SysWOW64\WindowsPowerShell\v1.0\powershell.exe");
+
         if (!File.Exists(ps86))
         {
-            throw new PlatformNotSupportedException("No se encontró el subsistema PowerShell x86 ni proveedor ACE OLEDB x64.");
+            throw new FileNotFoundException("No se encontró Windows PowerShell x86 en SysWOW64 para leer archivos Access de 32 bits.");
         }
 
-        string tableListLiteral = string.Join(",", AllowedTables.Select(t => $"'{t}'"));
-        string escapedPath = mdbPath.Replace("'", "''", StringComparison.Ordinal);
+        string tempJson = Path.Combine(Path.GetTempPath(), $"scrap_mdb_{Guid.NewGuid():N}.json");
+        string tablesLiteral = string.Join(",", AllowedTables.Select(t => $"'{t}'"));
+        string escapedMdb = mdbPath.Replace("'", "''", StringComparison.Ordinal);
+        string escapedOut = tempJson.Replace("'", "''", StringComparison.Ordinal);
 
         string script = $$"""
             $ErrorActionPreference = 'Stop'
-            $mdb = '{{escapedPath}}'
-            $tables = @({{tableListLiteral}})
+            $mdb = '{{escapedMdb}}'
+            $outFile = '{{escapedOut}}'
+            $tables = @({{tablesLiteral}})
             $conn = $null
             foreach ($prov in @('Microsoft.ACE.OLEDB.16.0','Microsoft.ACE.OLEDB.12.0','Microsoft.Jet.OLEDB.4.0')) {
-              try {
-                $c = New-Object System.Data.OleDb.OleDbConnection("Provider=$prov;Data Source=$mdb;")
-                $c.Open()
-                $conn = $c
-                break
-              } catch {}
+                try {
+                    $c = New-Object System.Data.OleDb.OleDbConnection("Provider=$prov;Data Source=$mdb;")
+                    $c.Open()
+                    $conn = $c
+                    break
+                } catch {}
             }
-            if ($null -eq $conn) { throw 'No se encontró proveedor OLEDB Access (32-bit).' }
-            $out = @{}
+            if ($null -eq $conn) { throw 'No se encontro proveedor ACE/Jet x86 en el sistema.' }
+            $schema = $conn.GetSchema('Tables')
+            $existing = @{}
+            foreach ($r in $schema.Rows) { $existing[$r['TABLE_NAME'].ToString().ToUpperInvariant()] = $true }
+            $payload = @{}
             $warns = New-Object System.Collections.ArrayList
             foreach ($t in $tables) {
-              try {
-                $cmd = $conn.CreateCommand()
-                $cmd.CommandText = "SELECT * FROM [$t]"
-                $da = New-Object System.Data.OleDb.OleDbDataAdapter($cmd)
-                $dt = New-Object System.Data.DataTable
-                [void]$da.Fill($dt)
-                $list = New-Object System.Collections.ArrayList
-                foreach ($r in $dt.Rows) {
-                  $obj = @{}
-                  foreach ($col in $dt.Columns) {
-                    $v = $r[$col.ColumnName]
-                    if ($v -is [DBNull]) { $obj[$col.ColumnName] = '' }
-                    elseif ($v -is [DateTime]) { $obj[$col.ColumnName] = $v.ToString('o') }
-                    else { $obj[$col.ColumnName] = [string]$v }
-                  }
-                  [void]$list.Add($obj)
+                if (-not $existing.ContainsKey($t.ToUpperInvariant())) { continue }
+                try {
+                    $cmd = $conn.CreateCommand()
+                    $cmd.CommandText = "SELECT * FROM [$t]"
+                    $rd = $cmd.ExecuteReader()
+                    $list = New-Object System.Collections.ArrayList
+                    while ($rd.Read()) {
+                        $row = [ordered]@{}
+                        for ($i = 0; $i -lt $rd.FieldCount; $i++) {
+                            $v = $rd.GetValue($i)
+                            if ($v -is [DBNull]) { $v = $null }
+                            elseif ($v -is [DateTime]) { $v = $v.ToString('yyyy-MM-ddTHH:mm:ss') }
+                            $row[$rd.GetName($i)] = $v
+                        }
+                        [void]$list.Add($row)
+                    }
+                    $rd.Close()
+                    $payload[$t] = $list
+                } catch {
+                    [void]$warns.Add("Tabla '$t' omitida: $($_.Exception.Message)")
                 }
-                $out[$t] = $list
-              } catch {
-                [void]$warns.Add("Tabla '$t' omitida: $($_.Exception.Message)")
-              }
             }
             $conn.Close()
-            @{ Tables = $out; Warnings = $warns } | ConvertTo-Json -Depth 6 -Compress
+            @{ Data = $payload; Warnings = $warns } | ConvertTo-Json -Depth 6 | Set-Content -Path $outFile -Encoding UTF8
             """;
 
         string encoded = Convert.ToBase64String(Encoding.Unicode.GetBytes(script));
-        ProcessStartInfo psi = new(ps86)
+
+        try
         {
-            Arguments = $"-NoProfile -NonInteractive -EncodedCommand {encoded}",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-            StandardOutputEncoding = Encoding.UTF8
-        };
-
-        using Process proc = Process.Start(psi) ?? throw new InvalidOperationException("No se pudo iniciar el lector x86.");
-        string stdout = await proc.StandardOutput.ReadToEndAsync(ct).ConfigureAwait(false);
-        string stderr = await proc.StandardError.ReadToEndAsync(ct).ConfigureAwait(false);
-        await proc.WaitForExitAsync(ct).ConfigureAwait(false);
-
-        if (proc.ExitCode != 0 || string.IsNullOrWhiteSpace(stdout))
-        {
-            throw new InvalidOperationException($"Error leyendo Access MDB (x86): {stderr}");
-        }
-
-        using JsonDocument doc = JsonDocument.Parse(stdout);
-        Dictionary<string, List<Dictionary<string, string>>> parsed = new(StringComparer.OrdinalIgnoreCase);
-
-        if (doc.RootElement.TryGetProperty("Warnings", out JsonElement warnEl) && warnEl.ValueKind == JsonValueKind.Array)
-        {
-            foreach (JsonElement w in warnEl.EnumerateArray())
+            ProcessStartInfo psi = new()
             {
-                if (w.GetString() is string ws && !string.IsNullOrWhiteSpace(ws))
-                {
-                    warnings.Add(ws);
-                }
+                FileName = ps86,
+                Arguments = $"-NoProfile -NonInteractive -EncodedCommand {encoded}",
+                UseShellExecute = false,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true,
+                CreateNoWindow = true
+            };
+
+            using Process? proc = Process.Start(psi) ?? throw new InvalidOperationException("No fue posible iniciar extractor Access x86.");
+            await proc.WaitForExitAsync(ct).ConfigureAwait(false);
+            string err = await proc.StandardError.ReadToEndAsync(ct).ConfigureAwait(false);
+
+            if (proc.ExitCode != 0 || !File.Exists(tempJson))
+            {
+                throw new InvalidOperationException($"Error en extracción Access x86: {err}");
             }
-        }
 
-        if (doc.RootElement.TryGetProperty("Tables", out JsonElement tblsEl) && tblsEl.ValueKind == JsonValueKind.Object)
-        {
-            foreach (JsonProperty tblProp in tblsEl.EnumerateObject())
+            string jsonText = await File.ReadAllTextAsync(tempJson, Encoding.UTF8, ct).ConfigureAwait(false);
+            using JsonDocument doc = JsonDocument.Parse(jsonText);
+
+            if (doc.RootElement.TryGetProperty("Warnings", out JsonElement warnArr) && warnArr.ValueKind == JsonValueKind.Array)
             {
-                List<Dictionary<string, string>> rows = [];
-                if (tblProp.Value.ValueKind == JsonValueKind.Array)
+                foreach (JsonElement w in warnArr.EnumerateArray())
                 {
-                    foreach (JsonElement rowEl in tblProp.Value.EnumerateArray())
+                    if (w.ValueKind == JsonValueKind.String && !string.IsNullOrWhiteSpace(w.GetString()))
                     {
-                        Dictionary<string, string> rowDict = new(StringComparer.OrdinalIgnoreCase);
-                        foreach (JsonProperty colProp in rowEl.EnumerateObject())
-                        {
-                            rowDict[colProp.Name] = colProp.Value.ToString();
-                        }
-                        rows.Add(rowDict);
+                        warnings.Add(w.GetString()!);
                     }
                 }
-                parsed[tblProp.Name] = rows;
+            }
+
+            Dictionary<string, List<Dictionary<string, object?>>> result = new(StringComparer.OrdinalIgnoreCase);
+            if (doc.RootElement.TryGetProperty("Data", out JsonElement dataObj) && dataObj.ValueKind == JsonValueKind.Object)
+            {
+                foreach (JsonProperty tblProp in dataObj.EnumerateObject())
+                {
+                    List<Dictionary<string, object?>> list = [];
+                    if (tblProp.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement rowEl in tblProp.Value.EnumerateArray())
+                        {
+                            Dictionary<string, object?> dict = new(StringComparer.OrdinalIgnoreCase);
+                            foreach (JsonProperty col in rowEl.EnumerateObject())
+                            {
+                                dict[col.Name] = col.Value.ValueKind switch
+                                {
+                                    JsonValueKind.Null or JsonValueKind.Undefined => null,
+                                    JsonValueKind.String => col.Value.GetString(),
+                                    JsonValueKind.Number => col.Value.TryGetInt64(out long lv) ? lv : col.Value.GetDecimal(),
+                                    JsonValueKind.True => true,
+                                    JsonValueKind.False => false,
+                                    _ => col.Value.ToString()
+                                };
+                            }
+                            list.Add(dict);
+                        }
+                    }
+                    result[tblProp.Name] = list;
+                }
+            }
+
+            return result;
+        }
+        finally
+        {
+            if (File.Exists(tempJson))
+            {
+                File.Delete(tempJson);
             }
         }
-
-        return parsed;
     }
 
-    private static string GetStr(Dictionary<string, string> row, string key) =>
-        row.TryGetValue(key, out string? val) ? val.Trim() : string.Empty;
-
-    private static long ParseLong(string s) =>
-        long.TryParse(s.Replace(".", string.Empty, StringComparison.Ordinal).Replace(",", string.Empty, StringComparison.Ordinal),
-            NumberStyles.Any, CultureInfo.InvariantCulture, out long v) ? v : 0;
-
-    private static int ParseInt(string s) =>
-        int.TryParse(s.Replace(".", string.Empty, StringComparison.Ordinal).Replace(",", string.Empty, StringComparison.Ordinal),
-            NumberStyles.Any, CultureInfo.InvariantCulture, out int v) ? v : 0;
-
-    private static decimal ParseDecimal(string s) =>
-        decimal.TryParse(s, NumberStyles.Any, CultureInfo.InvariantCulture, out decimal v) ? v : 0m;
-
-    private static DateOnly ParseDate(string s, DateOnly? fallback = null)
+    private static string GetStr(Dictionary<string, object?> row, params string[] keys)
     {
-        if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime iso))
+        foreach (string k in keys)
         {
-            return DateOnly.FromDateTime(iso);
+            if (row.TryGetValue(k, out object? val) && val is not null)
+            {
+                return val.ToString()?.Trim() ?? string.Empty;
+            }
         }
+        return string.Empty;
+    }
 
-        if (DateTime.TryParse(s, new CultureInfo("es-CL"), DateTimeStyles.None, out DateTime cl))
+    private static long GetLong(Dictionary<string, object?> row, string key)
+    {
+        if (!row.TryGetValue(key, out object? val) || val is null) return 0;
+        return long.TryParse(val.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out long res) ? res : 0;
+    }
+
+    private static int GetInt(Dictionary<string, object?> row, string key)
+    {
+        if (!row.TryGetValue(key, out object? val) || val is null) return 0;
+        return decimal.TryParse(val.ToString(), NumberStyles.Any, CultureInfo.InvariantCulture, out decimal d) ? (int)Math.Round(d) : 0;
+    }
+
+    private static DateOnly GetDate(Dictionary<string, object?> row, string key, DateOnly? fallback = null)
+    {
+        if (row.TryGetValue(key, out object? val) && val is not null)
         {
-            return DateOnly.FromDateTime(cl);
+            if (val is DateTime dt) return DateOnly.FromDateTime(dt);
+            if (DateTime.TryParse(val.ToString(), CultureInfo.InvariantCulture, DateTimeStyles.None, out DateTime parsed))
+            {
+                return DateOnly.FromDateTime(parsed);
+            }
         }
-
         return fallback ?? DateOnly.FromDateTime(DateTime.Today);
     }
 
-    private static TimeOnly ParseTime(string s)
+    private static TimeOnly GetTime(Dictionary<string, object?> row, string key)
     {
-        if (DateTime.TryParse(s, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind, out DateTime dt))
+        if (row.TryGetValue(key, out object? val) && val is not null)
         {
-            return TimeOnly.FromDateTime(dt);
+            if (val is DateTime dt) return TimeOnly.FromDateTime(dt);
+            if (TimeOnly.TryParse(val.ToString(), CultureInfo.InvariantCulture, out TimeOnly parsed))
+            {
+                return parsed;
+            }
         }
-
-        return TimeOnly.TryParse(s, CultureInfo.InvariantCulture, out TimeOnly t)
-            ? t
-            : TimeOnly.MinValue;
+        return new TimeOnly(8, 0);
     }
 }

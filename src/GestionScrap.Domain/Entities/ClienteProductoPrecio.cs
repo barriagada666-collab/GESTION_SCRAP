@@ -8,8 +8,11 @@ public sealed class Cliente
     public string Digito { get; init; } = string.Empty;
     public string Nombre { get; init; } = string.Empty;
     public string RazonSocial { get; init; } = string.Empty;
+    public string Giro { get; init; } = string.Empty;
+    public string Comuna { get; init; } = string.Empty;
     public string Ciudad { get; init; } = string.Empty;
     public string Direccion { get; init; } = string.Empty;
+    public string Telefono { get; init; } = string.Empty;
     public Planta? PlantaAsociada { get; init; }
 
     public string RutFormateado => string.IsNullOrWhiteSpace(Digito) ? Rut : $"{Rut}-{Digito}";
@@ -23,28 +26,16 @@ public sealed class Producto
     public string UnidadMedida { get; init; } = "KG";
 }
 
-public sealed class PrecioProveedor
+/// <summary>
+/// Nodo jerárquico editable para organizar Grupos de Material (Nodos Padre / Subgrupos / Productos Hijo).
+/// </summary>
+public sealed class MaterialGroupNode
 {
-    public long Indice { get; init; }
-    public Planta Planta { get; init; }
-    public string Rut { get; init; } = string.Empty;
-    public string RazonSocial { get; init; } = string.Empty;
+    public long Id { get; init; }
+    public long? ParentId { get; init; }
+    public string Nombre { get; init; } = string.Empty;
+    public NodoGrupoTipo TipoNodo { get; init; } = NodoGrupoTipo.CarpetaGrupo;
     public string CodigoProducto { get; init; } = string.Empty;
-    public decimal Precio { get; init; }
-    public DateOnly FechaActualizacion { get; init; }
-}
-
-public sealed class IndexPrecioPesaje
-{
-    public long Folio { get; init; }
-    public Planta Planta { get; init; }
-    public decimal Precio { get; init; }
-    public string Familia { get; init; } = string.Empty;
-    public DateTime ActualizadoEn { get; init; }
-}
-
-public sealed class UltimoFolioJcramm
-{
-    public long Folio { get; init; }
-    public DateOnly Fecha { get; init; }
+    public string ColorHex { get; init; } = "#0891B2";
+    public int Orden { get; init; }
 }

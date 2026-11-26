@@ -12,6 +12,14 @@ public enum TipoPesaje
 
 public static class TipoPesajeExtensions
 {
+    public static string ToDisplayName(this TipoPesaje tipo) => tipo switch
+    {
+        TipoPesaje.RecepcionCarga => "Recepción de Carga",
+        TipoPesaje.DespachoCarga => "Despacho de Carga",
+        TipoPesaje.MovimientoInterno => "Movimiento Interno",
+        _ => "Recepción de Carga"
+    };
+
     public static string ToLegacyLabel(this TipoPesaje tipo) => tipo switch
     {
         TipoPesaje.RecepcionCarga => "Recepcion de carga",

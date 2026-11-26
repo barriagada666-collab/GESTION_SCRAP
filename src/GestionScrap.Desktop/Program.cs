@@ -28,47 +28,68 @@ internal static class Program
 
         ApplicationConfiguration.Initialize();
 
-        AppSettingsStore settingsStore = new();
-        AppSettings settings = settingsStore.Load();
-
-        ServiceCollection services = new();
-        services.AddSingleton(settingsStore);
-        services.AddSingleton(settings);
-        services.AddSingleton<IScrapRepository>(_ => new SqliteScrapRepository(settings.SqliteDatabasePath));
-        services.AddSingleton<IAuthService, SecuritySessionService>();
-        services.AddSingleton<IFirebirdSyncService, FirebirdSyncService>();
-        services.AddSingleton<IExcelExportService, ClosedXmlExcelExportService>();
-        services.AddSingleton<IMdbMigrationService, MdbMigrationService>();
-        services.AddSingleton<ScrapApplicationService>();
-
-        using ServiceProvider provider = services.BuildServiceProvider();
-        IScrapRepository repo = provider.GetRequiredService<IScrapRepository>();
-        repo.InitializeAsync().GetAwaiter().GetResult();
-
-        IAuthService auth = provider.GetRequiredService<IAuthService>();
-        ScrapApplicationService appService = provider.GetRequiredService<ScrapApplicationService>();
-
-        while (true)
+        ServiceProvider? provider = null;
+        using (SplashForm splash = new())
         {
-            using LoginForm login = new(auth);
-            if (login.ShowDialog() != DialogResult.OK)
-            {
-                break;
-            }
+            splash.Show();
+            splash.UpdateProgress(25, "Cargando configuración local y endpoints...");
+            System.Windows.Forms.Application.DoEvents();
 
-            bool logoutRequested;
-            using (MainForm main = new(appService, auth, settingsStore, settings))
-            {
-                System.Windows.Forms.Application.Run(main);
-                logoutRequested = main.LogoutRequested;
-            }
+            AppSettingsStore settingsStore = new();
+            AppSettings settings = settingsStore.Load();
 
-            if (!logoutRequested)
-            {
-                break;
-            }
+            ServiceCollection services = new();
+            services.AddSingleton(settingsStore);
+            services.AddSingleton(settings);
+            services.AddSingleton<IScrapRepository>(_ => new SqliteScrapRepository(settings.SqliteDatabasePath));
+            services.AddSingleton<IAuthService, SecuritySessionService>();
+            services.AddSingleton<IFirebirdSyncService, FirebirdSyncService>();
+            services.AddSingleton<IExcelExportService, ClosedXmlExcelExportService>();
+            services.AddSingleton<IMdbMigrationService, MdbMigrationService>();
+            services.AddSingleton<ScrapApplicationService>();
 
-            auth.Logout();
+            provider = services.BuildServiceProvider();
+
+            splash.UpdateProgress(65, "Inicializando SQLite WAL, perfiles RBAC y jerarquía...");
+            System.Windows.Forms.Application.DoEvents();
+            IScrapRepository repo = provider.GetRequiredService<IScrapRepository>();
+            repo.InitializeAsync().GetAwaiter().GetResult();
+
+            splash.UpdateProgress(100, "Sistema listo.");
+            System.Windows.Forms.Application.DoEvents();
+            Thread.Sleep(260);
+            splash.Close();
+        }
+
+        using (provider)
+        {
+            AppSettingsStore settingsStore = provider.GetRequiredService<AppSettingsStore>();
+            AppSettings settings = provider.GetRequiredService<AppSettings>();
+            IAuthService auth = provider.GetRequiredService<IAuthService>();
+            ScrapApplicationService appService = provider.GetRequiredService<ScrapApplicationService>();
+
+            while (true)
+            {
+                using LoginForm login = new(auth);
+                if (login.ShowDialog() != DialogResult.OK)
+                {
+                    break;
+                }
+
+                bool logoutRequested;
+                using (MainForm main = new(appService, auth, settingsStore, settings))
+                {
+                    System.Windows.Forms.Application.Run(main);
+                    logoutRequested = main.LogoutRequested;
+                }
+
+                if (!logoutRequested)
+                {
+                    break;
+                }
+
+                auth.Logout();
+            }
         }
     }
 
@@ -86,7 +107,7 @@ internal static class Program
         }
         catch
         {
-            // Evita cascada si el disco o directorio de logs no está disponible
+            // Evitar cascada de excepciones al registrar el log
         }
 
         MessageBox.Show(

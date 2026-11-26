@@ -10,7 +10,8 @@ using GestionScrap.Infrastructure.Configuration;
 namespace GestionScrap.Desktop.Forms;
 
 /// <summary>
-/// Ventana principal de escritorio con barra de navegación lateral, control RBAC por módulo y carga diferida.
+/// Ventana principal Cambiaso con los 5 módulos activos: Informe Resumen, Grupos de Material (Árbol CRUD),
+/// Análisis de Proveedores, Importador Multi-Origen y Seguridad / Perfiles.
 /// </summary>
 public sealed class MainForm : Form
 {
@@ -26,8 +27,6 @@ public sealed class MainForm : Form
     private readonly Label _lblHeaderModule = new();
     private readonly Label _lblHeaderSub = new();
 
-    private readonly Button _btnQuickPa;
-    private readonly Button _btnQuickPurge;
     private readonly Button _btnQuickConfig;
     private readonly Button _btnQuickPassword;
     private readonly Button _btnLogout;
@@ -62,7 +61,7 @@ public sealed class MainForm : Form
         _settingsStore = settingsStore;
         _settings = settings;
 
-        Text = "Gestión de Scrap · Plataforma .NET 10";
+        Text = "Cambiaso · Gestión de Scrap y Pesajes v4.0";
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1180, 720);
         Size = new Size(1380, 840);
@@ -71,39 +70,44 @@ public sealed class MainForm : Form
         Icon = AppTheme.LoadAppIcon();
         KeyPreview = true;
 
-        // Sidebar izquierdo
         _sidebar.Dock = DockStyle.Left;
-        _sidebar.Width = 236;
+        _sidebar.Width = 242;
         _sidebar.BackColor = AppTheme.SidebarDark;
 
         Panel brandPanel = new()
         {
             Dock = DockStyle.Top,
-            Height = 76,
+            Height = 82,
             BackColor = AppTheme.HeaderDark,
             Padding = new Padding(12, 12, 12, 10)
         };
+        brandPanel.Paint += (_, e) =>
+        {
+            using Pen goldBar = new(AppTheme.AccentGold, 2f);
+            e.Graphics.DrawLine(goldBar, 0, brandPanel.Height - 1, brandPanel.Width, brandPanel.Height - 1);
+        };
+
         PictureBox picBrand = new()
         {
-            Size = new Size(44, 44),
+            Size = new Size(48, 48),
             Location = new Point(12, 16),
             SizeMode = PictureBoxSizeMode.Zoom,
             Image = AppTheme.LoadAppLogo()
         };
         Label lblBrandTitle = new()
         {
-            Text = "GESTIÓN SCRAP",
+            Text = "CAMBIASO SCRAP",
             Font = new Font("Segoe UI", 11F, FontStyle.Bold),
-            ForeColor = Color.White,
-            Location = new Point(64, 15),
+            ForeColor = AppTheme.AccentGold,
+            Location = new Point(68, 17),
             AutoSize = true
         };
         Label lblBrandVer = new()
         {
             Text = "v4.0 · .NET 10 · SQLite",
             Font = new Font("Segoe UI", 8.5F),
-            ForeColor = Color.FromArgb(148, 163, 184),
-            Location = new Point(65, 39),
+            ForeColor = Color.FromArgb(186, 210, 228),
+            Location = new Point(69, 41),
             AutoSize = true
         };
         brandPanel.Controls.AddRange([picBrand, lblBrandTitle, lblBrandVer]);
@@ -112,67 +116,56 @@ public sealed class MainForm : Form
         {
             Dock = DockStyle.Fill,
             AutoScroll = true,
-            Padding = new Padding(8, 10, 8, 10)
+            Padding = new Padding(8, 12, 8, 10)
         };
 
-        RegisterNavItem(navContainer, 0, "Dashboard", "Resumen ejecutivo, KPIs y alertas de tarifas", IconKind.Dashboard,
-            () => _auth.HasPermission(PermisoSistema.VerDashboard), "Atajo Ctrl+1");
-        RegisterNavItem(navContainer, 1, "Grupo de Material", "Consolidado de kilos por familia y planta", IconKind.Layers,
-            () => _auth.HasPermission(PermisoSistema.ConsultarInformes), "Atajo Ctrl+2");
-        RegisterNavItem(navContainer, 2, "Compras y Traslados", "Comparativa de compras vs movimientos internos", IconKind.ShoppingCart,
-            () => _auth.HasPermission(PermisoSistema.ConsultarInformes), "Atajo Ctrl+3");
-        RegisterNavItem(navContainer, 3, "Informe por Cliente", "Historial detallado por RUT o Folio", IconKind.User,
-            () => _auth.HasPermission(PermisoSistema.ConsultarInformes), "Atajo Ctrl+4");
-        RegisterNavItem(navContainer, 4, "Grupos Especiales", "8 segmentos Retail, Mix, Agrícola, Pesquera y Agrosuper", IconKind.Store,
-            () => _auth.HasPermission(PermisoSistema.ConsultarInformes), "Atajo Ctrl+5");
-        RegisterNavItem(navContainer, 5, "Informe JCRAMM", "Despachos pendientes y cierre persistente de folio", IconKind.Document,
-            () => _auth.HasPermission(PermisoSistema.ConsultarInformes), "Atajo Ctrl+6");
-        RegisterNavItem(navContainer, 6, "Informe de Precios", "Precios teóricos, precios reales indexados y congelamiento", IconKind.DollarSign,
-            () => _auth.HasPermission(PermisoSistema.ConsultarInformes), "Atajo Ctrl+7");
-        RegisterNavItem(navContainer, 7, "Mantenedor Precios", "Tarifas pactadas por proveedor y código", IconKind.Plus,
-            () => _auth.HasPermission(PermisoSistema.AdministrarMantenedorPrecios) || _auth.HasPermission(PermisoSistema.ConsultarInformes), "Atajo Ctrl+8");
-        RegisterNavItem(navContainer, 8, "Importar Firebird", "Sincronización TCP/IP desde básculas de planta", IconKind.Database,
-            () => _auth.HasPermission(PermisoSistema.ImportarFirebird), "Atajo Ctrl+9");
-        RegisterNavItem(navContainer, 9, "Seguridad y MDB", "Usuarios RBAC, auditoría, migrador MDB y respaldo SQLite", IconKind.Shield,
-            () => _auth.HasPermission(PermisoSistema.AdministrarSeguridad)
+        RegisterNavItem(navContainer, 0, "Informe Resumen", "Resumen ejecutivo de volumen, plantas y movimientos", IconKind.Dashboard,
+            () => _auth.HasPermission(PermisoSistema.VerInformeResumen), "Atajo Ctrl+1");
+        RegisterNavItem(navContainer, 1, "Grupos de Material", "Árbol editable (Nodos Padre/Hijo) e informe consolidado", IconKind.Layers,
+            () => _auth.HasPermission(PermisoSistema.VerGrupoMaterial), "Atajo Ctrl+2");
+        RegisterNavItem(navContainer, 2, "Análisis Proveedores", "Ranking Pareto ABC, evolución, flota y detalle de entregas", IconKind.Store,
+            () => _auth.HasPermission(PermisoSistema.VerAnalisisProveedores), "Atajo Ctrl+3");
+        RegisterNavItem(navContainer, 3, "Importador BD", "Conexión directa Firebird WMDBSPC.GDB y migración Access", IconKind.Database,
+            () => _auth.HasPermission(PermisoSistema.ImportarDatos), "Atajo Ctrl+4");
+        RegisterNavItem(navContainer, 4, "Seguridad y Perfiles", "Gestión de usuarios, perfiles RBAC, auditoría y respaldo SQLite", IconKind.Shield,
+            () => _auth.HasPermission(PermisoSistema.AdministrarSeguridadPerfiles)
                   || _auth.HasPermission(PermisoSistema.VerAuditoria)
-                  || _auth.HasPermission(PermisoSistema.MigrarDesdeMdb)
-                  || _auth.HasPermission(PermisoSistema.PurgarTablasPesaje),
-            "Atajo Ctrl+0");
+                  || _auth.HasPermission(PermisoSistema.MantenimientoBaseDatos),
+            "Atajo Ctrl+5");
 
         _sidebar.Controls.Add(navContainer);
         _sidebar.Controls.Add(brandPanel);
 
-        // Header superior
         _header.Dock = DockStyle.Top;
-        _header.Height = 60;
+        _header.Height = 62;
         _header.BackColor = AppTheme.HeaderDark;
         _header.Padding = new Padding(16, 8, 14, 8);
+        _header.Paint += (_, e) =>
+        {
+            using Pen goldBar = new(AppTheme.AccentGold, 2f);
+            e.Graphics.DrawLine(goldBar, 0, _header.Height - 1, _header.Width, _header.Height - 1);
+        };
 
         Panel headerTitleBox = new() { Dock = DockStyle.Fill };
-        _lblHeaderModule.Text = "Dashboard";
+        _lblHeaderModule.Text = "Informe Resumen";
         _lblHeaderModule.Font = new Font("Segoe UI", 12.5F, FontStyle.Bold);
         _lblHeaderModule.ForeColor = Color.White;
         _lblHeaderModule.Location = new Point(0, 2);
         _lblHeaderModule.AutoSize = true;
 
-        _lblHeaderSub.Text = "Resumen ejecutivo";
+        _lblHeaderSub.Text = "Resumen ejecutivo operativo";
         _lblHeaderSub.Font = new Font("Segoe UI", 8.5F);
-        _lblHeaderSub.ForeColor = Color.FromArgb(148, 163, 184);
+        _lblHeaderSub.ForeColor = Color.FromArgb(186, 210, 228);
         _lblHeaderSub.Location = new Point(1, 27);
         _lblHeaderSub.AutoSize = true;
         headerTitleBox.Controls.AddRange([_lblHeaderModule, _lblHeaderSub]);
 
-        _btnQuickPa = AppTheme.CreateButton("PA Firebird", IconKind.Play, ButtonVariant.GhostDark,
-            (_, _) => OpenPaFirebirdDialog(), "Ejecutar procedimientos almacenados SAP en Firebird", _toolTip, 118, 32);
-        _btnQuickPurge = AppTheme.CreateButton("Purgar", IconKind.Trash, ButtonVariant.GhostDark,
-            (_, _) => OpenPurgeDialog(), "Limpiar tablas de pesajes (requiere Administrador)", _toolTip, 96, 32);
         _btnQuickConfig = AppTheme.CreateButton("Config. BD", IconKind.Settings, ButtonVariant.GhostDark,
-            (_, _) => OpenConfigDbDialog(), "Configuración de rutas SQLite y servidores Firebird", _toolTip, 112, 32);
+            (_, _) => OpenConfigDbDialog(), "Configuración de rutas SQLite y servidores Firebird", _toolTip, 114, 32);
         _btnQuickPassword = AppTheme.CreateButton("Mi Clave", IconKind.Key, ButtonVariant.GhostDark,
             (_, _) => OpenChangePasswordDialog(), "Cambiar contraseña de la sesión actual", _toolTip, 108, 32);
         _btnLogout = AppTheme.CreateButton("Salir", IconKind.Logout, ButtonVariant.Danger,
-            (_, _) => RequestLogout(), "Cerrar sesión actual y volver a la pantalla de acceso", _toolTip, 86, 32);
+            (_, _) => RequestLogout(), "Cerrar sesión actual y regresar al login", _toolTip, 86, 32);
 
         FlowLayoutPanel headerActions = new()
         {
@@ -182,22 +175,20 @@ public sealed class MainForm : Form
             WrapContents = false,
             Padding = new Padding(0, 6, 0, 0)
         };
-        headerActions.Controls.AddRange([_btnQuickPa, _btnQuickPurge, _btnQuickConfig, _btnQuickPassword, _btnLogout]);
+        headerActions.Controls.AddRange([_btnQuickConfig, _btnQuickPassword, _btnLogout]);
         _header.Controls.Add(headerTitleBox);
         _header.Controls.Add(headerActions);
 
-        // Área central de contenido
         _contentHost.Dock = DockStyle.Fill;
         _contentHost.BackColor = AppTheme.CanvasLight;
 
-        // Barra de estado inferior
         StatusStrip status = new()
         {
             BackColor = AppTheme.HeaderDark,
             ForeColor = Color.White,
             SizingGrip = false
         };
-        _lblUserStatus.ForeColor = Color.FromArgb(125, 211, 252);
+        _lblUserStatus.ForeColor = AppTheme.AccentGold;
         _lblUserStatus.Font = AppTheme.FontBodyBold;
         _lblDbStatus.ForeColor = Color.FromArgb(110, 231, 183);
         _lblDbStatus.Font = AppTheme.FontBody;
@@ -233,7 +224,7 @@ public sealed class MainForm : Form
             TextAlign = ContentAlignment.MiddleLeft,
             TextImageRelation = TextImageRelation.ImageBeforeText,
             Dock = DockStyle.Top,
-            Height = 42,
+            Height = 44,
             FlatStyle = FlatStyle.Flat,
             BackColor = AppTheme.SidebarDark,
             ForeColor = Color.FromArgb(226, 232, 240),
@@ -245,14 +236,13 @@ public sealed class MainForm : Form
             Tag = index
         };
         btn.FlatAppearance.BorderSize = 0;
-        btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(30, 48, 78);
+        btn.FlatAppearance.MouseOverBackColor = Color.FromArgb(14, 96, 138);
         btn.Click += async (_, _) => await NavigateToAsync(index);
         _toolTip.SetToolTip(btn, $"{subtitle} ({tooltip})");
 
         NavItem item = new(index, title, subtitle, icon, isAllowed, btn);
         _navItems.Add(item);
 
-        // Orden inverso por DockStyle.Top: agregamos en container y luego reordenamos por ChildIndex
         container.Controls.Add(btn);
         container.Controls.SetChildIndex(btn, 0);
     }
@@ -262,13 +252,11 @@ public sealed class MainForm : Form
         Usuario? user = _auth.CurrentUser;
         _lblUserStatus.Text = user is null
             ? "Sin sesión activa"
-            : $"Usuario: {user.NombreCompleto} ({user.NombreUsuario} · {user.Rol})";
+            : $"Usuario: {user.NombreCompleto} ({user.NombreUsuario} · {user.NombrePerfil})";
         _lblDbStatus.Text = $"SQLite: {Path.GetFileName(_settings.SqliteDatabasePath)}";
         _lblOpStatus.Text = "Sistema listo.";
 
-        _btnQuickPa.Enabled = _auth.HasPermission(PermisoSistema.EjecutarProcedimientosFirebird);
-        _btnQuickPurge.Enabled = _auth.HasPermission(PermisoSistema.PurgarTablasPesaje);
-        _btnQuickConfig.Enabled = _auth.HasPermission(PermisoSistema.AdministrarSeguridad) || _auth.HasPermission(PermisoSistema.ImportarFirebird);
+        _btnQuickConfig.Enabled = _auth.HasPermission(PermisoSistema.ImportarDatos) || _auth.HasPermission(PermisoSistema.MantenimientoBaseDatos);
 
         foreach (NavItem item in _navItems)
         {
@@ -334,7 +322,7 @@ public sealed class MainForm : Form
                 item.Button.ForeColor = !item.Button.Enabled
                     ? Color.FromArgb(100, 116, 139)
                     : Color.White;
-                item.Button.Image = IconFactory.GetIcon(item.Icon, isActive ? Color.White : Color.FromArgb(203, 213, 225), 16);
+                item.Button.Image = IconFactory.GetIcon(item.Icon, isActive ? Color.White : AppTheme.AccentGold, 16);
             }
         }
         finally
@@ -350,24 +338,22 @@ public sealed class MainForm : Form
 
     private ScrapTabControlBase CreateTabControl(int index) => index switch
     {
-        0 => new DashboardControl(_app, _auth, NavigateTo),
+        0 => new InformeResumenControl(_app, _auth, NavigateTo),
         1 => new GrupoMaterialControl(_app, _auth),
-        2 => new ComprasTrasladosControl(_app, _auth),
-        3 => new InformeClienteControl(_app, _auth),
-        4 => new GruposEspecialesControl(_app, _auth),
-        5 => new InformeJcrammControl(_app, _auth),
-        6 => new InformePreciosControl(_app, _auth),
-        7 => new MantenedorPreciosControl(_app, _auth),
-        8 => new ImportacionFirebirdControl(_app, _auth, _settingsStore, _settings, RefreshDashboardIfLoadedAsync),
-        9 => new AdministracionSeguridadControl(_app, _auth, _settings),
-        _ => new DashboardControl(_app, _auth, NavigateTo)
+        2 => new AnalisisProveedoresControl(_app, _auth),
+        3 => new ImportadorControl(_app, _auth, _settingsStore, _settings, RefreshDataTabsIfLoadedAsync),
+        4 => new SeguridadPerfilesControl(_app, _auth, _settings),
+        _ => new InformeResumenControl(_app, _auth, NavigateTo)
     };
 
-    private async Task RefreshDashboardIfLoadedAsync()
+    private async Task RefreshDataTabsIfLoadedAsync()
     {
-        if (_tabs.TryGetValue(0, out ScrapTabControlBase? dash) && dash.Visible)
+        foreach (int idx in new[] { 0, 1, 2 })
         {
-            await dash.ActivateAsync();
+            if (_tabs.TryGetValue(idx, out ScrapTabControlBase? tab) && tab.Visible)
+            {
+                await tab.ActivateAsync();
+            }
         }
     }
 
@@ -392,11 +378,6 @@ public sealed class MainForm : Form
             Keys.D3 => 2,
             Keys.D4 => 3,
             Keys.D5 => 4,
-            Keys.D6 => 5,
-            Keys.D7 => 6,
-            Keys.D8 => 7,
-            Keys.D9 => 8,
-            Keys.D0 => 9,
             _ => null
         };
 
@@ -404,23 +385,6 @@ public sealed class MainForm : Form
         {
             e.SuppressKeyPress = true;
             NavigateTo(targetIndex.Value);
-        }
-    }
-
-    private void OpenPaFirebirdDialog()
-    {
-        FirebirdPlantaEndpoint ep = _settings.FirebirdEndpoints.FirstOrDefault()
-            ?? AppSettingsStore.CreateDefaultEndpoints()[0];
-        using EjecutarPaFirebirdDialog dlg = new(_app, ep);
-        dlg.ShowDialog(this);
-    }
-
-    private void OpenPurgeDialog()
-    {
-        using LimpiarTablasDialog dlg = new(_app);
-        if (dlg.ShowDialog(this) == DialogResult.OK && _tabs.TryGetValue(_activeTabIndex, out ScrapTabControlBase? active))
-        {
-            _ = active.ActivateAsync();
         }
     }
 

@@ -50,7 +50,7 @@ public sealed class AppSettingsStore
                             ServidorIp = e.ServidorIp,
                             Puerto = e.Puerto <= 0 ? 3050 : e.Puerto,
                             RutaArchivo = e.RutaArchivo,
-                            Usuario = e.Usuario,
+                            Usuario = string.IsNullOrWhiteSpace(e.Usuario) ? "SYSDBA" : e.Usuario,
                             Password = UnprotectSecret(e.ProtectedPassword),
                             UsarModoLocalSiFallaRed = e.UsarModoLocalSiFallaRed
                         })]
@@ -67,7 +67,7 @@ public sealed class AppSettingsStore
         }
         catch
         {
-            // Fallback to safe defaults if settings file is corrupted
+            // Respaldo seguro si el archivo de configuración local está dañado
         }
 
         return new AppSettings
@@ -109,36 +109,36 @@ public sealed class AppSettingsStore
     [
         new FirebirdPlantaEndpoint
         {
-            Planta = Planta.Placilla,
-            Nombre = "Firebird Placilla 1",
+            Planta = Planta.Santiago,
+            Nombre = "Santiago / Bodega Vicky (placilla2)",
             ServidorIp = "192.168.2.56",
             Puerto = 3050,
-            RutaArchivo = @"C:\BDWM\placilla\WMDBSPC.GDB",
+            RutaArchivo = @"\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB",
             Usuario = "SYSDBA",
-            Password = string.Empty,
-            UsarModoLocalSiFallaRed = true
+            Password = "masterkey",
+            UsarModoLocalSiFallaRed = false
         },
         new FirebirdPlantaEndpoint
         {
-            Planta = Planta.Santiago,
-            Nombre = "Firebird Santiago",
+            Planta = Planta.Placilla,
+            Nombre = "Placilla Planta 1 (placilla)",
             ServidorIp = "192.168.2.56",
             Puerto = 3050,
-            RutaArchivo = @"C:\BDWM\placilla2\WMDBSPC.GDB",
+            RutaArchivo = @"\\192.168.2.56\bdwm\placilla\WMDBSPC.GDB",
             Usuario = "SYSDBA",
-            Password = string.Empty,
-            UsarModoLocalSiFallaRed = true
+            Password = "masterkey",
+            UsarModoLocalSiFallaRed = false
         },
         new FirebirdPlantaEndpoint
         {
             Planta = Planta.Talcahuano,
-            Nombre = "Firebird Talcahuano",
+            Nombre = "Talcahuano (thno)",
             ServidorIp = "192.168.2.56",
             Puerto = 3050,
-            RutaArchivo = @"C:\BDWM\thno\PWAREHOUSE.FDB",
+            RutaArchivo = @"\\192.168.2.56\bdwm\thno\PWAREHOUSE.FDB",
             Usuario = "SYSDBA",
-            Password = string.Empty,
-            UsarModoLocalSiFallaRed = true
+            Password = "masterkey",
+            UsarModoLocalSiFallaRed = false
         }
     ];
 
@@ -161,7 +161,7 @@ public sealed class AppSettingsStore
 
     private static string UnprotectSecret(string? stored)
     {
-        if (string.IsNullOrWhiteSpace(stored))
+        if (string.IsNullOrEmpty(stored))
         {
             return string.Empty;
         }
@@ -170,8 +170,8 @@ public sealed class AppSettingsStore
         {
             if (stored.StartsWith("DPAPI:", StringComparison.Ordinal) && OperatingSystem.IsWindows())
             {
-                byte[] cipher = Convert.FromBase64String(stored["DPAPI:".Length..]);
-                byte[] plain = ProtectedData.Unprotect(cipher, null, DataProtectionScope.CurrentUser);
+                byte[] encrypted = Convert.FromBase64String(stored["DPAPI:".Length..]);
+                byte[] plain = ProtectedData.Unprotect(encrypted, null, DataProtectionScope.CurrentUser);
                 return Encoding.UTF8.GetString(plain);
             }
 
@@ -195,10 +195,10 @@ public sealed class AppSettingsStore
         public Planta Planta { get; set; }
         public string Nombre { get; set; } = string.Empty;
         public string ServidorIp { get; set; } = string.Empty;
-        public int Puerto { get; set; }
+        public int Puerto { get; set; } = 3050;
         public string RutaArchivo { get; set; } = string.Empty;
-        public string Usuario { get; set; } = string.Empty;
-        public string ProtectedPassword { get; set; } = string.Empty;
+        public string Usuario { get; set; } = "SYSDBA";
+        public string? ProtectedPassword { get; set; }
         public bool UsarModoLocalSiFallaRed { get; set; }
     }
 }

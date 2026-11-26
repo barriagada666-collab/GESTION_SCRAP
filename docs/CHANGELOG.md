@@ -1,22 +1,17 @@
 # Historial de Cambios (Changelog) · Gestión de Scrap
 
-## [4.0.0] - Migración Completa a .NET 10 + Inno Setup 7
+## [4.0.0] - Arquitectura .NET 10, Branding Cambiaso e Importación Directa Firebird
 
-### Agregado
-- **Nueva Arquitectura .NET 10 (Clean Architecture):** Capas `Domain`, `Application`, `Infrastructure`, `Desktop` (WinForms `PerMonitorV2`) y `Tests`.
-- **Motor Central SQLite WAL:** Reemplazo definitivo de Microsoft Access multiusuario para eliminar corrupción de índices y bloqueos `.ldb`.
-- **Seguridad y Auditoría RBAC:** Autenticación PBKDF2-SHA256, bloqueo tras 5 intentos fallidos, 4 roles (`Administrador`, `Supervisor`, `Operador`, `Auditor`), 13 permisos granulares editables y bitácora `audit_log`.
-- **Cifrado DPAPI:** Protección nativa Windows de credenciales Firebird en configuración local.
-- **Dashboard Ejecutivo Vectorial:** KPIs comparativos, alertas automáticas de tarifas faltantes/pendientes de congelar y gráficos GDI+ con doble búfer.
-- **Exportación Excel Nativa:** Generación directa de archivos `.xlsx` vía `ClosedXML 0.105.1` sin requerir Microsoft Excel COM instalado.
-- **Migrador Híbrido Access MDB:** Extracción segura desde `BD_SCRAP.mdb` con puente automático PowerShell x86 (`SysWOW64`) cuando solo existen drivers Office de 32 bits.
-- **Suite Automatizada de Pruebas:** 22 pruebas xUnit cubriendo lógica unitaria, integración SQLite/Excel, migración Access real, auditoría UI de controles WinForms y carga masiva de 10.000 filas.
-- **Instaladores Inno Setup 7.1.1:** Empaquetado x64 moderno en variantes `SelfContained` y `FrameworkDependent`, gráficos de versión `v4.0` y preservación de datos locales en actualizaciones.
+### Refactorización de Alcance (5 Módulos Activos)
+- Eliminados los módulos y diálogos fuera de alcance (`Precios`, `Mantenedor de Precios`, `JCRAMM`, `Grupos Especiales`, `Compras y Traslados`, `Informe por Cliente` y ejecución directa PA Firebird) para enfocar el sistema exclusivamente en los `5` flujos centrales:
+  1. `Informe Resumen` (`Ctrl+1`).
+  2. `Grupos de Material` (`Ctrl+2`) con árbol CRUD jerárquico completo (Nodos Padre / Subgrupos / Productos Hijo, mover con diálogo o Drag & Drop, reordenar y eliminar).
+  3. `Análisis de Proveedores` (`Ctrl+3`) con ranking Pareto ABC, variación entre períodos, mix de materiales, evolución mensual, flota/patentes y orígenes.
+  4. `Importador BD` (`Ctrl+4`) conectado a Firebird `WMDBSPC.GDB` y migración Access `.mdb`/`.accdb`.
+  5. `Seguridad y Perfiles` (`Ctrl+5`) con CRUD dinámico de `PerfilUsuario`, CRUD de usuarios, bitácora y respaldo/purga SQLite.
 
-### Corregido (Respecto a VBA / Prototipos Anteriores)
-- Habilitada la búsqueda operativa por **Folio** en **Informe por Cliente**.
-- Separadas **Pesquera** y **Agrosuper** en grillas independientes dentro de **Grupos Especiales**.
-- Corregida la consulta de **Grupo Material Talcahuano** para consultar sus propios registros en lugar de Placilla.
-- Corregido `Mantenedor de Precios` para ejecutar actualización real en lugar de inserción duplicada.
-- Prevenida la división por cero en cálculos ponderados cuando los kilos acumulados son 0.
-- Eliminadas vulnerabilidades de concatenación SQL mediante comandos estrictamente parametrizados.
+### Identidad Visual, Base de Datos y Seguridad
+- **Branding Corporativo Cambiaso con Cero Dependencias:** Paleta azul petróleo (`#0B3C5D`, `#0B253A`), cian (`#0891B2`) y dorado (`#C9A46E`), más emblema/monograma e icono embebidos en `GestionScrap.Desktop.dll` (`EmbeddedResource`) y pantalla de arranque (`SplashForm`).
+- **Auditoría e Interoperabilidad Firebird (`WMDBSPC.GDB`):** Corregido el ajuste `Charset=NONE` en `FirebirdSyncService` tras auditar `\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB` (`DEFAULT CHARACTER SET NONE`, `2.730` pesajes activos, `48` productos, `263` clientes) y `\\192.168.2.56\bdwm\placilla\WMDBSPC.GDB` (`18.031` pesajes activos).
+- **Seguridad y Cuenta Inicial:** Sembrado de `5` perfiles iniciales (`Administrador`, `Supervisor`, `Analista`, `Operador`, `Auditor`) y cuenta administrativa `barriagada` / `Cambias0` con PBKDF2-SHA256, bloqueo tras `5` intentos y DPAPI.
+- **Pruebas y Empaquetado:** Suite automatizada `xUnit` de `19` pruebas (`Unit`, `Integration`, `RealDatabases`, `UI STA Audit`, `10k Stress`) y compilación dual Inno Setup 7 (`SelfContained` y `FrameworkDependent`).

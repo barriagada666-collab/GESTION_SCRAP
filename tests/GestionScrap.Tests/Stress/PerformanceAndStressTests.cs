@@ -25,7 +25,7 @@ public sealed class PerformanceAndStressTests : IDisposable
         _repo = new SqliteScrapRepository(dbPath);
         _repo.InitializeAsync().GetAwaiter().GetResult();
         _auth = new SecuritySessionService(_repo);
-        _auth.LoginAsync("admin", "Admin@2026").GetAwaiter().GetResult();
+        _auth.LoginAsync("barriagada", "Cambias0").GetAwaiter().GetResult();
         _app = new ScrapApplicationService(
             _repo,
             _auth,
@@ -45,119 +45,87 @@ public sealed class PerformanceAndStressTests : IDisposable
             }
             catch
             {
-                // Best-effort cleanup
+                // Best-effort
             }
         }
     }
 
     [Fact]
-    public async Task BulkImport10kRows_AndConcurrentQueries_MeetLatencyTargets()
+    public async Task BulkImport10kRows_AndConcurrentCoreQueries_MeetLatencyTargets()
     {
-        DateOnly baseDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-60));
-        string[] familias = ["SUPER-BASULIP", "RECAM", "ALTA", "MIX SUPERMERCADO", "STRETCH"];
-        string[] cods = ["S0400", "S0200", "S0300", "5300000009", "S0500"];
+        DateOnly baseDate = DateOnly.FromDateTime(DateTime.Today.AddDays(-90));
+        string[] cods = ["5300000009", "5301000007", "5301001002", "5302000004", "5300000006"];
 
-        List<Pesaje> placillaBatch = new(4000);
-        List<Pesaje> stgoBatch = new(4000);
-        List<Pesaje> thnoBatch = new(2000);
+        List<Pesaje> batchStgo = new(5000);
+        List<Pesaje> batchPl = new(5000);
 
-        for (int i = 0; i < 4000; i++)
+        for (int i = 0; i < 5000; i++)
         {
-            int fIdx = i % familias.Length;
-            placillaBatch.Add(new Pesaje
+            string cod = cods[i % cods.Length];
+            batchStgo.Add(new Pesaje
             {
                 Folio = 900_000 + i,
-                Planta = Planta.Placilla,
-                TipoPesaje = i % 10 == 0 ? TipoPesaje.MovimientoInterno : TipoPesaje.RecepcionCarga,
+                Planta = Planta.Santiago,
+                TipoPesaje = i % 8 == 0 ? TipoPesaje.MovimientoInterno : TipoPesaje.RecepcionCarga,
                 Patente = $"AB{(i % 90) + 10}CD",
                 PesoBruto = 18_500 + (i % 500),
                 PesoTara = 8_000,
                 PesoNeto = 10_500 + (i % 500),
-                CodProducto = cods[fIdx],
-                NomProducto = familias[fIdx],
-                RutCliente = $"76{(i % 20) + 100000}-1",
-                NomCliente = $"PROVEEDOR STRESS {i % 20}",
-                FechaIngreso = baseDate.AddDays(i % 60),
+                CodProducto = cod,
+                NomProducto = cod,
+                RutCliente = $"76{(i % 25) + 100000}-1",
+                NomCliente = $"PROVEEDOR STRESS {i % 25}",
+                Origen = "BOD. VICKY",
+                FechaIngreso = baseDate.AddDays(i % 90),
                 HoraIngreso = new TimeOnly(8 + (i % 10), i % 60),
-                FechaSalida = baseDate.AddDays(i % 60),
+                FechaSalida = baseDate.AddDays(i % 90),
                 HoraSalida = new TimeOnly(8 + (i % 10), (i + 15) % 60),
-                GrupoMaterial = familias[fIdx],
-                EsTraslado = i % 10 == 0
+                GrupoMaterial = "SCRAP SUPERMERCADO & MIX"
             });
 
-            stgoBatch.Add(new Pesaje
+            batchPl.Add(new Pesaje
             {
-                Folio = 910_000 + i,
-                Planta = Planta.Santiago,
+                Folio = 950_000 + i,
+                Planta = Planta.Placilla,
                 TipoPesaje = TipoPesaje.RecepcionCarga,
                 Patente = $"XY{(i % 90) + 10}ZW",
-                PesoBruto = 16_000,
+                PesoBruto = 17_000,
                 PesoTara = 7_500,
-                PesoNeto = 8_500,
-                CodProducto = cods[fIdx],
-                NomProducto = familias[fIdx],
-                RutCliente = $"77{(i % 15) + 100000}-K",
-                NomCliente = $"RETAIL CLIENTE {i % 15}",
-                FechaIngreso = baseDate.AddDays(i % 60),
+                PesoNeto = 9_500,
+                CodProducto = cod,
+                NomProducto = cod,
+                RutCliente = $"77{(i % 20) + 100000}-K",
+                NomCliente = $"PROVEEDOR PLACILLA {i % 20}",
+                Origen = "PLACILLA",
+                FechaIngreso = baseDate.AddDays(i % 90),
                 HoraIngreso = new TimeOnly(9 + (i % 8), i % 60),
-                FechaSalida = baseDate.AddDays(i % 60),
+                FechaSalida = baseDate.AddDays(i % 90),
                 HoraSalida = new TimeOnly(9 + (i % 8), (i + 10) % 60),
-                GrupoMaterial = familias[fIdx],
-                EsTraslado = false
-            });
-        }
-
-        for (int i = 0; i < 2000; i++)
-        {
-            thnoBatch.Add(new Pesaje
-            {
-                Folio = 920_000 + i,
-                Planta = Planta.Talcahuano,
-                TipoPesaje = TipoPesaje.RecepcionCarga,
-                Patente = $"TH{(i % 90) + 10}NO",
-                PesoBruto = 19_000,
-                PesoTara = 8_200,
-                PesoNeto = 10_800,
-                CodProducto = "S0400",
-                NomProducto = "SUPER-BASULIP",
-                RutCliente = "76555444-3",
-                NomCliente = "PESQUERA SUR",
-                FechaIngreso = baseDate.AddDays(i % 60),
-                HoraIngreso = new TimeOnly(7 + (i % 12), i % 60),
-                FechaSalida = baseDate.AddDays(i % 60),
-                HoraSalida = new TimeOnly(7 + (i % 12), (i + 20) % 60),
-                GrupoMaterial = "SUPER-BASULIP"
+                GrupoMaterial = "SCRAP PESQUERA"
             });
         }
 
         Stopwatch swImport = Stopwatch.StartNew();
-        var r1 = await _repo.ImportPesajesAsync(placillaBatch, Planta.Placilla, "STRESS");
-        var r2 = await _repo.ImportPesajesAsync(stgoBatch, Planta.Santiago, "STRESS");
-        var r3 = await _repo.ImportPesajesAsync(thnoBatch, Planta.Talcahuano, "STRESS");
+        var r1 = await _repo.ImportPesajesAsync(batchStgo, Planta.Santiago, "STRESS");
+        var r2 = await _repo.ImportPesajesAsync(batchPl, Planta.Placilla, "STRESS");
         swImport.Stop();
 
-        Assert.Equal(4000, r1.Imported);
-        Assert.Equal(4000, r2.Imported);
-        Assert.Equal(2000, r3.Imported);
-        Assert.True(swImport.ElapsedMilliseconds < 15_000, $"Importación 10k tardó demasiado: {swImport.ElapsedMilliseconds} ms");
+        Assert.Equal(5000, r1.Imported);
+        Assert.Equal(5000, r2.Imported);
+        Assert.True(swImport.ElapsedMilliseconds < 15_000, $"Importación 10k tardó {swImport.ElapsedMilliseconds} ms");
 
-        // Reimportación idempotente debe detectar 100% duplicados
-        var dupCheck = await _repo.ImportPesajesAsync(placillaBatch, Planta.Placilla, "STRESS");
-        Assert.Equal(0, dupCheck.Imported);
-        Assert.Equal(4000, dupCheck.Duplicates);
+        var dup = await _repo.ImportPesajesAsync(batchStgo, Planta.Santiago, "STRESS");
+        Assert.Equal(0, dup.Imported);
+        Assert.Equal(5000, dup.Duplicates);
 
-        // Consultas concurrentes sobre >10k filas bajo modo WAL
         DateOnly desde = baseDate;
-        DateOnly hasta = baseDate.AddDays(65);
+        DateOnly hasta = baseDate.AddDays(95);
 
         Stopwatch swQueries = Stopwatch.StartNew();
         await Task.WhenAll(
-            _app.GetDashboardSummaryAsync(),
-            _app.GetGrupoMaterialAsync(desde, hasta, semanal: false),
-            _app.GetComprasTrasladosAsync(Planta.Placilla, desde, hasta),
-            _app.GetGruposEspecialesAsync(desde, hasta),
-            _app.GetInformePreciosAsync(Planta.Placilla, ModoPrecio.Teoricos, desde, hasta),
-            _app.GetInformeJcrammAsync());
+            _app.GetInformeResumenAsync(null, null, desde, hasta),
+            _app.GetGrupoMaterialReportAsync(null, desde, hasta),
+            _app.GetAnalisisProveedoresAsync(null, desde, hasta));
         swQueries.Stop();
 
         Assert.True(swQueries.ElapsedMilliseconds < 10_000, $"Consultas concurrentes tardaron {swQueries.ElapsedMilliseconds} ms");

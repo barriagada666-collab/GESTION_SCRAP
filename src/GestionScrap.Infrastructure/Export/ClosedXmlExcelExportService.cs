@@ -1,6 +1,5 @@
 using System.Globalization;
 using ClosedXML.Excel;
-using GestionScrap.Application.Services;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Enums;
 using GestionScrap.Domain.Interfaces;
@@ -8,343 +7,235 @@ using GestionScrap.Domain.Interfaces;
 namespace GestionScrap.Infrastructure.Export;
 
 /// <summary>
-/// Generador nativo de libros Excel (.xlsx) mediante ClosedXML sin dependencia de Office COM.
+/// Exportador nativo .xlsx con ClosedXML estilizado según la identidad corporativa Cambiaso.
 /// </summary>
 public sealed class ClosedXmlExcelExportService : IExcelExportService
 {
-    private static readonly XLColor HeaderDark = XLColor.FromHtml("#0F172A");
-    private static readonly XLColor AccentCyan = XLColor.FromHtml("#0E7490");
-    private static readonly XLColor AccentAmber = XLColor.FromHtml("#B45309");
+    private static readonly XLColor PetrolDark = XLColor.FromHtml("#0B3C5D");
+    private static readonly XLColor GoldAccent = XLColor.FromHtml("#C9A46E");
+    private static readonly XLColor TealAccent = XLColor.FromHtml("#0891B2");
     private static readonly XLColor ZebraFill = XLColor.FromHtml("#F8FAFC");
     private static readonly XLColor TotalFill = XLColor.FromHtml("#E2E8F0");
 
-    public string ExportGrupoMaterial(
+    public string ExportInformeResumen(
         string filePath,
-        DateOnly desde,
-        DateOnly hasta,
-        IReadOnlyList<(string Grupo, long Kilos)> placilla,
-        IReadOnlyList<(string Grupo, long Kilos)> santiago,
-        IReadOnlyList<(string Grupo, long Kilos)> talcahuano)
-    {
-        using XLWorkbook wb = new();
-        IXLWorksheet ws = wb.Worksheets.Add("Grupos Material");
-
-        WriteBanner(ws, "RESUMEN CONSOLIDADO POR GRUPO DE MATERIAL", $"Periodo: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy}", 3);
-
-        int row = 5;
-        row = WritePlantMaterialSection(ws, row, "PLANTA PLACILLA", placilla, AccentCyan);
-        row += 2;
-        row = WritePlantMaterialSection(ws, row, "PLANTA SANTIAGO", santiago, XLColor.FromHtml("#1D4ED8"));
-        row += 2;
-        row = WritePlantMaterialSection(ws, row, "PLANTA TALCAHUANO", talcahuano, XLColor.FromHtml("#047857"));
-        row += 2;
-
-        long granTotal = placilla.Sum(x => x.Kilos) + santiago.Sum(x => x.Kilos) + talcahuano.Sum(x => x.Kilos);
-        ws.Cell(row, 2).Value = "GRAN TOTAL TODAS LAS PLANTAS";
-        ws.Cell(row, 3).Value = granTotal;
-        StyleTotalRow(ws.Range(row, 1, row, 3), 3);
-
-        FinalizeSheet(ws, 3);
-        SaveWorkbook(wb, filePath);
-        return filePath;
-    }
-
-    public string ExportComprasTraslados(
-        string filePath,
-        Planta planta,
-        DateOnly desde,
-        DateOnly hasta,
-        IReadOnlyList<(string Codigo, string Descripcion, string RazonSocial, long Kilos)> compras,
-        IReadOnlyList<(long Folio, string Patente, string Producto, DateOnly FechaEnt, DateOnly FechaSal, int Bruto, int Tara, int Neto)> traslados,
-        long totalCompras,
-        long totalTraslados)
+        string tituloPeriodo,
+        IReadOnlyList<(string Planta, int Viajes, long Kilos)> porPlanta,
+        IReadOnlyList<(string Grupo, int Viajes, long Kilos, double Porcentaje)> porGrupo,
+        IReadOnlyList<(string Rut, string Proveedor, int Viajes, long Kilos, double Porcentaje)> topProveedores,
+        IReadOnlyList<Pesaje> detallePesajes)
     {
         using XLWorkbook wb = new();
 
-        // Hoja 1: Compras
-        IXLWorksheet wsCompras = wb.Worksheets.Add($"Compras {planta.ToShortTitle()}");
-        WriteBanner(wsCompras, $"INFORME COMPRAS SCRAP - PLANTA {planta.ToDisplayName()}", $"Periodo: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy}", 5);
+        IXLWorksheet wsRes = wb.Worksheets.Add("Resumen Ejecutivo");
+        WriteBanner(wsRes, "CAMBIASO HNOS. · INFORME RESUMEN DE PESAJES Y SCRAP", $"Período: {tituloPeriodo}", 4);
 
-        string[] hdrCompras = ["N°", "CÓDIGO", "DESCRIPCIÓN PRODUCTO", "RAZÓN SOCIAL / PROVEEDOR", "TOTAL KILOS"];
-        WriteTableHeaders(wsCompras, 5, hdrCompras, AccentCyan);
-
-        int r = 6;
-        for (int i = 0; i < compras.Count; i++)
+        int r = 5;
+        WriteSectionHeader(wsRes, r++, "DISTRIBUCIÓN POR PLANTA", ["Planta", "Viajes", "Kilos Netos", "% Participación"], TealAccent);
+        long totPl = porPlanta.Sum(x => x.Kilos);
+        foreach ((string Planta, int Viajes, long Kilos) p in porPlanta)
         {
-            var c = compras[i];
-            wsCompras.Cell(r, 1).Value = i + 1;
-            wsCompras.Cell(r, 2).Value = c.Codigo;
-            wsCompras.Cell(r, 3).Value = c.Descripcion;
-            wsCompras.Cell(r, 4).Value = c.RazonSocial;
-            wsCompras.Cell(r, 5).Value = c.Kilos;
-            wsCompras.Cell(r, 5).Style.NumberFormat.Format = "#,##0";
-            if (i % 2 == 1)
-            {
-                wsCompras.Range(r, 1, r, 5).Style.Fill.BackgroundColor = ZebraFill;
-            }
+            double pct = totPl > 0 ? p.Kilos * 100.0 / totPl : 0.0;
+            wsRes.Cell(r, 1).Value = p.Planta;
+            wsRes.Cell(r, 2).Value = p.Viajes;
+            wsRes.Cell(r, 3).Value = p.Kilos;
+            wsRes.Cell(r, 4).Value = pct / 100.0;
+            wsRes.Cell(r, 2).Style.NumberFormat.Format = "#,##0";
+            wsRes.Cell(r, 3).Style.NumberFormat.Format = "#,##0";
+            wsRes.Cell(r, 4).Style.NumberFormat.Format = "0.0%";
             r++;
         }
 
-        wsCompras.Cell(r, 4).Value = "TOTAL GENERAL COMPRAS";
-        if (compras.Count > 0)
+        r += 2;
+        WriteSectionHeader(wsRes, r++, "TOP PROVEEDORES DEL PERÍODO", ["RUT / Razón Social", "Viajes", "Kilos Netos", "% Participación"], PetrolDark);
+        foreach ((string Rut, string Proveedor, int Viajes, long Kilos, double Porcentaje) tp in topProveedores)
         {
-            wsCompras.Cell(r, 5).FormulaA1 = $"SUM(E6:E{r - 1})";
-        }
-        else
-        {
-            wsCompras.Cell(r, 5).Value = totalCompras;
-        }
-        StyleTotalRow(wsCompras.Range(r, 1, r, 5), 5);
-        FinalizeSheet(wsCompras, 5);
-
-        // Hoja 2: Traslados
-        IXLWorksheet wsTras = wb.Worksheets.Add($"Traslados {planta.ToShortTitle()}");
-        WriteBanner(wsTras, $"TRASLADOS Y MOVIMIENTOS - PLANTA {planta.ToDisplayName()}", $"Periodo: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy}", 9);
-
-        string[] hdrTras = ["N°", "FOLIO", "PATENTE", "PRODUCTO", "FECHA ENT.", "FECHA SAL.", "PESO BRUTO", "PESO TARA", "TOTAL KILOS"];
-        WriteTableHeaders(wsTras, 5, hdrTras, AccentAmber);
-
-        r = 6;
-        for (int i = 0; i < traslados.Count; i++)
-        {
-            var t = traslados[i];
-            wsTras.Cell(r, 1).Value = i + 1;
-            wsTras.Cell(r, 2).Value = t.Folio;
-            wsTras.Cell(r, 3).Value = t.Patente;
-            wsTras.Cell(r, 4).Value = t.Producto;
-            wsTras.Cell(r, 5).Value = t.FechaEnt.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            wsTras.Cell(r, 6).Value = t.FechaSal.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            wsTras.Cell(r, 7).Value = t.Bruto;
-            wsTras.Cell(r, 8).Value = t.Tara;
-            wsTras.Cell(r, 9).Value = t.Neto;
-            wsTras.Range(r, 7, r, 9).Style.NumberFormat.Format = "#,##0";
-            if (i % 2 == 1)
-            {
-                wsTras.Range(r, 1, r, 9).Style.Fill.BackgroundColor = ZebraFill;
-            }
+            wsRes.Cell(r, 1).Value = $"{tp.Rut} · {tp.Proveedor}";
+            wsRes.Cell(r, 2).Value = tp.Viajes;
+            wsRes.Cell(r, 3).Value = tp.Kilos;
+            wsRes.Cell(r, 4).Value = tp.Porcentaje / 100.0;
+            wsRes.Cell(r, 2).Style.NumberFormat.Format = "#,##0";
+            wsRes.Cell(r, 3).Style.NumberFormat.Format = "#,##0";
+            wsRes.Cell(r, 4).Style.NumberFormat.Format = "0.0%";
             r++;
         }
 
-        wsTras.Cell(r, 8).Value = "TOTAL TRASLADOS";
-        if (traslados.Count > 0)
+        IXLWorksheet wsGrp = wb.Worksheets.Add("Grupos Material");
+        WriteBanner(wsGrp, "CONSOLIDADO POR GRUPO DE MATERIAL", $"Período: {tituloPeriodo}", 4);
+        WriteSectionHeader(wsGrp, 5, "GRUPOS DE MATERIAL", ["Grupo Padre", "Viajes", "Kilos Netos", "%"], PetrolDark);
+        int gr = 6;
+        foreach ((string Grupo, int Viajes, long Kilos, double Porcentaje) g in porGrupo)
         {
-            wsTras.Cell(r, 9).FormulaA1 = $"SUM(I6:I{r - 1})";
+            wsGrp.Cell(gr, 1).Value = g.Grupo;
+            wsGrp.Cell(gr, 2).Value = g.Viajes;
+            wsGrp.Cell(gr, 3).Value = g.Kilos;
+            wsGrp.Cell(gr, 4).Value = g.Porcentaje / 100.0;
+            wsGrp.Cell(gr, 2).Style.NumberFormat.Format = "#,##0";
+            wsGrp.Cell(gr, 3).Style.NumberFormat.Format = "#,##0";
+            wsGrp.Cell(gr, 4).Style.NumberFormat.Format = "0.0%";
+            if ((gr - 6) % 2 == 1) wsGrp.Range(gr, 1, gr, 4).Style.Fill.BackgroundColor = ZebraFill;
+            gr++;
         }
-        else
-        {
-            wsTras.Cell(r, 9).Value = totalTraslados;
-        }
-        StyleTotalRow(wsTras.Range(r, 1, r, 9), 9);
-        FinalizeSheet(wsTras, 9);
 
-        SaveWorkbook(wb, filePath);
+        IXLWorksheet wsDet = wb.Worksheets.Add("Últimos Movimientos");
+        WriteBanner(wsDet, "DETALLE DE MOVIMIENTOS RECIENTES", $"Período: {tituloPeriodo}", 9);
+        WriteHeaders(wsDet, 5, ["Folio", "Planta", "Fecha", "Patente", "RUT", "Proveedor", "Código", "Producto", "Neto Kg"]);
+        int dr = 6;
+        foreach (Pesaje p in detallePesajes)
+        {
+            wsDet.Cell(dr, 1).Value = p.Folio;
+            wsDet.Cell(dr, 2).Value = p.Planta.ToShortTitle();
+            wsDet.Cell(dr, 3).Value = p.FechaIngreso.ToDateTime(TimeOnly.MinValue);
+            wsDet.Cell(dr, 3).Style.DateFormat.Format = "dd-mm-yyyy";
+            wsDet.Cell(dr, 4).Value = p.Patente;
+            wsDet.Cell(dr, 5).Value = p.RutCliente;
+            wsDet.Cell(dr, 6).Value = p.NomCliente;
+            wsDet.Cell(dr, 7).Value = p.CodProducto;
+            wsDet.Cell(dr, 8).Value = p.NomProducto;
+            wsDet.Cell(dr, 9).Value = p.PesoNeto;
+            wsDet.Cell(dr, 9).Style.NumberFormat.Format = "#,##0";
+            dr++;
+        }
+
+        wsRes.Columns().AdjustToContents();
+        wsGrp.Columns().AdjustToContents();
+        wsDet.Columns().AdjustToContents();
+        wb.SaveAs(filePath);
         return filePath;
     }
 
-    public string ExportInformeCliente(
+    public string ExportGrupoMaterialJerarquico(
         string filePath,
-        Planta planta,
-        string rut,
-        string razonSocial,
-        DateOnly desde,
-        DateOnly hasta,
-        IReadOnlyList<(long Folio, string Patente, string Producto, DateOnly FechaIng, DateOnly FechaSal, int Bruto, int Tara, int Neto)> pesajes,
+        string periodoLabel,
+        IReadOnlyList<(int Nivel, string Nombre, string Tipo, string CodigoProducto, int Viajes, long Kilos, double Porcentaje)> nodosPlanos,
         long totalKilos)
     {
         using XLWorkbook wb = new();
-        IXLWorksheet ws = wb.Worksheets.Add("Ticket Cliente");
-
-        WriteBanner(ws, $"TICKET CONSOLIDADO DE RECEPCIÓN - {planta.ToDisplayName()}",
-            $"Cliente: {razonSocial} | RUT: {rut} | Periodo: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy}", 9);
-
-        string[] headers = ["N°", "N° FOLIO", "PATENTE", "PRODUCTO", "FECHA ENT.", "FECHA SAL.", "PESO BRUTO", "PESO TARA", "PESO NETO (KG)"];
-        WriteTableHeaders(ws, 5, headers, AccentCyan);
+        IXLWorksheet ws = wb.Worksheets.Add("Árbol Grupos Material");
+        WriteBanner(ws, "CAMBIASO HNOS. · INFORME JERÁRQUICO POR GRUPO DE MATERIAL", periodoLabel, 6);
+        WriteHeaders(ws, 5, ["Jerarquía / Nodo", "Nivel / Tipo", "Código Prod.", "Viajes", "Kilos Netos", "% del Total"]);
 
         int r = 6;
-        for (int i = 0; i < pesajes.Count; i++)
+        foreach (var n in nodosPlanos)
         {
-            var p = pesajes[i];
-            ws.Cell(r, 1).Value = i + 1;
-            ws.Cell(r, 2).Value = p.Folio;
-            ws.Cell(r, 3).Value = p.Patente;
-            ws.Cell(r, 4).Value = p.Producto;
-            ws.Cell(r, 5).Value = p.FechaIng.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            ws.Cell(r, 6).Value = p.FechaSal.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            ws.Cell(r, 7).Value = p.Bruto;
-            ws.Cell(r, 8).Value = p.Tara;
-            ws.Cell(r, 9).Value = p.Neto;
-            ws.Range(r, 7, r, 9).Style.NumberFormat.Format = "#,##0";
-            if (i % 2 == 1)
+            string indent = n.Nivel == 0 ? string.Empty : new string(' ', n.Nivel * 4) + "└─ ";
+            ws.Cell(r, 1).Value = indent + n.Nombre;
+            ws.Cell(r, 2).Value = n.Tipo;
+            ws.Cell(r, 3).Value = n.CodigoProducto;
+            ws.Cell(r, 4).Value = n.Viajes;
+            ws.Cell(r, 5).Value = n.Kilos;
+            ws.Cell(r, 6).Value = n.Porcentaje / 100.0;
+
+            ws.Cell(r, 4).Style.NumberFormat.Format = "#,##0";
+            ws.Cell(r, 5).Style.NumberFormat.Format = "#,##0";
+            ws.Cell(r, 6).Style.NumberFormat.Format = "0.00%";
+
+            if (n.Nivel == 0)
             {
-                ws.Range(r, 1, r, 9).Style.Fill.BackgroundColor = ZebraFill;
+                IXLRange rowRange = ws.Range(r, 1, r, 6);
+                rowRange.Style.Font.Bold = true;
+                rowRange.Style.Fill.BackgroundColor = TotalFill;
             }
+            else if ((r - 6) % 2 == 1)
+            {
+                ws.Range(r, 1, r, 6).Style.Fill.BackgroundColor = ZebraFill;
+            }
+
             r++;
         }
 
-        ws.Cell(r, 8).Value = "TOTAL KILOS RECEPCIONADOS";
-        ws.Cell(r, 9).FormulaA1 = pesajes.Count > 0 ? $"SUM(I6:I{r - 1})" : totalKilos.ToString(CultureInfo.InvariantCulture);
-        StyleTotalRow(ws.Range(r, 1, r, 9), 9);
+        ws.Cell(r + 1, 4).Value = "TOTAL GENERAL:";
+        ws.Cell(r + 1, 4).Style.Font.Bold = true;
+        ws.Cell(r + 1, 5).Value = totalKilos;
+        ws.Cell(r + 1, 5).Style.Font.Bold = true;
+        ws.Cell(r + 1, 5).Style.NumberFormat.Format = "#,##0";
 
-        FinalizeSheet(ws, 9);
-        SaveWorkbook(wb, filePath);
+        ws.Columns().AdjustToContents();
+        wb.SaveAs(filePath);
         return filePath;
     }
 
-    public string ExportInformeJcramm(
+    public string ExportAnalisisProveedores(
         string filePath,
-        IReadOnlyList<(DateOnly Fecha, long Folio, string CodProd, string Descripcion, string Patente, string Proveedor, string Ciudad, int Kilos)> detalle,
-        IReadOnlyList<(string Producto, long Kilos)> resumen,
-        long totalDetalle,
-        long totalResumen)
+        string periodoLabel,
+        IReadOnlyList<(string Rut, string RazonSocial, string Ciudad, int Viajes, long Kilos, double Participacion, double Acumulado, string ClaseAbc, double PromedioKg, string ProductoTop)> ranking,
+        IReadOnlyList<(string Grupo, int Viajes, long Kilos, double Porcentaje)>? desgloseSeleccionado,
+        IReadOnlyList<Pesaje>? entregasSeleccionado,
+        string? proveedorSeleccionadoNombre)
     {
         using XLWorkbook wb = new();
-        IXLWorksheet ws = wb.Worksheets.Add("Informe JCRAMM");
 
-        WriteBanner(ws, "INFORME DE PESAJE JCRAMM", $"Generado: {DateTime.Now:dd/MM/yyyy HH:mm}", 8);
+        IXLWorksheet wsRank = wb.Worksheets.Add("Ranking Pareto ABC");
+        WriteBanner(wsRank, "CAMBIASO HNOS. · ANÁLISIS ROBUSTO DE PROVEEDORES (PARETO ABC)", periodoLabel, 10);
+        WriteHeaders(wsRank, 5, ["RUT", "Proveedor / Razón Social", "Ciudad", "Clase ABC", "Viajes", "Kilos Netos", "% Partic.", "% Acum.", "Prom. Kg/Viaje", "Grupo Principal"]);
 
-        int row = 5;
-        ws.Cell(row, 1).Value = "RESUMEN POR MATERIAL";
-        ws.Cell(row, 1).Style.Font.Bold = true;
-        row++;
-
-        WriteTableHeaders(ws, row, ["N°", "DESCRIPCIÓN PRODUCTO", "TOTAL KILOS"], AccentCyan);
-        row++;
-        int startRes = row;
-        for (int i = 0; i < resumen.Count; i++)
+        int r = 6;
+        foreach (var item in ranking)
         {
-            ws.Cell(row, 1).Value = i + 1;
-            ws.Cell(row, 2).Value = resumen[i].Producto;
-            ws.Cell(row, 3).Value = resumen[i].Kilos;
-            ws.Cell(row, 3).Style.NumberFormat.Format = "#,##0";
-            row++;
+            wsRank.Cell(r, 1).Value = item.Rut;
+            wsRank.Cell(r, 2).Value = item.RazonSocial;
+            wsRank.Cell(r, 3).Value = item.Ciudad;
+            wsRank.Cell(r, 4).Value = item.ClaseAbc;
+            wsRank.Cell(r, 5).Value = item.Viajes;
+            wsRank.Cell(r, 6).Value = item.Kilos;
+            wsRank.Cell(r, 7).Value = item.Participacion / 100.0;
+            wsRank.Cell(r, 8).Value = item.Acumulado / 100.0;
+            wsRank.Cell(r, 9).Value = item.PromedioKg;
+            wsRank.Cell(r, 10).Value = item.ProductoTop;
+
+            wsRank.Cell(r, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+            wsRank.Cell(r, 5).Style.NumberFormat.Format = "#,##0";
+            wsRank.Cell(r, 6).Style.NumberFormat.Format = "#,##0";
+            wsRank.Cell(r, 7).Style.NumberFormat.Format = "0.00%";
+            wsRank.Cell(r, 8).Style.NumberFormat.Format = "0.00%";
+            wsRank.Cell(r, 9).Style.NumberFormat.Format = "#,##0.0";
+            if ((r - 6) % 2 == 1) wsRank.Range(r, 1, r, 10).Style.Fill.BackgroundColor = ZebraFill;
+            r++;
         }
-        ws.Cell(row, 2).Value = "TOTAL KILOS RESUMEN";
-        ws.Cell(row, 3).FormulaA1 = resumen.Count > 0 ? $"SUM(C{startRes}:C{row - 1})" : totalResumen.ToString(CultureInfo.InvariantCulture);
-        StyleTotalRow(ws.Range(row, 1, row, 3), 3);
-        row += 2;
 
-        ws.Cell(row, 1).Value = "DETALLE DE PESAJES REGISTRADOS";
-        ws.Cell(row, 1).Style.Font.Bold = true;
-        row++;
-
-        WriteTableHeaders(ws, row, ["N°", "FECHA", "FOLIO", "DESCRIPCIÓN PRODUCTO", "PATENTE", "PROVEEDOR", "CIUDAD", "KILOS"], HeaderDark);
-        row++;
-        int startDet = row;
-        for (int i = 0; i < detalle.Count; i++)
+        if (!string.IsNullOrWhiteSpace(proveedorSeleccionadoNombre) &&
+            desgloseSeleccionado is not null &&
+            entregasSeleccionado is not null)
         {
-            var d = detalle[i];
-            ws.Cell(row, 1).Value = i + 1;
-            ws.Cell(row, 2).Value = d.Fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-            ws.Cell(row, 3).Value = d.Folio;
-            ws.Cell(row, 4).Value = d.Descripcion;
-            ws.Cell(row, 5).Value = d.Patente;
-            ws.Cell(row, 6).Value = d.Proveedor;
-            ws.Cell(row, 7).Value = d.Ciudad;
-            ws.Cell(row, 8).Value = d.Kilos;
-            ws.Cell(row, 8).Style.NumberFormat.Format = "#,##0";
-            if (i % 2 == 1)
+            IXLWorksheet wsDet = wb.Worksheets.Add("Ficha Proveedor");
+            WriteBanner(wsDet, $"FICHA PROVEEDOR: {proveedorSeleccionadoNombre}", periodoLabel, 8);
+            WriteSectionHeader(wsDet, 5, "MIX DE MATERIALES", ["Grupo Material", "Viajes", "Kilos", "%"], TealAccent);
+            int mr = 6;
+            foreach (var g in desgloseSeleccionado)
             {
-                ws.Range(row, 1, row, 8).Style.Fill.BackgroundColor = ZebraFill;
+                wsDet.Cell(mr, 1).Value = g.Grupo;
+                wsDet.Cell(mr, 2).Value = g.Viajes;
+                wsDet.Cell(mr, 3).Value = g.Kilos;
+                wsDet.Cell(mr, 4).Value = g.Porcentaje / 100.0;
+                wsDet.Cell(mr, 2).Style.NumberFormat.Format = "#,##0";
+                wsDet.Cell(mr, 3).Style.NumberFormat.Format = "#,##0";
+                wsDet.Cell(mr, 4).Style.NumberFormat.Format = "0.0%";
+                mr++;
             }
-            row++;
-        }
 
-        ws.Cell(row, 7).Value = "TOTAL KILOS DETALLE";
-        ws.Cell(row, 8).FormulaA1 = detalle.Count > 0 ? $"SUM(H{startDet}:H{row - 1})" : totalDetalle.ToString(CultureInfo.InvariantCulture);
-        StyleTotalRow(ws.Range(row, 1, row, 8), 8);
-
-        FinalizeSheet(ws, 8);
-        SaveWorkbook(wb, filePath);
-        return filePath;
-    }
-
-    public string ExportInformePrecios(
-        string filePath,
-        Planta planta,
-        DateOnly desde,
-        DateOnly hasta,
-        ModoPrecio modo,
-        IReadOnlyList<(long Folio, string CodigoProd, string Descripcion, string Proveedor, int Kilos, decimal Precio, decimal Total, string Familia)> detalle,
-        IReadOnlyList<(string Grupo, long Kilos, decimal PrecioPromedio, decimal TotalPesos)> resumen)
-    {
-        using XLWorkbook wb = new();
-        IXLWorksheet ws = wb.Worksheets.Add($"Precios {planta.ToShortTitle()}");
-
-        WriteBanner(ws, $"INFORME DE PRECIOS {modo.ToString().ToUpperInvariant()} - {planta.ToDisplayName()}",
-            $"Periodo: {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy}", 9);
-
-        int row = 5;
-        ws.Cell(row, 1).Value = "RESUMEN POR FAMILIA DE MATERIAL";
-        ws.Cell(row, 1).Style.Font.Bold = true;
-        row++;
-
-        WriteTableHeaders(ws, row, ["GRUPO", "TOTAL KILOS", "PRECIO PROM. PONDERADO", "TOTAL VALORIZADO ($)"], AccentAmber);
-        row++;
-        int resStart = row;
-        foreach (var r in resumen)
-        {
-            ws.Cell(row, 1).Value = r.Grupo;
-            ws.Cell(row, 2).Value = r.Kilos;
-            ws.Cell(row, 3).Value = r.PrecioPromedio;
-            ws.Cell(row, 4).Value = r.TotalPesos;
-            ws.Cell(row, 2).Style.NumberFormat.Format = "#,##0";
-            ws.Cell(row, 3).Style.NumberFormat.Format = "$ #,##0.00";
-            ws.Cell(row, 4).Style.NumberFormat.Format = "$ #,##0";
-            row++;
-        }
-
-        long totK = resumen.Sum(x => x.Kilos);
-        decimal totP = resumen.Sum(x => x.TotalPesos);
-        ws.Cell(row, 1).Value = "TOTALES RESUMEN";
-        ws.Cell(row, 2).FormulaA1 = $"SUM(B{resStart}:B{row - 1})";
-        ws.Cell(row, 3).Value = BusinessRules.CalculateWeightedAverage(totP, totK);
-        ws.Cell(row, 4).FormulaA1 = $"SUM(D{resStart}:D{row - 1})";
-        StyleTotalRow(ws.Range(row, 1, row, 4), 4);
-        ws.Cell(row, 3).Style.NumberFormat.Format = "$ #,##0.00";
-        ws.Cell(row, 4).Style.NumberFormat.Format = "$ #,##0";
-        row += 2;
-
-        ws.Cell(row, 1).Value = "DETALLE DE PESAJES VALORIZADOS";
-        ws.Cell(row, 1).Style.Font.Bold = true;
-        row++;
-
-        WriteTableHeaders(ws, row, ["N°", "FOLIO", "CÓDIGO PROD.", "DESCRIPCIÓN PRODUCTO", "PROVEEDOR", "KILOS", "PRECIO UNIT.", "TOTAL ($)", "FAMILIA"], HeaderDark);
-        row++;
-        int detStart = row;
-        for (int i = 0; i < detalle.Count; i++)
-        {
-            var d = detalle[i];
-            ws.Cell(row, 1).Value = i + 1;
-            ws.Cell(row, 2).Value = d.Folio;
-            ws.Cell(row, 3).Value = d.CodigoProd;
-            ws.Cell(row, 4).Value = d.Descripcion;
-            ws.Cell(row, 5).Value = d.Proveedor;
-            ws.Cell(row, 6).Value = d.Kilos;
-            ws.Cell(row, 7).Value = d.Precio;
-            ws.Cell(row, 8).FormulaA1 = $"F{row}*G{row}";
-            ws.Cell(row, 9).Value = d.Familia;
-
-            ws.Cell(row, 6).Style.NumberFormat.Format = "#,##0";
-            ws.Cell(row, 7).Style.NumberFormat.Format = "$ #,##0";
-            ws.Cell(row, 8).Style.NumberFormat.Format = "$ #,##0";
-            if (i % 2 == 1)
+            mr += 2;
+            WriteHeaders(wsDet, mr++, ["Folio", "Planta", "Fecha", "Patente", "Producto", "Origen", "Bruto", "Neto Kg"]);
+            foreach (Pesaje p in entregasSeleccionado)
             {
-                ws.Range(row, 1, row, 9).Style.Fill.BackgroundColor = ZebraFill;
+                wsDet.Cell(mr, 1).Value = p.Folio;
+                wsDet.Cell(mr, 2).Value = p.Planta.ToShortTitle();
+                wsDet.Cell(mr, 3).Value = p.FechaIngreso.ToDateTime(TimeOnly.MinValue);
+                wsDet.Cell(mr, 3).Style.DateFormat.Format = "dd-mm-yyyy";
+                wsDet.Cell(mr, 4).Value = p.Patente;
+                wsDet.Cell(mr, 5).Value = p.NomProducto;
+                wsDet.Cell(mr, 6).Value = p.Origen;
+                wsDet.Cell(mr, 7).Value = p.PesoBruto;
+                wsDet.Cell(mr, 8).Value = p.PesoNeto;
+                wsDet.Cell(mr, 7).Style.NumberFormat.Format = "#,##0";
+                wsDet.Cell(mr, 8).Style.NumberFormat.Format = "#,##0";
+                mr++;
             }
-            row++;
+
+            wsDet.Columns().AdjustToContents();
         }
 
-        ws.Cell(row, 5).Value = "TOTALES DETALLE";
-        if (detalle.Count > 0)
-        {
-            ws.Cell(row, 6).FormulaA1 = $"SUM(F{detStart}:F{row - 1})";
-            ws.Cell(row, 8).FormulaA1 = $"SUM(H{detStart}:H{row - 1})";
-        }
-        StyleTotalRow(ws.Range(row, 1, row, 9), 8);
-        ws.Cell(row, 8).Style.NumberFormat.Format = "$ #,##0";
-
-        FinalizeSheet(ws, 9);
-        SaveWorkbook(wb, filePath);
+        wsRank.Columns().AdjustToContents();
+        wb.SaveAs(filePath);
         return filePath;
     }
 
@@ -352,128 +243,66 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
     {
         using XLWorkbook wb = new();
         IXLWorksheet ws = wb.Worksheets.Add("Auditoría");
-        WriteBanner(ws, "REGISTRO DE AUDITORÍA DE SEGURIDAD Y OPERACIONES", $"Exportado: {DateTime.Now:dd/MM/yyyy HH:mm:ss}", 6);
+        WriteBanner(ws, "CAMBIASO HNOS. · BITÁCORA DE AUDITORÍA DEL SISTEMA", $"Exportado: {DateTime.Now:dd/MM/yyyy HH:mm}", 6);
+        WriteHeaders(ws, 5, ["ID", "Fecha UTC", "Usuario", "Acción", "Entidad", "Detalle"]);
 
-        WriteTableHeaders(ws, 5, ["ID", "FECHA / HORA (LOCAL)", "USUARIO", "ACCIÓN", "ENTIDAD", "DETALLE"], HeaderDark);
-        int row = 6;
-        for (int i = 0; i < logs.Count; i++)
+        int r = 6;
+        foreach (AuditLogEntry log in logs)
         {
-            AuditLogEntry l = logs[i];
-            ws.Cell(row, 1).Value = l.Id;
-            ws.Cell(row, 2).Value = l.TimestampUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-            ws.Cell(row, 3).Value = l.Usuario;
-            ws.Cell(row, 4).Value = l.Accion;
-            ws.Cell(row, 5).Value = l.Entidad;
-            ws.Cell(row, 6).Value = l.Detalle;
-            if (i % 2 == 1)
-            {
-                ws.Range(row, 1, row, 6).Style.Fill.BackgroundColor = ZebraFill;
-            }
-            row++;
+            ws.Cell(r, 1).Value = log.Id;
+            ws.Cell(r, 2).Value = log.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
+            ws.Cell(r, 3).Value = log.Usuario;
+            ws.Cell(r, 4).Value = log.Accion;
+            ws.Cell(r, 5).Value = log.Entidad;
+            ws.Cell(r, 6).Value = log.Detalle;
+            r++;
         }
 
-        FinalizeSheet(ws, 6);
-        SaveWorkbook(wb, filePath);
+        ws.Columns().AdjustToContents();
+        wb.SaveAs(filePath);
         return filePath;
     }
 
-    private static int WritePlantMaterialSection(
-        IXLWorksheet ws,
-        int startRow,
-        string title,
-        IReadOnlyList<(string Grupo, long Kilos)> rows,
-        XLColor color)
+    private static void WriteBanner(IXLWorksheet ws, string title, string subtitle, int spanCols)
     {
-        ws.Cell(startRow, 1).Value = title;
-        ws.Cell(startRow, 1).Style.Font.Bold = true;
-        ws.Cell(startRow, 1).Style.Font.FontColor = color;
-        startRow++;
-
-        WriteTableHeaders(ws, startRow, ["N°", "GRUPO DE MATERIAL", "TOTAL KILOS"], color);
-        startRow++;
-        int dataStart = startRow;
-
-        for (int i = 0; i < rows.Count; i++)
-        {
-            ws.Cell(startRow, 1).Value = i + 1;
-            ws.Cell(startRow, 2).Value = rows[i].Grupo;
-            ws.Cell(startRow, 3).Value = rows[i].Kilos;
-            ws.Cell(startRow, 3).Style.NumberFormat.Format = "#,##0";
-            startRow++;
-        }
-
-        ws.Cell(startRow, 2).Value = $"TOTAL {title}";
-        if (rows.Count > 0)
-        {
-            ws.Cell(startRow, 3).FormulaA1 = $"SUM(C{dataStart}:C{startRow - 1})";
-        }
-        else
-        {
-            ws.Cell(startRow, 3).Value = 0;
-        }
-        StyleTotalRow(ws.Range(startRow, 1, startRow, 3), 3);
-        return startRow;
-    }
-
-    private static void WriteBanner(IXLWorksheet ws, string title, string subtitle, int colSpan)
-    {
-        IXLRange titleRange = ws.Range(1, 1, 1, colSpan);
+        IXLRange titleRange = ws.Range(1, 1, 1, spanCols);
         titleRange.Merge();
         titleRange.Value = title;
         titleRange.Style.Font.Bold = true;
-        titleRange.Style.Font.FontSize = 14;
-        titleRange.Style.Font.FontColor = XLColor.White;
-        titleRange.Style.Fill.BackgroundColor = HeaderDark;
-        titleRange.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Left;
+        titleRange.Style.Font.FontSize = 13;
+        titleRange.Style.Font.FontColor = GoldAccent;
+        titleRange.Style.Fill.BackgroundColor = PetrolDark;
         titleRange.Style.Alignment.Vertical = XLAlignmentVerticalValues.Center;
         ws.Row(1).Height = 28;
 
-        IXLRange subRange = ws.Range(2, 1, 2, colSpan);
+        IXLRange subRange = ws.Range(2, 1, 2, spanCols);
         subRange.Merge();
         subRange.Value = subtitle;
         subRange.Style.Font.FontSize = 10;
-        subRange.Style.Font.FontColor = XLColor.FromHtml("#334155");
-        subRange.Style.Fill.BackgroundColor = XLColor.FromHtml("#F1F5F9");
+        subRange.Style.Font.FontColor = XLColor.White;
+        subRange.Style.Fill.BackgroundColor = TealAccent;
         ws.Row(2).Height = 20;
     }
 
-    private static void WriteTableHeaders(IXLWorksheet ws, int row, string[] headers, XLColor bgColor)
+    private static void WriteSectionHeader(IXLWorksheet ws, int row, string sectionTitle, string[] headers, XLColor color)
+    {
+        ws.Cell(row, 1).Value = sectionTitle;
+        ws.Range(row, 1, row, headers.Length).Merge().Style.Font.Bold = true;
+        ws.Range(row, 1, row, headers.Length).Style.Fill.BackgroundColor = color;
+        ws.Range(row, 1, row, headers.Length).Style.Font.FontColor = XLColor.White;
+        WriteHeaders(ws, row + 1, headers);
+    }
+
+    private static void WriteHeaders(IXLWorksheet ws, int row, string[] headers)
     {
         for (int i = 0; i < headers.Length; i++)
         {
-            IXLCell cell = ws.Cell(row, i + 1);
-            cell.Value = headers[i];
-            cell.Style.Font.Bold = true;
-            cell.Style.Font.FontColor = XLColor.White;
-            cell.Style.Fill.BackgroundColor = bgColor;
-            cell.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            cell.Style.Border.OutsideBorder = XLBorderStyleValues.Thin;
+            IXLCell c = ws.Cell(row, i + 1);
+            c.Value = headers[i];
+            c.Style.Font.Bold = true;
+            c.Style.Font.FontColor = XLColor.White;
+            c.Style.Fill.BackgroundColor = PetrolDark;
+            c.Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
         }
-        ws.Row(row).Height = 22;
-    }
-
-    private static void StyleTotalRow(IXLRange range, int numericCol)
-    {
-        range.Style.Font.Bold = true;
-        range.Style.Fill.BackgroundColor = TotalFill;
-        range.Style.Border.TopBorder = XLBorderStyleValues.Thin;
-        range.Style.Border.BottomBorder = XLBorderStyleValues.Double;
-        range.Worksheet.Cell(range.RangeAddress.FirstAddress.RowNumber, numericCol).Style.NumberFormat.Format = "#,##0";
-    }
-
-    private static void FinalizeSheet(IXLWorksheet ws, int colCount)
-    {
-        ws.Columns(1, colCount).AdjustToContents(6, 55);
-        ws.SheetView.FreezeRows(1);
-    }
-
-    private static void SaveWorkbook(XLWorkbook wb, string filePath)
-    {
-        string? dir = Path.GetDirectoryName(filePath);
-        if (!string.IsNullOrWhiteSpace(dir))
-        {
-            Directory.CreateDirectory(dir);
-        }
-        wb.SaveAs(filePath);
     }
 }

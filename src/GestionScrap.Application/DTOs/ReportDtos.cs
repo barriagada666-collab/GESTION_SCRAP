@@ -3,105 +3,99 @@ using GestionScrap.Domain.Enums;
 
 namespace GestionScrap.Application.DTOs;
 
-public sealed record GrupoKilosItem(string Grupo, long Kilos);
+public sealed record BarChartItemDto(string Label, long Value);
 
-public sealed record ComprasRowDto(string Codigo, string Descripcion, string RazonSocial, long Kilos);
+public sealed record GrupoKilosItem(string Grupo, long Kilos, int Viajes = 0, double Porcentaje = 0.0);
 
-public sealed record TrasladoRowDto(
-    long Folio,
-    string Patente,
-    string Producto,
-    DateOnly FechaEntrada,
-    DateOnly FechaSalida,
-    int PesoBruto,
-    int PesoTara,
-    int PesoNeto);
+public sealed record WeekComparisonDto(string Periodo, long KilosActual, long KilosAnterior);
 
-public sealed record ComprasTrasladosResultDto(
-    Planta Planta,
-    string LabelCompras,
-    string LabelTraslados,
-    IReadOnlyList<ComprasRowDto> Compras,
-    IReadOnlyList<TrasladoRowDto> Traslados,
-    long TotalComprasKilos,
-    long TotalTrasladosKilos,
-    long TotalGeneralKilos);
+public sealed record PlantaResumenItem(Planta Planta, string NombrePlanta, int Viajes, long Kilos, double Porcentaje);
 
-public sealed record GrupoEspecialItemDto(string Cliente, long Kilos);
+public sealed record TipoPesajeResumenItem(TipoPesaje Tipo, string NombreTipo, int Viajes, long Kilos, double Porcentaje);
 
-public sealed record GrupoEspecialCardDto(
-    string Id,
-    string Titulo,
-    string VistaReferencia,
-    IReadOnlyList<GrupoEspecialItemDto> Items,
-    long TotalKilos);
-
-public sealed record JcrammDetalleRowDto(
-    DateOnly Fecha,
-    long Folio,
-    string CodProducto,
-    string Descripcion,
-    string Patente,
-    string Proveedor,
-    string Ciudad,
-    int Kilos);
-
-public sealed record JcrammResumenRowDto(string Producto, long Kilos);
-
-public sealed record JcrammReportDto(
-    UltimoFolioJcramm UltimoFolio,
-    IReadOnlyList<JcrammDetalleRowDto> Detalle,
-    IReadOnlyList<JcrammResumenRowDto> Resumen,
-    long TotalKilosDetalle,
-    long TotalKilosResumen);
-
-public sealed record PrecioDetalleRowDto(
-    long Folio,
-    string CodigoProd,
-    string Descripcion,
-    string RutCliente,
-    string Proveedor,
-    int Kilos,
-    decimal Precio,
-    decimal Total,
-    string Familia);
-
-public sealed record PrecioFamiliaResumenDto(
-    string Grupo,
-    long TotalKilos,
-    decimal PrecioPromedioPonderado,
-    decimal TotalValorizado);
-
-public sealed record InformePreciosResultDto(
-    Planta Planta,
-    ModoPrecio Modo,
-    IReadOnlyList<PrecioDetalleRowDto> Detalle,
-    IReadOnlyList<PrecioFamiliaResumenDto> ResumenFamilias,
-    long TotalKilos,
-    decimal TotalValorizado);
-
-public sealed record PriceAlertDto(
-    string TipoAlerta,
-    long Folio,
-    Planta Planta,
-    string Cliente,
-    string CodProducto,
-    int Kilos,
-    string Mensaje);
-
-public sealed record WeekComparisonDto(string Semana, long KilosActual, long KilosAnterior);
-
-public sealed record DashboardSummaryDto(
+public sealed record InformeResumenDto(
     string PeriodoActualLabel,
     string PeriodoAnteriorLabel,
-    long TotalKilosMesActual,
-    long TotalKilosMesAnterior,
+    long TotalKilos,
+    int TotalViajes,
+    double PromedioKilosViaje,
+    long TotalKilosAnterior,
     double VariacionPorcentual,
-    DateOnly UltimaFechaRegistrada,
-    long KilosUltimaJornada,
-    int CamionesUltimaJornada,
-    IReadOnlyList<GrupoEspecialItemDto> TopProveedores,
-    IReadOnlyList<GrupoKilosItem> KilosPorMaterial,
-    IReadOnlyList<WeekComparisonDto> ComparativaSemanal,
-    IReadOnlyList<PriceAlertDto> AlertasPrecios,
+    int ProveedoresActivos,
+    int ProductosActivos,
+    DateOnly UltimaFecha,
+    long KilosUltimaFecha,
+    int ViajesUltimaFecha,
+    IReadOnlyList<PlantaResumenItem> PorPlanta,
+    IReadOnlyList<TipoPesajeResumenItem> PorTipo,
+    IReadOnlyList<GrupoKilosItem> PorGrupo,
+    IReadOnlyList<WeekComparisonDto> Tendencia,
+    IReadOnlyList<BarChartItemDto> TopProveedores,
     IReadOnlyList<Pesaje> UltimosFolios);
+
+public sealed record MaterialTreeFlatRowDto(
+    long NodeId,
+    long? ParentId,
+    int Nivel,
+    string NombreConSangria,
+    string Nombre,
+    NodoGrupoTipo TipoNodo,
+    string CodigoProducto,
+    string ColorHex,
+    int Viajes,
+    long TotalKilos,
+    double Porcentaje,
+    double PromedioKgViaje);
+
+public sealed record GrupoMaterialReportResultDto(
+    string PeriodoLabel,
+    long TotalKilos,
+    int TotalViajes,
+    int GruposPadreCount,
+    int NodosTotalesCount,
+    int ProductosSinClasificarCount,
+    IReadOnlyList<MaterialTreeFlatRowDto> Filas,
+    IReadOnlyList<GrupoKilosItem> ConsolidadoPadre,
+    IReadOnlyList<BarChartItemDto> DetalleProductosSeleccionados);
+
+public sealed record ProveedorRankingRowDto(
+    string Rut,
+    string Nombre,
+    string Ciudad,
+    string Giro,
+    string Telefono,
+    int Viajes,
+    long TotalKilos,
+    double PorcentajeParticipacion,
+    double PorcentajeAcumulado,
+    string ClaseAbc,
+    double PromedioKgViaje,
+    DateOnly PrimerEnvio,
+    DateOnly UltimoEnvio,
+    int DiasInactivo,
+    long KilosPeriodoAnterior,
+    double VariacionPorcentual,
+    string ProductoPrincipal);
+
+public sealed record AnalisisProveedoresResultDto(
+    string PeriodoLabel,
+    int TotalProveedoresActivos,
+    long TotalKilos,
+    int TotalViajes,
+    double PromedioGeneralKgViaje,
+    string ProveedorLiderNombre,
+    double ProveedorLiderParticipacion,
+    int ProveedoresClaseACount,
+    double ConcentracionClaseAPorcentaje,
+    IReadOnlyList<ProveedorRankingRowDto> Ranking,
+    IReadOnlyList<BarChartItemDto> TopProveedoresPareto,
+    IReadOnlyList<GrupoKilosItem> DistribucionPorClaseAbc);
+
+public sealed record ProveedorDetalleResultDto(
+    ProveedorRankingRowDto Resumen,
+    IReadOnlyList<GrupoKilosItem> MixMateriales,
+    IReadOnlyList<BarChartItemDto> ProductosPrincipales,
+    IReadOnlyList<BarChartItemDto> EvolucionMensual,
+    IReadOnlyList<BarChartItemDto> PatentesFrecuentes,
+    IReadOnlyList<BarChartItemDto> OrigenesFrecuentes,
+    IReadOnlyList<Pesaje> Entregas);

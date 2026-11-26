@@ -1,7 +1,7 @@
-using System.Data;
 using System.Diagnostics;
 using System.Globalization;
 using System.Net.Sockets;
+using System.Text;
 using FirebirdSql.Data.FirebirdClient;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Enums;
@@ -10,11 +10,16 @@ using GestionScrap.Domain.Interfaces;
 namespace GestionScrap.Infrastructure.Firebird;
 
 /// <summary>
-/// Servicio de conectividad directa TCP/IP contra servidores Firebird (.GDB/.FDB)
-/// con validación previa de puerto, consultas parametrizadas y soporte transaccional Commit/Rollback.
+/// Conector directo TCP/IP hacia Firebird (.GDB/.FDB) validado contra WMDBSPC.GDB y PWAREHOUSE.FDB.
+/// Utiliza Charset=NONE + CodePages para compatibilidad exacta con bases Firebird heredadas y tildes/eñes.
 /// </summary>
 public sealed class FirebirdSyncService : IFirebirdSyncService
 {
+    static FirebirdSyncService()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
+
     public static string BuildConnectionString(FirebirdPlantaEndpoint endpoint)
     {
         FbConnectionStringBuilder csb = new()
@@ -22,11 +27,11 @@ public sealed class FirebirdSyncService : IFirebirdSyncService
             DataSource = endpoint.ServidorIp.Trim(),
             Port = endpoint.Puerto <= 0 ? 3050 : endpoint.Puerto,
             Database = NormalizeDatabasePath(endpoint.RutaArchivo),
-            UserID = endpoint.Usuario.Trim(),
+            UserID = string.IsNullOrWhiteSpace(endpoint.Usuario) ? "SYSDBA" : endpoint.Usuario.Trim(),
             Password = endpoint.Password,
             Dialect = 3,
-            Charset = "UTF8",
-            ConnectionTimeout = 5,
+            Charset = "NONE",
+            ConnectionTimeout = 8,
             Pooling = true
         };
         return csb.ToString();
@@ -35,7 +40,6 @@ public sealed class FirebirdSyncService : IFirebirdSyncService
     public static string NormalizeDatabasePath(string rawPath)
     {
         string trimmed = rawPath.Trim();
-        // Previene el error clásico UNC \\192.168.x.x\BDWM\...
         if (trimmed.StartsWith(@"\\", StringComparison.Ordinal) || trimmed.StartsWith("//", StringComparison.Ordinal))
         {
             int idx = trimmed.IndexOf("BDWM", StringComparison.OrdinalIgnoreCase);
@@ -45,7 +49,6 @@ public sealed class FirebirdSyncService : IFirebirdSyncService
             }
         }
 
-        // Si incluye IP prefijada "192.168.2.56:\BDWM\...", extrae solo la ruta física local en servidor
         int colonIdx = trimmed.IndexOf(":\\", StringComparison.Ordinal);
         if (colonIdx > 1 && char.IsDigit(trimmed[0]))
         {
@@ -55,58 +58,72 @@ public sealed class FirebirdSyncService : IFirebirdSyncService
         return trimmed;
     }
 
-    public async Task<(bool Success, int PingMs, int TablesCount, int ProceduresCount, string Message)> TestConnectionAsync(
+    public async Task<(bool Success, int PingMs, int TablesCount, long PesajesCount, string DateBounds, string Message)> TestConnectionAsync(
         FirebirdPlantaEndpoint endpoint,
         CancellationToken ct = default)
     {
         Stopwatch sw = Stopwatch.StartNew();
         try
         {
-            bool tcpOk = await ProbeTcpAsync(endpoint.ServidorIp, endpoint.Puerto, 2000, ct).ConfigureAwait(false);
+            bool tcpOk = await ProbeTcpAsync(endpoint.ServidorIp, endpoint.Puerto, 2500, ct).ConfigureAwait(false);
             if (!tcpOk)
             {
-                return (false, (int)sw.ElapsedMilliseconds, 0, 0,
-                    $"No hay respuesta TCP en {endpoint.ServidorIp}:{endpoint.Puerto}. Verifique red/firewall o servicio Firebird.");
+                return (false, (int)sw.ElapsedMilliseconds, 0, 0, "-",
+                    $"No hay respuesta TCP en {endpoint.ServidorIp}:{endpoint.Puerto}. Verifique red o servicio Firebird.");
             }
 
             await using FbConnection conn = new(BuildConnectionString(endpoint));
             await conn.OpenAsync(ct).ConfigureAwait(false);
 
             await using FbCommand tblCmd = conn.CreateCommand();
-            tblCmd.CommandText = "SELECT COUNT(*) FROM RDB$RELATIONS WHERE RDB$SYSTEM_FLAG = 0;";
+            tblCmd.CommandText = "SELECT COUNT(*) FROM RDB$RELATIONS WHERE COALESCE(RDB$SYSTEM_FLAG, 0) = 0 AND RDB$VIEW_BLR IS NULL";
             int tables = Convert.ToInt32(await tblCmd.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture);
 
-            await using FbCommand procCmd = conn.CreateCommand();
-            procCmd.CommandText = "SELECT COUNT(*) FROM RDB$PROCEDURES WHERE RDB$SYSTEM_FLAG = 0;";
-            int procs = Convert.ToInt32(await procCmd.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture);
+            long pesajesCount = 0;
+            string bounds = "Sin registros";
+            await using FbCommand statCmd = conn.CreateCommand();
+            statCmd.CommandText = endpoint.Planta == Planta.Talcahuano
+                ? "SELECT COUNT(*), MIN(FECHA), MAX(FECHA) FROM PESAJES_ITEMS"
+                : "SELECT COUNT(*), MIN(FECHAING), MAX(FECHAING) FROM DBPESAJES WHERE COALESCE(ANULADO, '0') <> '1'";
+
+            await using FbDataReader rd = await statCmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await rd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                pesajesCount = rd.IsDBNull(0) ? 0L : Convert.ToInt64(rd.GetValue(0), CultureInfo.InvariantCulture);
+                if (!rd.IsDBNull(1) && !rd.IsDBNull(2))
+                {
+                    DateTime minD = Convert.ToDateTime(rd.GetValue(1), CultureInfo.InvariantCulture);
+                    DateTime maxD = Convert.ToDateTime(rd.GetValue(2), CultureInfo.InvariantCulture);
+                    bounds = $"{minD:dd/MM/yyyy} -> {maxD:dd/MM/yyyy}";
+                }
+            }
 
             sw.Stop();
-            return (true, (int)sw.ElapsedMilliseconds, tables, procs,
-                $"Conexión Firebird exitosa ({endpoint.ServidorIp}:{endpoint.Puerto}). {tables} tablas y {procs} procedimientos detectados.");
+            return (true, (int)sw.ElapsedMilliseconds, tables, pesajesCount, bounds,
+                $"Conexión Firebird exitosa ({endpoint.ServidorIp}:{endpoint.Puerto}). {tables} tablas · {pesajesCount:N0} pesajes ({bounds}).");
         }
         catch (Exception ex)
         {
             sw.Stop();
-            return (false, (int)sw.ElapsedMilliseconds, 0, 0, $"Error de conexión Firebird: {ex.Message}");
+            return (false, (int)sw.ElapsedMilliseconds, 0, 0, "-", $"Error Firebird: {ex.Message}");
         }
     }
 
-    public async Task<(IReadOnlyList<FirebirdRemotePesaje> Records, bool UsedSimulatedFallback, string StatusMessage)> QueryRemotePesajesAsync(
+    public async Task<FirebirdExtractPackage> QueryRemotePackageAsync(
         FirebirdPlantaEndpoint endpoint,
-        DateOnly desde,
-        DateOnly hasta,
+        DateOnly? desde,
+        DateOnly? hasta,
         bool allowFallbackDemo,
         CancellationToken ct = default)
     {
         try
         {
-            bool tcpOk = await ProbeTcpAsync(endpoint.ServidorIp, endpoint.Puerto, 2000, ct).ConfigureAwait(false);
+            bool tcpOk = await ProbeTcpAsync(endpoint.ServidorIp, endpoint.Puerto, 2500, ct).ConfigureAwait(false);
             if (!tcpOk)
             {
                 if (allowFallbackDemo)
                 {
-                    return (GenerateSimulatedRecords(endpoint.Planta, desde), true,
-                        $"Servidor {endpoint.ServidorIp}:{endpoint.Puerto} no accesible. Se cargaron registros de simulación offline.");
+                    return BuildFallbackDemoPackage(endpoint, desde ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-14)));
                 }
 
                 throw new InvalidOperationException($"No fue posible establecer conexión TCP con {endpoint.ServidorIp}:{endpoint.Puerto}.");
@@ -115,177 +132,222 @@ public sealed class FirebirdSyncService : IFirebirdSyncService
             await using FbConnection conn = new(BuildConnectionString(endpoint));
             await conn.OpenAsync(ct).ConfigureAwait(false);
 
-            List<FirebirdRemotePesaje> records = endpoint.Planta == Planta.Talcahuano
-                ? await QueryTalcahuanoAsync(conn, desde, hasta, ct).ConfigureAwait(false)
-                : await QueryPlacillaOrSantiagoAsync(conn, desde, hasta, ct).ConfigureAwait(false);
+            if (endpoint.Planta == Planta.Talcahuano)
+            {
+                return await QueryTalcahuanoPackageAsync(conn, desde, hasta, ct).ConfigureAwait(false);
+            }
 
-            return (records, false, $"Consulta real en Firebird ({endpoint.Nombre}) completada: {records.Count} registros.");
+            return await QueryWmdbspcPackageAsync(conn, endpoint.Planta, desde, hasta, ct).ConfigureAwait(false);
         }
         catch when (allowFallbackDemo)
         {
-            return (GenerateSimulatedRecords(endpoint.Planta, desde), true,
-                $"Sin acceso directo a {endpoint.RutaArchivo}. Cargados registros demostrativos de prueba.");
+            return BuildFallbackDemoPackage(endpoint, desde ?? DateOnly.FromDateTime(DateTime.Today.AddDays(-14)));
         }
     }
 
-    public async Task<(bool Success, IReadOnlyList<string> Logs, string? ErrorMessage)> ExecuteStoredProceduresAsync(
-        FirebirdPlantaEndpoint endpoint,
-        bool allowSimulatedDemo,
-        IProgress<string>? progress = null,
-        CancellationToken ct = default)
-    {
-        List<string> logs = [];
-        void Log(string msg)
-        {
-            string line = $"[{DateTime.Now:HH:mm:ss}] {msg}";
-            logs.Add(line);
-            progress?.Report(line);
-        }
-
-        try
-        {
-            Log($"Verificando conectividad TCP hacia {endpoint.ServidorIp}:{endpoint.Puerto}...");
-            bool tcpOk = await ProbeTcpAsync(endpoint.ServidorIp, endpoint.Puerto, 2000, ct).ConfigureAwait(false);
-
-            if (!tcpOk)
-            {
-                if (!allowSimulatedDemo)
-                {
-                    string err = $"Servidor Firebird {endpoint.ServidorIp}:{endpoint.Puerto} no alcanzable.";
-                    Log("ERROR: " + err);
-                    return (false, logs, err);
-                }
-
-                Log("Servidor remoto no disponible; ejecutando simulación controlada de procedimientos...");
-                await Task.Delay(250, ct).ConfigureAwait(false);
-                Log("Paso 1/2 (Simulado): PA_INS_PROV_STGO ejecutado.");
-                await Task.Delay(250, ct).ConfigureAwait(false);
-                Log("Paso 2/2 (Simulado): PA_INS_MASIVO_EXP_SAP ejecutado.");
-                Log("CommitTrans simulado completado.");
-                return (true, logs, null);
-            }
-
-            Log($"Abriendo conexión Firebird a {NormalizeDatabasePath(endpoint.RutaArchivo)}...");
-            await using FbConnection conn = new(BuildConnectionString(endpoint));
-            await conn.OpenAsync(ct).ConfigureAwait(false);
-
-            await using FbTransaction tx = await conn.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct).ConfigureAwait(false);
-            try
-            {
-                Log("Paso 1/2: Ejecutando PA_INS_PROV_STGO...");
-                await using (FbCommand cmd1 = new("PA_INS_PROV_STGO", conn, tx) { CommandType = CommandType.StoredProcedure })
-                {
-                    await cmd1.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                }
-                Log("PA_INS_PROV_STGO completado.");
-
-                Log("Paso 2/2: Ejecutando PA_INS_MASIVO_EXP_SAP...");
-                await using (FbCommand cmd2 = new("PA_INS_MASIVO_EXP_SAP", conn, tx) { CommandType = CommandType.StoredProcedure })
-                {
-                    await cmd2.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
-                }
-                Log("PA_INS_MASIVO_EXP_SAP completado.");
-
-                Log("Confirmando transacción (COMMIT)...");
-                await tx.CommitAsync(ct).ConfigureAwait(false);
-                Log("Transacción confirmada exitosamente.");
-                return (true, logs, null);
-            }
-            catch (Exception ex)
-            {
-                Log($"ERROR durante ejecución: {ex.Message}");
-                Log("Aplicando ROLLBACK para preservar integridad transaccional...");
-                await tx.RollbackAsync(ct).ConfigureAwait(false);
-                return (false, logs, ex.Message);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log($"ERROR de conexión: {ex.Message}");
-            return (false, logs, ex.Message);
-        }
-    }
-
-    private static async Task<List<FirebirdRemotePesaje>> QueryPlacillaOrSantiagoAsync(
+    private static async Task<FirebirdExtractPackage> QueryWmdbspcPackageAsync(
         FbConnection conn,
-        DateOnly desde,
-        DateOnly hasta,
+        Planta planta,
+        DateOnly? desde,
+        DateOnly? hasta,
         CancellationToken ct)
     {
-        const string sql = """
-            SELECT p.flpesaje, p.tpesaje, p.patente, p.bruto, p.tara, p.neto,
-                   p.producto, COALESCE(pr.descrip, p.producto),
-                   p.cliente, COALESCE(cl.nombre, p.cliente),
-                   COALESCE(o.descrip, CAST(p.origen AS VARCHAR(60))),
-                   COALESCE(d.descrip, CAST(p.destino AS VARCHAR(60))),
-                   p.gdespacho, p.fechaing, p.horaing, p.fechasal, p.horasal, p.observa1
+        // 1. Catálogo de Clientes (DBCLIENTES)
+        List<Cliente> clientes = [];
+        const string sqlCli = """
+            SELECT TRIM(rut), COALESCE(TRIM(digito), ''), TRIM(nombre),
+                   COALESCE(TRIM(direccion), ''), COALESCE(TRIM(giro), ''),
+                   COALESCE(TRIM(comuna), ''), COALESCE(TRIM(ciudad), ''), COALESCE(TRIM(telefono), '')
+            FROM dbclientes
+            ORDER BY rut
+            """;
+        await using (FbCommand cmd = new(sqlCli, conn))
+        await using (FbDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+        {
+            while (await rd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string rut = rd.IsDBNull(0) ? string.Empty : rd.GetString(0).Trim();
+                if (string.IsNullOrWhiteSpace(rut))
+                {
+                    continue;
+                }
+
+                string nombre = rd.IsDBNull(2) ? rut : rd.GetString(2).Trim();
+                clientes.Add(new Cliente
+                {
+                    Rut = rut,
+                    Digito = rd.IsDBNull(1) ? string.Empty : rd.GetString(1).Trim(),
+                    Nombre = nombre,
+                    RazonSocial = nombre,
+                    Direccion = rd.IsDBNull(3) ? string.Empty : rd.GetString(3).Trim(),
+                    Giro = rd.IsDBNull(4) ? string.Empty : rd.GetString(4).Trim(),
+                    Comuna = rd.IsDBNull(5) ? string.Empty : rd.GetString(5).Trim(),
+                    Ciudad = rd.IsDBNull(6) ? string.Empty : rd.GetString(6).Trim(),
+                    Telefono = rd.IsDBNull(7) ? string.Empty : rd.GetString(7).Trim(),
+                    PlantaAsociada = planta
+                });
+            }
+        }
+
+        // 2. Catálogo de Productos (DBPRODUCTOS)
+        List<Producto> productos = [];
+        const string sqlProd = "SELECT TRIM(producto), COALESCE(TRIM(descrip), '') FROM dbproductos ORDER BY producto";
+        await using (FbCommand cmd = new(sqlProd, conn))
+        await using (FbDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+        {
+            while (await rd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string cod = rd.IsDBNull(0) ? string.Empty : rd.GetString(0).Trim();
+                if (string.IsNullOrWhiteSpace(cod))
+                {
+                    continue;
+                }
+
+                string desc = rd.IsDBNull(1) ? cod : rd.GetString(1).Trim();
+                productos.Add(new Producto
+                {
+                    Codigo = cod,
+                    Descripcion = desc,
+                    Grupo = Application.Services.BusinessRules.ClassifyProductoDefaultGroup(cod, desc),
+                    UnidadMedida = "KG"
+                });
+            }
+        }
+
+        // 3. Pesajes activos (DBPESAJES excluyendo anulados)
+        string dateFilter = desde.HasValue && hasta.HasValue
+            ? "AND p.fechaing >= @desde AND p.fechaing <= @hasta"
+            : string.Empty;
+
+        string sqlPes = $"""
+            SELECT p.flpesaje, COALESCE(p.tpesaje, 1), COALESCE(TRIM(p.patente), ''), COALESCE(TRIM(p.acoplado), ''),
+                   COALESCE(p.bruto, 0), COALESCE(p.tara, 0), COALESCE(p.neto, 0),
+                   COALESCE(TRIM(p.producto), ''), COALESCE(TRIM(pr.descrip), TRIM(p.producto)),
+                   COALESCE(TRIM(p.cliente), ''), COALESCE(TRIM(cl.nombre), TRIM(p.cliente)),
+                   COALESCE(TRIM(o.descrip), CAST(COALESCE(p.origen, '') AS VARCHAR(60))),
+                   COALESCE(TRIM(d.descrip), CAST(COALESCE(p.destino, '') AS VARCHAR(60))),
+                   COALESCE(TRIM(p.gdespacho), ''), COALESCE(TRIM(p.chofer), ''), COALESCE(TRIM(tr.nombre), COALESCE(TRIM(p.transp), '')),
+                   p.fechaing, p.horaing, p.fechasal, p.horasal, COALESCE(TRIM(p.observa1), '')
             FROM dbpesajes p
             LEFT JOIN dbproductos pr ON pr.producto = p.producto
             LEFT JOIN dbclientes cl ON cl.rut = p.cliente
             LEFT JOIN dborigen o ON o.origen = p.origen
             LEFT JOIN dbdestinos d ON d.destino = p.destino
-            WHERE p.fechaing >= @desde AND p.fechaing <= @hasta
+            LEFT JOIN dbtransp tr ON tr.transp = p.transp
+            WHERE COALESCE(p.anulado, '0') <> '1'
+              {dateFilter}
             ORDER BY p.flpesaje
             """;
 
-        await using FbCommand cmd = new(sql, conn);
-        cmd.Parameters.AddWithValue("@desde", desde.ToDateTime(TimeOnly.MinValue));
-        cmd.Parameters.AddWithValue("@hasta", hasta.ToDateTime(TimeOnly.MaxValue));
-
-        List<FirebirdRemotePesaje> list = [];
-        await using FbDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
-        while (await rd.ReadAsync(ct).ConfigureAwait(false))
+        await using FbCommand pesCmd = new(sqlPes, conn);
+        if (desde.HasValue && hasta.HasValue)
         {
-            DateTime fing = rd.IsDBNull(13) ? DateTime.Today : Convert.ToDateTime(rd.GetValue(13), CultureInfo.InvariantCulture);
-            DateTime fsal = rd.IsDBNull(15) ? fing : Convert.ToDateTime(rd.GetValue(15), CultureInfo.InvariantCulture);
+            pesCmd.Parameters.AddWithValue("@desde", desde.Value.ToDateTime(TimeOnly.MinValue));
+            pesCmd.Parameters.AddWithValue("@hasta", hasta.Value.ToDateTime(TimeOnly.MaxValue));
+        }
 
-            list.Add(new FirebirdRemotePesaje
+        List<FirebirdRemotePesaje> pesajes = [];
+        await using FbDataReader prd = await pesCmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await prd.ReadAsync(ct).ConfigureAwait(false))
+        {
+            DateTime fing = prd.IsDBNull(16) ? DateTime.Today : Convert.ToDateTime(prd.GetValue(16), CultureInfo.InvariantCulture);
+            DateTime fsal = prd.IsDBNull(18) ? fing : Convert.ToDateTime(prd.GetValue(18), CultureInfo.InvariantCulture);
+
+            pesajes.Add(new FirebirdRemotePesaje
             {
-                Folio = rd.IsDBNull(0) ? 0 : Convert.ToInt64(rd.GetValue(0), CultureInfo.InvariantCulture),
-                TipoPesajeRaw = rd.IsDBNull(1) ? "1" : rd.GetValue(1).ToString() ?? "1",
-                Patente = rd.IsDBNull(2) ? string.Empty : rd.GetString(2),
-                PesoBruto = rd.IsDBNull(3) ? 0 : Convert.ToInt32(rd.GetValue(3), CultureInfo.InvariantCulture),
-                PesoTara = rd.IsDBNull(4) ? 0 : Convert.ToInt32(rd.GetValue(4), CultureInfo.InvariantCulture),
-                PesoNeto = rd.IsDBNull(5) ? 0 : Convert.ToInt32(rd.GetValue(5), CultureInfo.InvariantCulture),
-                CodProducto = rd.IsDBNull(6) ? string.Empty : rd.GetString(6),
-                NomProducto = rd.IsDBNull(7) ? string.Empty : rd.GetString(7),
-                RutCliente = rd.IsDBNull(8) ? string.Empty : rd.GetString(8),
-                NomCliente = rd.IsDBNull(9) ? string.Empty : rd.GetString(9),
-                Origen = rd.IsDBNull(10) ? string.Empty : rd.GetString(10),
-                Destino = rd.IsDBNull(11) ? string.Empty : rd.GetString(11),
-                GuiaDespacho = rd.IsDBNull(12) ? string.Empty : rd.GetString(12),
+                Folio = prd.IsDBNull(0) ? 0 : Convert.ToInt64(prd.GetValue(0), CultureInfo.InvariantCulture),
+                TipoPesajeRaw = prd.IsDBNull(1) ? "1" : prd.GetValue(1).ToString() ?? "1",
+                Patente = prd.IsDBNull(2) ? string.Empty : prd.GetString(2),
+                Acoplado = prd.IsDBNull(3) ? string.Empty : prd.GetString(3),
+                PesoBruto = prd.IsDBNull(4) ? 0 : Convert.ToInt32(prd.GetValue(4), CultureInfo.InvariantCulture),
+                PesoTara = prd.IsDBNull(5) ? 0 : Convert.ToInt32(prd.GetValue(5), CultureInfo.InvariantCulture),
+                PesoNeto = prd.IsDBNull(6) ? 0 : Convert.ToInt32(prd.GetValue(6), CultureInfo.InvariantCulture),
+                CodProducto = prd.IsDBNull(7) ? string.Empty : prd.GetString(7),
+                NomProducto = prd.IsDBNull(8) ? string.Empty : prd.GetString(8),
+                RutCliente = prd.IsDBNull(9) ? string.Empty : prd.GetString(9),
+                NomCliente = prd.IsDBNull(10) ? string.Empty : prd.GetString(10),
+                Origen = prd.IsDBNull(11) ? string.Empty : prd.GetString(11),
+                Destino = prd.IsDBNull(12) ? string.Empty : prd.GetString(12),
+                GuiaDespacho = prd.IsDBNull(13) ? string.Empty : prd.GetString(13),
+                Chofer = prd.IsDBNull(14) ? string.Empty : prd.GetString(14),
+                Transportista = prd.IsDBNull(15) ? string.Empty : prd.GetString(15),
                 FechaIngreso = DateOnly.FromDateTime(fing),
-                HoraIngreso = ParseFlexibleTime(rd.IsDBNull(14) ? null : rd.GetValue(14)),
+                HoraIngreso = ParseFlexibleTime(prd.IsDBNull(17) ? null : prd.GetValue(17)),
                 FechaSalida = DateOnly.FromDateTime(fsal),
-                HoraSalida = ParseFlexibleTime(rd.IsDBNull(16) ? null : rd.GetValue(16)),
-                Observacion = rd.IsDBNull(17) ? string.Empty : rd.GetString(17)
+                HoraSalida = ParseFlexibleTime(prd.IsDBNull(19) ? null : prd.GetValue(19)),
+                Observacion = prd.IsDBNull(20) ? string.Empty : prd.GetString(20)
             });
         }
-        return list;
+
+        return new FirebirdExtractPackage(
+            pesajes,
+            clientes,
+            productos,
+            false,
+            $"Extracción Firebird completada: {pesajes.Count:N0} pesajes, {clientes.Count:N0} clientes y {productos.Count:N0} productos.");
     }
 
-    private static async Task<List<FirebirdRemotePesaje>> QueryTalcahuanoAsync(
+    private static async Task<FirebirdExtractPackage> QueryTalcahuanoPackageAsync(
         FbConnection conn,
-        DateOnly desde,
-        DateOnly hasta,
+        DateOnly? desde,
+        DateOnly? hasta,
         CancellationToken ct)
     {
-        const string sql = """
-            SELECT pi.IDPSJ, pi.FECHA, pi.RUT, COALESCE(cp.NOMBRE, pi.RUT),
-                   pi.CDGPRODUCTO, COALESCE(pr.PRODUCTO, pi.CDGPRODUCTO),
-                   COALESCE(pe.PATENTE, ''), COALESCE(pi.GUIA, ''),
+        List<Cliente> clientes = [];
+        await using (FbCommand cCmd = new("SELECT TRIM(RUT), COALESCE(TRIM(NOMBRE), TRIM(RUT)) FROM CLI_PROV ORDER BY RUT", conn))
+        await using (FbDataReader crd = await cCmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+        {
+            while (await crd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string rut = crd.IsDBNull(0) ? string.Empty : crd.GetString(0).Trim();
+                if (!string.IsNullOrEmpty(rut))
+                {
+                    string nom = crd.IsDBNull(1) ? rut : crd.GetString(1).Trim();
+                    clientes.Add(new Cliente { Rut = rut, Nombre = nom, RazonSocial = nom, Ciudad = "Talcahuano", PlantaAsociada = Planta.Talcahuano });
+                }
+            }
+        }
+
+        List<Producto> productos = [];
+        await using (FbCommand pCmd = new("SELECT TRIM(CDGPRODUCTO), COALESCE(TRIM(PRODUCTO), TRIM(CDGPRODUCTO)) FROM PRODUCTOS ORDER BY CDGPRODUCTO", conn))
+        await using (FbDataReader prd = await pCmd.ExecuteReaderAsync(ct).ConfigureAwait(false))
+        {
+            while (await prd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                string cod = prd.IsDBNull(0) ? string.Empty : prd.GetString(0).Trim();
+                if (!string.IsNullOrEmpty(cod))
+                {
+                    string nom = prd.IsDBNull(1) ? cod : prd.GetString(1).Trim();
+                    productos.Add(new Producto
+                    {
+                        Codigo = cod,
+                        Descripcion = nom,
+                        Grupo = Application.Services.BusinessRules.ClassifyProductoDefaultGroup(cod, nom)
+                    });
+                }
+            }
+        }
+
+        string dateFilter = desde.HasValue && hasta.HasValue ? "WHERE pi.FECHA >= @desde AND pi.FECHA <= @hasta" : string.Empty;
+        string sql = $"""
+            SELECT pi.IDPSJ, pi.FECHA, COALESCE(TRIM(pi.RUT), ''), COALESCE(TRIM(cp.NOMBRE), TRIM(pi.RUT)),
+                   COALESCE(TRIM(pi.CDGPRODUCTO), ''), COALESCE(TRIM(pr.PRODUCTO), TRIM(pi.CDGPRODUCTO)),
+                   COALESCE(TRIM(pe.PATENTE), ''), COALESCE(TRIM(pi.GUIA), ''),
                    COALESCE(pe.TOTALNETO, pi.BRUTO), COALESCE(pi.BRUTO, 0)
             FROM PESAJES_ITEMS pi
             LEFT JOIN PESAJES pe ON pe.IDPSJ = pi.IDPSJ
             LEFT JOIN CLI_PROV cp ON cp.RUT = pi.RUT
             LEFT JOIN PRODUCTOS pr ON pr.CDGPRODUCTO = pi.CDGPRODUCTO
-            WHERE pi.FECHA >= @desde AND pi.FECHA <= @hasta
+            {dateFilter}
             ORDER BY pi.IDPSJ, pi.ITEM
             """;
 
         await using FbCommand cmd = new(sql, conn);
-        cmd.Parameters.AddWithValue("@desde", desde.ToDateTime(TimeOnly.MinValue));
-        cmd.Parameters.AddWithValue("@hasta", hasta.ToDateTime(TimeOnly.MaxValue));
+        if (desde.HasValue && hasta.HasValue)
+        {
+            cmd.Parameters.AddWithValue("@desde", desde.Value.ToDateTime(TimeOnly.MinValue));
+            cmd.Parameters.AddWithValue("@hasta", hasta.Value.ToDateTime(TimeOnly.MaxValue));
+        }
 
         List<FirebirdRemotePesaje> list = [];
         await using FbDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
@@ -308,16 +370,21 @@ public sealed class FirebirdSyncService : IFirebirdSyncService
                 RutCliente = rd.IsDBNull(2) ? string.Empty : rd.GetString(2),
                 NomCliente = rd.IsDBNull(3) ? string.Empty : rd.GetString(3),
                 Origen = "Talcahuano",
-                Destino = "Bodega Thno",
+                Destino = "Planta Talcahuano",
                 GuiaDespacho = rd.IsDBNull(7) ? string.Empty : rd.GetString(7),
                 FechaIngreso = DateOnly.FromDateTime(dt),
-                HoraIngreso = TimeOnly.FromDateTime(dt),
+                HoraIngreso = new TimeOnly(dt.Hour, dt.Minute),
                 FechaSalida = DateOnly.FromDateTime(dt),
-                HoraSalida = TimeOnly.FromDateTime(dt),
-                Observacion = "Importado PWAREHOUSE.FDB"
+                HoraSalida = new TimeOnly(dt.Hour, dt.Minute)
             });
         }
-        return list;
+
+        return new FirebirdExtractPackage(
+            list,
+            clientes,
+            productos,
+            false,
+            $"Extracción Talcahuano completada: {list.Count:N0} pesajes, {clientes.Count:N0} clientes y {productos.Count:N0} productos.");
     }
 
     private static async Task<bool> ProbeTcpAsync(string host, int port, int timeoutMs, CancellationToken ct)
@@ -340,39 +407,36 @@ public sealed class FirebirdSyncService : IFirebirdSyncService
     {
         if (val is null)
         {
-            return TimeOnly.MinValue;
+            return new TimeOnly(8, 0);
         }
 
-        if (val is TimeSpan ts)
+        string s = val.ToString()?.Trim() ?? string.Empty;
+        if (TimeOnly.TryParse(s, CultureInfo.InvariantCulture, out TimeOnly t))
         {
-            return TimeOnly.FromTimeSpan(ts);
+            return t;
         }
 
-        if (val is DateTime dt)
-        {
-            return TimeOnly.FromDateTime(dt);
-        }
-
-        return TimeOnly.TryParse(val.ToString(), CultureInfo.InvariantCulture, out TimeOnly parsed)
-            ? parsed
-            : TimeOnly.MinValue;
+        return new TimeOnly(8, 0);
     }
 
-    private static List<FirebirdRemotePesaje> GenerateSimulatedRecords(Planta planta, DateOnly refDate) =>
-        planta switch
-        {
-            Planta.Placilla =>
-            [
-                new() { Folio = 10430, TipoPesajeRaw = "1", Patente = "JK-9910", PesoBruto = 32500, PesoTara = 13200, PesoNeto = 19300, CodProducto = "5300000004", NomProducto = "SCRAP HDPE COMPRADO BLANCO", RutCliente = "76218764", NomCliente = "Sociedad Agrícola Demostrativa Ltda.", Origen = "Valparaíso", Destino = "Planta Placilla", GuiaDespacho = "GD-9001", FechaIngreso = refDate, HoraIngreso = new TimeOnly(8, 30), FechaSalida = refDate, HoraSalida = new TimeOnly(9, 15), Observacion = "Simulación Firebird Placilla" },
-                new() { Folio = 10431, TipoPesajeRaw = "1", Patente = "LK-5544", PesoBruto = 28400, PesoTara = 12000, PesoNeto = 16400, CodProducto = "5301003001", NomProducto = "SCRAP TRANSPARENTE LIMPIO", RutCliente = "76218764", NomCliente = "Sociedad Agrícola Demostrativa Ltda.", Origen = "Quilpué", Destino = "Planta Placilla", GuiaDespacho = "GD-9002", FechaIngreso = refDate, HoraIngreso = new TimeOnly(10, 0), FechaSalida = refDate, HoraSalida = new TimeOnly(10, 40), Observacion = "Simulación Firebird Placilla" }
-            ],
-            Planta.Santiago =>
-            [
-                new() { Folio = 20560, TipoPesajeRaw = "1", Patente = "ST-1011", PesoBruto = 35000, PesoTara = 14200, PesoNeto = 20800, CodProducto = "5300000009", NomProducto = "SCRAP MIX SUPERMERCADO", RutCliente = "77321450", NomCliente = "Retail Supermercados Santiago S.A.", Origen = "Lo Aguirre", Destino = "Planta Santiago", GuiaDespacho = "CEN-991", FechaIngreso = refDate, HoraIngreso = new TimeOnly(7, 45), FechaSalida = refDate, HoraSalida = new TimeOnly(8, 30), Observacion = "Simulación Firebird Santiago" }
-            ],
-            _ =>
-            [
-                new() { Folio = 30110, TipoPesajeRaw = "1", Patente = "TK-8819", PesoBruto = 36000, PesoTara = 14000, PesoNeto = 22000, CodProducto = "5301001000", NomProducto = "SCRAP PESQUERA PRE LAVADO COLOR (SUP)", RutCliente = "76658930", NomCliente = "Pesquera del Pacífico Demo S.A.", Origen = "Talcahuano", Destino = "Bodega Thno", GuiaDespacho = "PESQ-990", FechaIngreso = refDate, HoraIngreso = new TimeOnly(9, 0), FechaSalida = refDate, HoraSalida = new TimeOnly(9, 45), Observacion = "Simulación PWAREHOUSE.FDB" }
-            ]
-        };
+    private static FirebirdExtractPackage BuildFallbackDemoPackage(FirebirdPlantaEndpoint ep, DateOnly baseDate)
+    {
+        FirebirdRemotePesaje[] pesajes =
+        [
+            new()
+            {
+                Folio = 9501, TipoPesajeRaw = "1", Patente = "DEMO01", PesoBruto = 22400, PesoTara = 9200, PesoNeto = 13200,
+                CodProducto = "5300000009", NomProducto = "SCRAP MIX SUPERMERCADO", RutCliente = "89201400", NomCliente = "ENV. IMPRESOS CORDILLERA SPA",
+                Origen = "BOD. VICKY", Destino = "PLACILLA", FechaIngreso = baseDate, HoraIngreso = new TimeOnly(9, 15),
+                FechaSalida = baseDate, HoraSalida = new TimeOnly(9, 45), Observacion = "Registro de simulación offline"
+            }
+        ];
+
+        return new FirebirdExtractPackage(
+            pesajes,
+            [],
+            [],
+            true,
+            $"Servidor {ep.ServidorIp}:{ep.Puerto} no accesible; cargado 1 registro de demostración.");
+    }
 }

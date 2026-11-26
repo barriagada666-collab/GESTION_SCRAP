@@ -29,7 +29,10 @@ public enum IconKind
     Import,
     Settings,
     Lock,
-    Logout
+    Logout,
+    ArrowUp,
+    ArrowDown,
+    Move
 }
 
 public static class IconFactory
@@ -197,6 +200,22 @@ public static class IconFactory
                 g.DrawLines(pen, new[] { P(7 * u, 2.5f * u), P(2.5f * u, 2.5f * u), P(2.5f * u, 13.5f * u), P(7 * u, 13.5f * u) });
                 g.DrawLine(pen, 6 * u, 8 * u, 13.5f * u, 8 * u);
                 g.DrawLines(pen, new[] { P(10.5f * u, 5.2f * u), P(13.5f * u, 8 * u), P(10.5f * u, 10.8f * u) });
+                break;
+
+            case IconKind.ArrowUp:
+                g.DrawLine(pen, 8 * u, 13.2f * u, 8 * u, 2.8f * u);
+                g.DrawLines(pen, new[] { P(4 * u, 6.8f * u), P(8 * u, 2.8f * u), P(12 * u, 6.8f * u) });
+                break;
+
+            case IconKind.ArrowDown:
+                g.DrawLine(pen, 8 * u, 2.8f * u, 8 * u, 13.2f * u);
+                g.DrawLines(pen, new[] { P(4 * u, 9.2f * u), P(8 * u, 13.2f * u), P(12 * u, 9.2f * u) });
+                break;
+
+            case IconKind.Move:
+                g.DrawLine(pen, 3 * u, 8 * u, 13 * u, 8 * u);
+                g.DrawLines(pen, new[] { P(9.5f * u, 4.5f * u), P(13 * u, 8 * u), P(9.5f * u, 11.5f * u) });
+                g.DrawLine(pen, 3 * u, 3.5f * u, 3 * u, 12.5f * u);
                 break;
         }
 

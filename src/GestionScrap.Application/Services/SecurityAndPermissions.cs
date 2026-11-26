@@ -6,44 +6,81 @@ using GestionScrap.Domain.Interfaces;
 
 namespace GestionScrap.Application.Services;
 
-public static class RolePermissionMatrix
+public static class DefaultRoleProfiles
 {
-    private static readonly Dictionary<RolUsuario, PermisoSistema[]> Matrix = new()
+    public static IReadOnlyList<PerfilUsuario> GetSeededProfiles() =>
+    [
+        new PerfilUsuario
         {
-            [RolUsuario.Administrador] = Enum.GetValues<PermisoSistema>(),
-            [RolUsuario.Supervisor] =
+            Id = 1,
+            Nombre = "Administrador",
+            Descripcion = "Acceso completo a informes, árbol de grupos, proveedores, importador, perfiles y auditoría.",
+            EsSistema = true,
+            Permisos = Enum.GetValues<PermisoSistema>()
+        },
+        new PerfilUsuario
+        {
+            Id = 2,
+            Nombre = "Supervisor",
+            Descripcion = "Acceso operativo completo, edición de árbol de grupos, importación y revisión de auditoría.",
+            EsSistema = false,
+            Permisos =
             [
-                PermisoSistema.VerDashboard,
-                PermisoSistema.ConsultarInformes,
-                PermisoSistema.ExportarExcel,
-                PermisoSistema.EditarPreciosReales,
-                PermisoSistema.CongelarPreciosTeoricos,
-                PermisoSistema.AdministrarMantenedorPrecios,
-                PermisoSistema.CerrarFolioJcramm,
-                PermisoSistema.ImportarFirebird,
-                PermisoSistema.EjecutarProcedimientosFirebird,
-                PermisoSistema.VerAuditoria
-            ],
-            [RolUsuario.Operador] =
-            [
-                PermisoSistema.VerDashboard,
-                PermisoSistema.ConsultarInformes,
-                PermisoSistema.ExportarExcel,
-                PermisoSistema.ImportarFirebird
-            ],
-            [RolUsuario.Auditor] =
-            [
-                PermisoSistema.VerDashboard,
-                PermisoSistema.ConsultarInformes,
+                PermisoSistema.VerInformeResumen,
+                PermisoSistema.VerGrupoMaterial,
+                PermisoSistema.AdministrarGrupoMaterial,
+                PermisoSistema.VerAnalisisProveedores,
+                PermisoSistema.ImportarDatos,
                 PermisoSistema.ExportarExcel,
                 PermisoSistema.VerAuditoria
             ]
-        };
-
-    public static IReadOnlyCollection<PermisoSistema> GetDefaultsForRole(RolUsuario rol) =>
-        Matrix.TryGetValue(rol, out PermisoSistema[]? perms)
-            ? perms
-            : [PermisoSistema.VerDashboard, PermisoSistema.ConsultarInformes];
+        },
+        new PerfilUsuario
+        {
+            Id = 3,
+            Nombre = "Analista",
+            Descripcion = "Gestión completa de grupos de material, informes resumen, análisis de proveedores y Excel.",
+            EsSistema = false,
+            Permisos =
+            [
+                PermisoSistema.VerInformeResumen,
+                PermisoSistema.VerGrupoMaterial,
+                PermisoSistema.AdministrarGrupoMaterial,
+                PermisoSistema.VerAnalisisProveedores,
+                PermisoSistema.ExportarExcel
+            ]
+        },
+        new PerfilUsuario
+        {
+            Id = 4,
+            Nombre = "Operador",
+            Descripcion = "Consulta de informes, importación desde básculas Firebird/Access y exportación Excel.",
+            EsSistema = false,
+            Permisos =
+            [
+                PermisoSistema.VerInformeResumen,
+                PermisoSistema.VerGrupoMaterial,
+                PermisoSistema.VerAnalisisProveedores,
+                PermisoSistema.ImportarDatos,
+                PermisoSistema.ExportarExcel
+            ]
+        },
+        new PerfilUsuario
+        {
+            Id = 5,
+            Nombre = "Auditor",
+            Descripcion = "Acceso de solo lectura a informes, exportación Excel y bitácora de auditoría.",
+            EsSistema = false,
+            Permisos =
+            [
+                PermisoSistema.VerInformeResumen,
+                PermisoSistema.VerGrupoMaterial,
+                PermisoSistema.VerAnalisisProveedores,
+                PermisoSistema.ExportarExcel,
+                PermisoSistema.VerAuditoria
+            ]
+        }
+    ];
 }
 
 public static class PasswordSecurity
@@ -101,6 +138,7 @@ public sealed class SecuritySessionService(IScrapRepository repository) : IAuthS
     private static readonly TimeSpan LockoutDuration = TimeSpan.FromMinutes(5);
 
     private readonly IScrapRepository _repository = repository;
+    private PerfilUsuario? _currentPerfil;
 
     public Usuario? CurrentUser { get; private set; }
 
@@ -150,7 +188,8 @@ public sealed class SecuritySessionService(IScrapRepository repository) : IAuthS
                 Id = user.Id,
                 NombreUsuario = user.NombreUsuario,
                 NombreCompleto = user.NombreCompleto,
-                Rol = user.Rol,
+                PerfilId = user.PerfilId,
+                NombrePerfil = user.NombrePerfil,
                 PasswordHash = user.PasswordHash,
                 PasswordSalt = user.PasswordSalt,
                 Activo = user.Activo,
@@ -173,7 +212,7 @@ public sealed class SecuritySessionService(IScrapRepository repository) : IAuthS
 
             return (false, lockUntil.HasValue
                 ? "Demasiados intentos fallidos. Cuenta bloqueada por 5 minutos."
-                : "Credenciales inválidas.", null);
+                : $"Credenciales inválidas (intento {nextAttempts} de {MaxFailedAttempts}).", null);
         }
 
         if (user.IntentosFallidos > 0 || user.BloqueadoHastaUtc.HasValue)
@@ -183,7 +222,8 @@ public sealed class SecuritySessionService(IScrapRepository repository) : IAuthS
                 Id = user.Id,
                 NombreUsuario = user.NombreUsuario,
                 NombreCompleto = user.NombreCompleto,
-                Rol = user.Rol,
+                PerfilId = user.PerfilId,
+                NombrePerfil = user.NombrePerfil,
                 PasswordHash = user.PasswordHash,
                 PasswordSalt = user.PasswordSalt,
                 Activo = user.Activo,
@@ -192,66 +232,76 @@ public sealed class SecuritySessionService(IScrapRepository repository) : IAuthS
                 PermisosPersonalizados = user.PermisosPersonalizados,
                 CreadoEnUtc = user.CreadoEnUtc
             };
-            await _repository.SaveUsuarioAsync(user, user.NombreUsuario, ct).ConfigureAwait(false);
+            await _repository.SaveUsuarioAsync(user, "SISTEMA", ct).ConfigureAwait(false);
         }
 
+        _currentPerfil = await _repository.GetPerfilByIdAsync(user.PerfilId, ct).ConfigureAwait(false);
         CurrentUser = user;
+
         await _repository.AddAuditLogAsync(new AuditLogEntry
         {
             Usuario = user.NombreUsuario,
             Accion = "LOGIN_EXITOSO",
             Entidad = "SEGURIDAD",
             RegistroId = user.Id.ToString(CultureInfo.InvariantCulture),
-            Detalle = $"Inicio de sesión con perfil {user.Rol}."
+            Detalle = $"Inicio de sesión exitoso (Perfil: {user.NombrePerfil})."
         }, ct).ConfigureAwait(false);
 
-        return (true, $"Bienvenido, {user.NombreCompleto}.", user);
+        return (true, "Autenticación exitosa.", user);
     }
 
     public void Logout()
     {
         CurrentUser = null;
-    }
-
-    public IReadOnlyCollection<PermisoSistema> GetEffectivePermissions(Usuario usuario)
-    {
-        if (usuario.PermisosPersonalizados.Count > 0)
-        {
-            return usuario.PermisosPersonalizados;
-        }
-
-        return RolePermissionMatrix.GetDefaultsForRole(usuario.Rol);
+        _currentPerfil = null;
     }
 
     public bool HasPermission(PermisoSistema permiso)
     {
-        if (CurrentUser is null || !CurrentUser.Activo)
+        if (CurrentUser is null)
         {
             return false;
         }
 
-        return GetEffectivePermissions(CurrentUser).Contains(permiso);
+        return GetEffectivePermissions(CurrentUser, _currentPerfil).Contains(permiso);
     }
 
     public void EnsurePermission(PermisoSistema permiso)
     {
         if (CurrentUser is null)
         {
-            throw new UnauthorizedAccessException("Debe iniciar sesión para realizar esta acción.");
+            throw new UnauthorizedAccessException("Debe iniciar sesión para ejecutar esta operación.");
         }
 
         if (!HasPermission(permiso))
         {
-            throw new UnauthorizedAccessException(
-                $"El perfil '{CurrentUser.Rol}' no posee el permiso requerido ({permiso}).");
+            throw new UnauthorizedAccessException($"El perfil '{CurrentUser.NombrePerfil}' no cuenta con el permiso requerido ({permiso}).");
         }
+    }
+
+    public IReadOnlyCollection<PermisoSistema> GetEffectivePermissions(Usuario usuario, PerfilUsuario? perfil = null)
+    {
+        if (usuario.PermisosPersonalizados.Count > 0)
+        {
+            return usuario.PermisosPersonalizados;
+        }
+
+        if (perfil is not null && perfil.Id == usuario.PerfilId && perfil.Permisos.Count > 0)
+        {
+            return perfil.Permisos;
+        }
+
+        PerfilUsuario? seeded = DefaultRoleProfiles.GetSeededProfiles()
+            .FirstOrDefault(p => p.Id == usuario.PerfilId || string.Equals(p.Nombre, usuario.NombrePerfil, StringComparison.OrdinalIgnoreCase));
+
+        return seeded?.Permisos ?? [PermisoSistema.VerInformeResumen];
     }
 
     public async Task<bool> ChangePasswordAsync(string currentPassword, string newPassword, CancellationToken ct = default)
     {
         if (CurrentUser is null)
         {
-            throw new UnauthorizedAccessException("No hay sesión activa.");
+            throw new UnauthorizedAccessException("No hay una sesión autenticada.");
         }
 
         if (!PasswordSecurity.VerifyPassword(currentPassword, CurrentUser.PasswordHash, CurrentUser.PasswordSalt))
@@ -259,10 +309,10 @@ public sealed class SecuritySessionService(IScrapRepository repository) : IAuthS
             return false;
         }
 
-        (bool valid, string message) = PasswordSecurity.ValidateComplexity(newPassword);
+        (bool valid, string msg) = PasswordSecurity.ValidateComplexity(newPassword);
         if (!valid)
         {
-            throw new ArgumentException(message, nameof(newPassword));
+            throw new ArgumentException(msg, nameof(newPassword));
         }
 
         (string hash, string salt) = PasswordSecurity.HashPassword(newPassword);
@@ -271,7 +321,8 @@ public sealed class SecuritySessionService(IScrapRepository repository) : IAuthS
             Id = CurrentUser.Id,
             NombreUsuario = CurrentUser.NombreUsuario,
             NombreCompleto = CurrentUser.NombreCompleto,
-            Rol = CurrentUser.Rol,
+            PerfilId = CurrentUser.PerfilId,
+            NombrePerfil = CurrentUser.NombrePerfil,
             PasswordHash = hash,
             PasswordSalt = salt,
             Activo = CurrentUser.Activo,
@@ -282,16 +333,17 @@ public sealed class SecuritySessionService(IScrapRepository repository) : IAuthS
         };
 
         await _repository.SaveUsuarioAsync(updated, CurrentUser.NombreUsuario, ct).ConfigureAwait(false);
+        CurrentUser = updated;
+
         await _repository.AddAuditLogAsync(new AuditLogEntry
         {
             Usuario = CurrentUser.NombreUsuario,
             Accion = "CAMBIO_CLAVE",
             Entidad = "SEGURIDAD",
             RegistroId = CurrentUser.Id.ToString(CultureInfo.InvariantCulture),
-            Detalle = "Contraseña actualizada por el usuario."
+            Detalle = "El usuario actualizó su contraseña personal."
         }, ct).ConfigureAwait(false);
 
-        CurrentUser = updated;
         return true;
     }
 }

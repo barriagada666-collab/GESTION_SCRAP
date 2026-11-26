@@ -1,12 +1,12 @@
 <div align="center">
-  <img src="installer/assets/app_logo.png" alt="Gestión de Scrap Logo" width="110" />
-  <h1>Gestión de Scrap v4.0</h1>
-  <p><strong>Plataforma de Escritorio .NET 10 para Control de Pesajes, Tarifas, Informes Operativos y Sincronización Firebird</strong></p>
+  <img src="installer/assets/app_logo.png" alt="Cambiaso Gestión de Scrap Logo" width="128" />
+  <h1>Cambiaso · Gestión de Scrap y Pesajes v4.0</h1>
+  <p><strong>Plataforma de Escritorio .NET 10 x64 para Control de Pesajes, Clasificación Jerárquica de Materiales, Análisis de Proveedores e Importación Firebird</strong></p>
 
-  ![.NET 10](https://img.shields.io/badge/.NET-10.0%20WinForms%20x64-512BD4?style=for-the-badge&logo=dotnet)
-  ![SQLite WAL](https://img.shields.io/badge/Database-SQLite%20WAL%20%2B%20Firebird-003B57?style=for-the-badge&logo=sqlite)
-  ![Inno Setup 7](https://img.shields.io/badge/Installer-Inno%20Setup%207-0891B2?style=for-the-badge)
-  ![Tests](https://img.shields.io/badge/Tests-22%2F22%20Passing-059669?style=for-the-badge)
+  ![.NET 10](https://img.shields.io/badge/.NET-10.0%20WinForms%20x64-0B3C5D?style=for-the-badge&logo=dotnet)
+  ![SQLite WAL](https://img.shields.io/badge/Database-SQLite%20WAL%20%2B%20Firebird-0891B2?style=for-the-badge&logo=sqlite)
+  ![Inno Setup 7](https://img.shields.io/badge/Installer-Inno%20Setup%207-C9A46E?style=for-the-badge)
+  ![Tests](https://img.shields.io/badge/Tests-19%2F19%20Passing-059669?style=for-the-badge)
   ![Warnings](https://img.shields.io/badge/Build-0%20Errors%20%7C%200%20Warnings-10B981?style=for-the-badge)
 </div>
 
@@ -14,28 +14,31 @@
 
 ## Descripción del Proyecto
 
-**Gestión de Scrap v4.0** es la migración integral hacia **.NET 10 (C# 14 + Windows Forms x64)** y **Inno Setup 7** del sistema operativo de gestión de datos de scrap y pesajes de camiones across plantas **Placilla**, **Santiago** y **Talcahuano**.
+**Gestión de Scrap v4.0** es la plataforma corporativa desarrollada en **.NET 10 (`C# 14` + Windows Forms `x64` `PerMonitorV2`)** y **Inno Setup 7** para consolidar, clasificar y analizar los pesajes de báscula desde las bases productivas **Firebird (`WMDBSPC.GDB` / `PWAREHOUSE.FDB`)** y respaldos históricos **Access (`.mdb`/`.accdb`)**.
 
-Reemplaza los libros heredados Excel/VBA y la base Microsoft Access compartida por una arquitectura limpia de cuatro capas respaldada por **SQLite en modo WAL**, conectividad TCP/IP nativa hacia servidores **Firebird (`.GDB`/`.FDB`)**, exportación Excel moderna mediante **ClosedXML** y control de acceso basado en roles (**RBAC**).
+Opera con almacenamiento local **SQLite en modo WAL**, exportación nativa **Excel (`.xlsx`)** mediante **ClosedXML**, **cero dependencias externas de UI o recursos remotos** (identidad visual corporativa Cambiaso azul petróleo `#0B3C5D`, cian técnico `#0891B2` y dorado `#C9A46E` embebida directamente como `EmbeddedResource` en el binario) y control de acceso dinámico basado en perfiles (**RBAC**).
 
 ---
 
-## Características Principales
+## Los 5 Módulos Operativos (`Ctrl+1` .. `Ctrl+5`)
 
-- **Dashboard Ejecutivo (`Ctrl+1`):** KPIs del período vs mes anterior, última jornada, alertas automáticas de folios sin tarifa y 3 gráficos vectoriales GDI+ con doble búfer.
-- **10 Módulos Operativos Especializados:**
-  1. `Grupo de Material` (consolidado por familia en Placilla, Santiago y Talcahuano; rango o semanal).
-  2. `Compras y Traslados` (separación de compras reales y movimientos internos entre plantas).
-  3. `Informe por Cliente` (búsqueda dual por **RUT** o **Folio** con selector rápido `F2`).
-  4. `Grupos Especiales` (8 segmentos estratégicos independientes: Retail Santiago, Retail Empresas, Mix Santiago, Mix Placilla, Retail Regiones, Agrícola, Pesquera y Agrosuper).
-  5. `Informe JCRAMM` (control persistente de último folio cerrado y exportación + cierre atómico).
-  6. `Informe de Precios` (precios teóricos pactados, congelamiento e índice histórico de precios reales, promedios ponderados sin división por cero).
-  7. `Mantenedor de Precios` (CRUD validado por proveedor/producto con filtros en tiempo real).
-  8. `Importar Firebird` (conexión TCP/IP puerto `3050`, prevención de duplicados y ejecución transaccional de procedimientos SAP `PA_INS_PROV_STGO` / `PA_INS_MASIVO_EXP_SAP`).
-  9. `Seguridad, Auditoría y Migración MDB` (usuarios, permisos granulares, bitácora de auditoría, migrador de `BD_SCRAP.mdb` y respaldo SQLite en caliente).
-- **Seguridad End-to-End:** Contraseñas con **PBKDF2-SHA256** (`100.000` iteraciones), bloqueo por intentos fallidos, secretos de red cifrados con **Windows DPAPI** y validación de permisos tanto en UI como en capa de aplicación.
-- **Exportación Excel sin Office COM:** Generación directa `.xlsx` mediante `ClosedXML 0.105.1`.
-- **Rendimiento Fluido:** Grillas con `DoubleBuffered = true`, carga diferida de pestañas y SQLite WAL indexado validado bajo carga de 10.000 registros.
+1. **Informe Resumen (`Ctrl+1`):**
+   - KPIs ejecutivos de kilos netos, viajes, promedio por viaje, comparación vs período anterior, última jornada, proveedores y productos activos.
+   - Gráficos vectoriales GDI+ con doble búfer (tendencia comparativa, top proveedores y distribución por grupo) más resumen por planta, tipo de pesaje y últimos folios.
+   - Exportación directa a `.xlsx`.
+2. **Grupos de Material con Árbol CRUD Jerárquico (`Ctrl+2`):**
+   - Gestión integral de árbol (`MaterialGroupNode`) con **Nodos Padre**, **Subgrupos** y **Productos Hijo**.
+   - Acciones completas de creación, edición, asignación de productos no clasificados, movimiento entre padres (mediante diálogo y arrastrar/soltar), reordenamiento arriba/abajo y eliminación segura (mantener subnodos o eliminar subárbol).
+   - Agregación jerárquica consolidada por rama y exportación a `.xlsx`.
+3. **Análisis de Proveedores (`Ctrl+3`):**
+   - Clasificación **Pareto ABC** (`A` / `B` / `C`), participación individual y acumulada, variación porcentual respecto al período anterior y días de inactividad.
+   - Ficha detallada del proveedor seleccionado: mix de materiales, productos principales, evolución mensual, patentes frecuentes, orígenes frecuentes y tabla completa de entregas con exportación multi-hoja `.xlsx`.
+4. **Importador Multi-Origen (`Ctrl+4`):**
+   - Conector directo TCP/IP (`3050`) hacia Firebird preconfigurado para `\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB` (incluye presets para `placilla\WMDBSPC.GDB` y `thno\PWAREHOUSE.FDB`) usando `Charset=NONE` compatible con bases heredadas.
+   - Prueba de conectividad con conteo real de tablas, pesajes y rango de fechas, extracción deduplicada de pesajes/clientes/productos y migración opcional desde `.mdb`/`.accdb`.
+5. **Seguridad, Perfiles y Auditoría (`Ctrl+5`):**
+   - Administración CRUD de **Perfiles RBAC (`PerfilUsuario`)** y **Usuarios** con hash **PBKDF2-SHA256** (`100.000` iteraciones), bloqueo por `5` intentos fallidos (`5` min) y cifrado **DPAPI** de credenciales Firebird.
+   - Bitácora de auditoría (`audit_log`), respaldo SQLite en caliente y purga confirmada mediante palabra de seguridad (`"ELIMINAR"`).
 
 ---
 
@@ -44,60 +47,46 @@ Reemplaza los libros heredados Excel/VBA y la base Microsoft Access compartida p
 ```text
 GESTION_SCRAP/
 ├── GestionScrap.sln
-├── Directory.Build.props                 # Compilación estricta (.NET 10 / Lang 14 / 0 Warnings)
+├── Directory.Build.props                 # .NET 10 / C# 14 / 0 Errors & 0 Warnings
 ├── src/
-│   ├── GestionScrap.Domain/              # Entidades, Enums, RutChileno, Interfaces
-│   ├── GestionScrap.Application/         # BusinessRules, DTOs, Seguridad PBKDF2, Servicios
-│   ├── GestionScrap.Infrastructure/      # SQLite WAL, Firebird TCP, ClosedXML, Migrador MDB, DPAPI
-│   └── GestionScrap.Desktop/             # WinForms UI, Dashboard GDI+, Diálogos, IconFactory
+│   ├── GestionScrap.Domain/              # Entidades (Pesaje, Cliente, Producto, MaterialGroupNode, PerfilUsuario, Usuario), Enums, RutChileno
+│   ├── GestionScrap.Application/         # BusinessRules, DTOs, SecuritySessionService, ScrapApplicationService
+│   ├── GestionScrap.Infrastructure/      # SqliteScrapRepository (WAL), FirebirdSyncService, ClosedXmlExcelExportService, MdbMigrationService, AppSettingsStore
+│   └── GestionScrap.Desktop/             # WinForms UI (SplashForm, LoginForm, MainForm, 5 Módulos, 5 Diálogos, AppTheme, IconFactory, Assets embebidos)
 ├── tests/
-│   └── GestionScrap.Tests/               # Unit, Integration, MDB Migration, STA UI Audit & Stress (22 tests)
+│   └── GestionScrap.Tests/               # Unit, Integration, Real DB (WMDBSPC.GDB), STA UI Audit & 10k Stress (19 tests)
 ├── installer/
-│   ├── GestionScrap.iss                  # Script parametrizado Inno Setup 7 (x64 SelfContained / FDD)
-│   ├── InfoSoftware.rtf                  # Nota informativa del asistente de instalación
-│   ├── build_installer.cmd               # Pipeline completo Build -> Test -> Publish -> ISCC
-│   ├── AssetBuilder/                     # Generador .NET 10 de gráficos e iconos v4.0
-│   └── assets/                           # Iconos (.ico/.png) y banners modernos Inno Setup 7
-└── docs/                                 # Arquitectura, Manual Funcional, Compilación, Despliegue, Seguridad, QA
+│   ├── GestionScrap.iss                  # Script parametrizado Inno Setup 7 (SelfContained / FrameworkDependent x64)
+│   ├── InfoSoftware.rtf                  # Nota informativa del instalador
+│   ├── build_installer.cmd               # Pipeline Build -> Test -> Publish -> ISCC
+│   ├── AssetBuilder/                     # Generador .NET 10 de gráficos Cambiaso HiDPI (.ico/.png/.bmp)
+│   └── assets/                           # Emblema, monograma, icono y banners modernos
+└── docs/                                 # Documentación técnica y funcional completa
 ```
 
 ---
 
-## Visualización e Instalador (`v4.0`)
+## Auditoría Real de Datos (`WMDBSPC.GDB`)
 
-Los instaladores utilizan **Inno Setup 7 (`WizardStyle=modern`)** con gráficos HiDPI regenerables mediante `installer/AssetBuilder`:
-
-| Recurso | Uso | Ubicación |
-| :--- | :--- | :--- |
-| Icono y Logo `v4.0` | Ejecutable, menú Inicio y formularios | [installer/assets/app_logo.png](installer/assets/app_logo.png) |
-| Banner Lateral (`1x` / `2x`) | Pantalla inicial y finalización Inno Setup 7 | [installer/assets/wizard_banner.bmp](installer/assets/wizard_banner.bmp) |
-| Cabecera Compacta (`1x` / `2x`) | Páginas internas del asistente | [installer/assets/wizard_small.bmp](installer/assets/wizard_small.bmp) |
+Durante la auditoría directa sobre el servidor `192.168.2.56:3050` se verificó:
+- **`\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB` (`DEFAULT CHARACTER SET NONE`):** `33` tablas de usuario, `49` procedimientos almacenados, **`2.730` pesajes activos** (`2.732` totales, `ANULADO='0'`, del `12-11-2024` al `26-11-2026`, folios `1..2737`, **`25.443.901 Kg`** netos), `48` productos en `DBPRODUCTOS` y `263` clientes/proveedores en `DBCLIENTES`.
+- **`\\192.168.2.56\bdwm\placilla\WMDBSPC.GDB`:** **`18.031` pesajes activos** (`01-04-2011` al `12-11-2024`, `118.944.543 Kg` netos).
+- **`\\192.168.2.56\bdwm\thno\PWAREHOUSE.FDB`:** `PESAJES` (`1.040`), `PESAJES_ITEMS` (`11.724`), `CLI_PROV` (`32`), `PRODUCTOS` (`26`).
 
 ---
 
-## Requisitos
+## Instalación y Uso Inicial
 
-### Para Usuarios Finales (Instalación)
-- **Sistema Operativo:** Windows 10 o Windows 11 (64 bits / `x64`).
-- **Instalador Autocontenido (`SelfContained`):** No requiere descargas previas ni `.NET` preinstalado.
-- **Instalador Compacto (`FrameworkDependent`):** Requiere **.NET 10 Desktop Runtime (x64)**.
+1. Ejecute el instalador deseado desde `Instalador/`:
+   - `GestionScrap_Setup_v4.0.0_x64_SelfContained.exe` *(recomendado — cero dependencias previas)*
+   - `GestionScrap_Setup_v4.0.0_x64_FrameworkDependent.exe` *(requiere .NET 10 Desktop Runtime x64)*
+2. Inicie sesión con la cuenta inicial de administrador sembrada (`barriagada` / `Cambias0`) y **cambie la contraseña inicial en producción** desde **Mi Clave** o **Seguridad y Perfiles (`Ctrl+5`)**.
+3. En **Importador BD (`Ctrl+4`)**, pruebe e importe directamente desde `\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB`.
 
-### Para Desarrollo / Compilación
-- **.NET 10 SDK** (`10.0.100+`).
-- **Inno Setup 7** (`7.1.1+`) para compilar los instaladores `.exe`.
-
----
-
-## Instalación
-
-1. Ejecute el instalador deseado generado en `Instalador/`:
-   - `GestionScrap_Setup_v4.0.0_x64_SelfContained.exe` *(recomendado)*
-   - `GestionScrap_Setup_v4.0.0_x64_FrameworkDependent.exe`
-2. Siga el asistente en español (la base operativa local `%LocalAppData%\GestionScrap\gestion_scrap.db` se conserva automáticamente al actualizar versiones).
-3. Para despliegue corporativo desatendido:
-   ```cmd
-   GestionScrap_Setup_v4.0.0_x64_SelfContained.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER
-   ```
+Para instalación silenciosa en despliegue TI:
+```cmd
+GestionScrap_Setup_v4.0.0_x64_SelfContained.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER
+```
 
 ---
 
@@ -107,40 +96,19 @@ Los instaladores utilizan **Inno Setup 7 (`WizardStyle=modern`)** con gráficos 
 # 1. Restaurar dependencias
 dotnet restore GestionScrap.sln
 
-# 2. Compilar Debug y Release (0 advertencias, 0 errores)
+# 2. Compilar Debug y Release (0 errores / 0 advertencias)
 dotnet build GestionScrap.sln -c Debug --no-restore
 dotnet build GestionScrap.sln -c Release --no-restore
 
-# 3. Ejecutar pruebas automatizadas (Unit, Integration, MDB, STA UI Audit, 10k Stress)
+# 3. Ejecutar suite automatizada de 19 pruebas
 dotnet test GestionScrap.sln -c Release --no-build --verbosity normal
 
-# 4. Publicar binarios win-x64 y generar instaladores Inno Setup 7
+# 4. Publicar e empaquetar instaladores Inno Setup 7
 dotnet publish src\GestionScrap.Desktop\GestionScrap.Desktop.csproj -c Release -r win-x64 --self-contained true -p:DebugType=none -p:DebugSymbols=false -o publish\win-x64
 dotnet publish src\GestionScrap.Desktop\GestionScrap.Desktop.csproj -c Release -r win-x64 --self-contained false -p:DebugType=none -p:DebugSymbols=false -o publish\win-x64-fdd
 & "$env:LOCALAPPDATA\Programs\Inno Setup 7\ISCC.exe" --quiet-progress -DVariant=selfcontained installer\GestionScrap.iss
 & "$env:LOCALAPPDATA\Programs\Inno Setup 7\ISCC.exe" --quiet-progress -DVariant=framework installer\GestionScrap.iss
 ```
-
----
-
-## Configuración Inicial y Seguridad
-
-- **Perfiles Iniciales:** `admin` (`Administrador`), `supervisor` (`Supervisor`), `operador` (`Operador`) y `auditor` (`Auditor`). Rotar las contraseñas iniciales inmediatamente después de instalar mediante **Mi Clave** o **Seguridad y MDB** (consulte [docs/SEGURIDAD.md](docs/SEGURIDAD.md)).
-- **Conexiones Firebird:** Configure IP, puerto `3050`, ruta `.GDB`/`.FDB` y credenciales cifradas con DPAPI desde **Config. BD**.
-- **Migración desde Access (`BD_SCRAP.mdb`):** Desde **Seguridad y MDB (`Ctrl+0`) -> Migración Access MDB**, importe los datos históricos de pesajes, clientes, familias de productos y tarifas.
-
----
-
-## Uso y Atajos Principales
-
-| Atajo | Acción |
-| :--- | :--- |
-| `Ctrl+1` .. `Ctrl+9` | Navegar entre Dashboard, Informes, Precios, Mantenedor e Importación Firebird |
-| `Ctrl+0` | Abrir módulo de Seguridad RBAC, Auditoría, Migración MDB y Respaldo SQLite |
-| `F5` | Refrescar datos del módulo activo |
-| `F2` / `Enter` | Abrir catálogo rápido de Clientes o Productos en campos de búsqueda |
-
-Consulte la guía completa en [docs/MANUAL_FUNCIONAL.md](docs/MANUAL_FUNCIONAL.md).
 
 ---
 
@@ -150,20 +118,6 @@ Consulte la guía completa en [docs/MANUAL_FUNCIONAL.md](docs/MANUAL_FUNCIONAL.m
 - [Manual Funcional de Usuario](docs/MANUAL_FUNCIONAL.md)
 - [Guía de Compilación](docs/COMPILACION.md)
 - [Guía de Despliegue e Instalación](docs/DESPLIEGUE.md)
-- [Seguridad, Roles RBAC y Auditoría](docs/SEGURIDAD.md)
+- [Seguridad, Perfiles RBAC y Auditoría](docs/SEGURIDAD.md)
 - [Plan y Evidencia de Pruebas QA](docs/PRUEBAS_QA.md)
 - [Historial de Cambios (Changelog)](docs/CHANGELOG.md)
-
----
-
-## Versionado e Historial de Cambios
-
-Este proyecto sigue **Versionado Semántico (`SemVer`)** — versión actual **`4.0.0`**.
-Revise los detalles de la migración y correcciones aplicadas respecto al sistema Excel/VBA en [docs/CHANGELOG.md](docs/CHANGELOG.md).
-
----
-
-## Créditos
-
-- Desarrollado y mantenido sobre el ecosistema **.NET 10**, **SQLite**, **FirebirdSql.Data.FirebirdClient**, **ClosedXML** y **Inno Setup 7**.
-- Proyecto: [GESTION_SCRAP](https://github.com/barriagada666-collab/GESTION_SCRAP)

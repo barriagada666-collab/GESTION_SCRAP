@@ -1,15 +1,14 @@
 {\rtf1\ansi\ansicpg1252\deff0\nouicompat{\fonttbl{\f0\fnil\fcharset0 Segoe UI;}}
-{\colortbl ;\red15\green23\blue42;\red8\green145\blue178;\red71\green85\blue105;}
+{\colortbl ;\red15\green23\blue42;\red11\green60\blue93;\red8\green145\blue178;\red71\green85\blue105;}
 \viewkind4\uc1
-\pard\sa120\sl276\slmult1\cf2\b\f0\fs26 Gesti\'f3n de Scrap \emdash  Versi\'f3n 4.0 (.NET 10)\par
-\cf1\b0\fs20 Sistema de escritorio para control de pesajes en b\'e1scula, valorizaci\'f3n de tarifas, cierres operativos e informes en Excel.\par
-\pard\sa100\sl250\slmult1\cf2\b\fs21 Caracter\'edsticas principales:\par
-\cf1\b0\fs19\bullet  Motor central SQLite (WAL) sin bloqueos ni corrupci\'f3n de archivos.\par
-\bullet  Conectividad directa TCP/IP con servidores Firebird (.GDB / .FDB) y procedimientos SAP.\par
-\bullet  Valorizaci\'f3n con precios te\'f3ricos pactados, congelamiento e \'edndice de precios reales.\par
-\bullet  Segmentaci\'f3n por plantas (Placilla, Santiago, Talcahuano), grupos especiales y cierre JCRAMM.\par
-\bullet  Migrador integrado de bases Access (.mdb / .accdb) y exportaci\'f3n nativa a Excel (.xlsx).\par
-\bullet  Control de acceso por perfiles (RBAC) con bit\'e1cora de auditor\'eda integrada.\par
-\pard\sa100\sl250\slmult1\cf2\b\fs21 Datos y actualizaciones:\par
-\cf3\b0\fs18 Los datos operativos se almacenan en la carpeta de datos locales del usuario y se conservan autom\'e1ticamente al actualizar o reinstalar esta aplicaci\'f3n.\par
+\pard\sa120\sl276\slmult1\cf2\b\f0\fs26 Gesti\'f3n de Scrap y Pesajes \emdash  Versi\'f3n 4.0 (.NET 10)\par
+\cf1\b0\fs20 Sistema de escritorio x64 para consolidaci\'f3n de pesajes de b\'e1scula, clasificaci\'f3n jer\'e1rquica de materiales, an\'e1lisis Pareto ABC de proveedores e importaci\'f3n Firebird/Access.\par
+\pard\sa100\sl250\slmult1\cf3\b\fs21 M\'f3dulos principales:\par
+\cf1\b0\fs19\bullet  Informe Resumen (Ctrl+1): KPIs comparativos, gr\'e1ficos GDI+ y desglose por planta, tipo y grupo.\par
+\bullet  Grupos de Material (Ctrl+2): \'c1rbol CRUD jer\'e1rquico (Padre / Subgrupo / Producto Hijo) con arrastrar y soltar.\par
+\bullet  An\'e1lisis de Proveedores (Ctrl+3): Ranking Pareto ABC, variaci\'f3n entre per\'edodos, flota y detalle completo.\par
+\bullet  Importador Multi-Origen (Ctrl+4): Conector TCP/IP directo a servidores Firebird (WMDBSPC.GDB) y migraci\'f3n Access.\par
+\bullet  Seguridad y Perfiles (Ctrl+5): Perfiles RBAC configurables, usuarios PBKDF2-SHA256, bit\'e1cora y respaldo SQLite WAL.\par
+\pard\sa100\sl250\slmult1\cf3\b\fs21 Arquitectura sin dependencias externas:\par
+\cf4\b0\fs18 Motor embebido SQLite WAL, exportaci\'f3n nativa Excel (.xlsx) y recursos gr\'e1ficos corporativos integrados en el ejecutable. Los datos locales se conservan autom\'e1ticamente en %LocalAppData%\\GestionScrap al actualizar.\par
 }

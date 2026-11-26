@@ -7,11 +7,46 @@ string versionText = args.Length > 1 ? args[1] : "v4.0";
 
 Directory.CreateDirectory(outDir);
 
+string sourceLogoPath = Path.Combine(outDir, "cambiaso_brand_source.png");
+if (!File.Exists(sourceLogoPath))
+{
+    Console.Error.WriteLine($"No se encontro logo fuente en: {sourceLogoPath}");
+    return 1;
+}
+
+using Bitmap fullSource = (Bitmap)Image.FromFile(sourceLogoPath);
+
+// Recorta el monograma circular superior del logo fuente (coordenadas medidas: X=409..617, Y=15..224 en 1024x538)
+int embX = (int)(fullSource.Width * 0.39);
+int embY = (int)(fullSource.Height * 0.015);
+int embW = (int)(fullSource.Width * 0.22);
+int embH = embW;
+using Bitmap croppedEmblem = new(256, 256, PixelFormat.Format32bppArgb);
+using (Graphics g = Graphics.FromImage(croppedEmblem))
+{
+    g.SmoothingMode = SmoothingMode.AntiAlias;
+    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+    g.Clear(Color.Transparent);
+    g.DrawImage(fullSource, new Rectangle(8, 8, 240, 240), new Rectangle(embX, embY, embW, embH), GraphicsUnit.Pixel);
+}
+croppedEmblem.Save(Path.Combine(outDir, "cambiaso_emblem.png"), ImageFormat.Png);
+
+// Genera versión wordmark optimizada para UI (512x269)
+using Bitmap wordmark = new(512, 269, PixelFormat.Format32bppArgb);
+using (Graphics g = Graphics.FromImage(wordmark))
+{
+    g.SmoothingMode = SmoothingMode.AntiAlias;
+    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+    g.Clear(Color.Transparent);
+    g.DrawImage(fullSource, 0, 0, 512, 269);
+}
+wordmark.Save(Path.Combine(outDir, "cambiaso_wordmark.png"), ImageFormat.Png);
+
 int[] sizes = [16, 32, 48, 64, 128, 256];
 List<byte[]> pngFrames = [];
 foreach (int s in sizes)
 {
-    using Bitmap bmp = RenderAppBadge(s);
+    using Bitmap bmp = RenderCorporateBadge(s, croppedEmblem);
     using MemoryStream ms = new();
     bmp.Save(ms, ImageFormat.Png);
     byte[] bytes = ms.ToArray();
@@ -23,71 +58,48 @@ foreach (int s in sizes)
 }
 WriteIco(Path.Combine(outDir, "app_icon.ico"), sizes, pngFrames);
 
-SaveBmp24(RenderWizardBanner(164, 314, versionText), Path.Combine(outDir, "wizard_banner.bmp"));
-SaveBmp24(RenderWizardBanner(328, 628, versionText), Path.Combine(outDir, "wizard_banner_2x.bmp"));
-SaveBmp24(RenderWizardSmall(55, 58), Path.Combine(outDir, "wizard_small.bmp"));
-SaveBmp24(RenderWizardSmall(110, 116), Path.Combine(outDir, "wizard_small_2x.bmp"));
+SaveBmp24(RenderWizardBanner(164, 314, versionText, croppedEmblem), Path.Combine(outDir, "wizard_banner.bmp"));
+SaveBmp24(RenderWizardBanner(328, 628, versionText, croppedEmblem), Path.Combine(outDir, "wizard_banner_2x.bmp"));
+SaveBmp24(RenderWizardSmall(55, 58, croppedEmblem), Path.Combine(outDir, "wizard_small.bmp"));
+SaveBmp24(RenderWizardSmall(110, 116, croppedEmblem), Path.Combine(outDir, "wizard_small_2x.bmp"));
 
-Console.WriteLine($"Assets generados correctamente en: {outDir}");
+Console.WriteLine($"Assets corporativos Cambiaso v4.0 generados correctamente en: {outDir}");
 return 0;
 
-static Bitmap RenderAppBadge(int size)
+static Bitmap RenderCorporateBadge(int size, Bitmap emblem)
 {
     Bitmap bmp = new(size, size, PixelFormat.Format32bppArgb);
     using Graphics g = Graphics.FromImage(bmp);
     g.SmoothingMode = SmoothingMode.AntiAlias;
     g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-    g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
     g.Clear(Color.Transparent);
 
     float pad = size * 0.04f;
     float r = size * 0.22f;
     RectangleF rect = new(pad, pad, size - pad * 2, size - pad * 2);
 
+    // Paleta corporativa petróleo-azulado (#0B3C5D -> #0E2238) con aro dorado Cambiaso (#C9A46E)
     using (GraphicsPath path = RoundedRect(rect, r))
-    using (LinearGradientBrush bg = new(rect, Color.FromArgb(15, 23, 42), Color.FromArgb(14, 116, 144), 135f))
-    using (Pen borderPen = new(Color.FromArgb(56, 189, 248), Math.Max(1f, size * 0.03f)))
+    using (LinearGradientBrush bg = new(rect, Color.FromArgb(14, 96, 138), Color.FromArgb(11, 37, 58), 135f))
+    using (Pen goldPen = new(Color.FromArgb(201, 164, 110), Math.Max(1.2f, size * 0.045f)))
     {
         g.FillPath(bg, path);
-        g.DrawPath(borderPen, path);
+        g.DrawPath(goldPen, path);
     }
 
-    float cx = size * 0.5f;
-    float cy = size * 0.46f;
-    float stroke = Math.Max(1.5f, size * 0.06f);
-
-    using Pen cyanPen = new(Color.FromArgb(34, 211, 238), stroke) { StartCap = LineCap.Round, EndCap = LineCap.Round, LineJoin = LineJoin.Round };
-    using SolidBrush amberBrush = new(Color.FromArgb(245, 158, 11));
-    using SolidBrush whiteBrush = new(Color.FromArgb(241, 245, 249));
-    using SolidBrush greenBrush = new(Color.FromArgb(16, 185, 129));
-    using Pen darkPen = new(Color.FromArgb(15, 23, 42), Math.Max(1.2f, size * 0.045f)) { StartCap = LineCap.Round, EndCap = LineCap.Round };
-
-    float baseW = size * 0.62f;
-    float baseY = size * 0.72f;
-    g.DrawLine(cyanPen, cx - baseW / 2f, baseY, cx + baseW / 2f, baseY);
-    g.DrawLine(cyanPen, cx, cy - size * 0.14f, cx, baseY);
-
-    float boxW = size * 0.44f;
-    float boxH = size * 0.24f;
-    RectangleF boxRect = new(cx - boxW / 2f, baseY - boxH - stroke * 0.6f, boxW, boxH);
-    using (GraphicsPath boxPath = RoundedRect(boxRect, size * 0.06f))
+    float ringPad = size * 0.14f;
+    RectangleF ringRect = new(ringPad, ringPad, size - ringPad * 2, size - ringPad * 2);
+    using (Pen cyanRing = new(Color.FromArgb(95, 56, 189, 248), Math.Max(1f, size * 0.025f)))
     {
-        g.FillPath(amberBrush, boxPath);
+        g.DrawEllipse(cyanRing, ringRect);
     }
 
-    float dialR = size * 0.14f;
-    RectangleF dialRect = new(cx - dialR, size * 0.16f, dialR * 2f, dialR * 2f);
-    g.FillEllipse(whiteBrush, dialRect);
-    g.DrawLine(darkPen, cx, size * 0.16f + dialR, cx + dialR * 0.52f, size * 0.16f + dialR * 0.48f);
-
-    float barW = size * 0.34f;
-    RectangleF barRect = new(cx - barW / 2f, size * 0.81f, barW, Math.Max(1.5f, size * 0.055f));
-    g.FillRectangle(greenBrush, barRect);
-
+    float embPad = size * 0.17f;
+    g.DrawImage(emblem, new RectangleF(embPad, embPad, size - embPad * 2, size - embPad * 2));
     return bmp;
 }
 
-static Bitmap RenderWizardBanner(int width, int height, string ver)
+static Bitmap RenderWizardBanner(int width, int height, string ver, Bitmap emblem)
 {
     float scale = width / 164f;
     Bitmap bmp = new(width, height, PixelFormat.Format24bppRgb);
@@ -97,106 +109,76 @@ static Bitmap RenderWizardBanner(int width, int height, string ver)
     g.TextRenderingHint = TextRenderingHint.ClearTypeGridFit;
 
     Rectangle full = new(0, 0, width, height);
-    using (LinearGradientBrush bg = new(full, Color.FromArgb(12, 20, 38), Color.FromArgb(17, 46, 72), 90f))
+    using (LinearGradientBrush bg = new(full, Color.FromArgb(11, 60, 93), Color.FromArgb(10, 29, 48), 95f))
     {
         g.FillRectangle(bg, full);
     }
 
-    using (Pen gridPen = new(Color.FromArgb(26, 56, 86), 1f * scale))
+    // Líneas decorativas estilo industrial petróleo + dorado
+    using (Pen gridPen = new(Color.FromArgb(26, 201, 164, 110), 1f * scale))
     {
-        for (int y = 0; y < height; y += (int)(22 * scale))
+        for (int i = -60; i < height + 80; i += 24)
         {
-            g.DrawLine(gridPen, 0, y, width, y);
+            g.DrawLine(gridPen, 0, i * scale, width, (i + 52) * scale);
         }
     }
 
-    using (SolidBrush topBrush = new(Color.FromArgb(6, 182, 212)))
+    using (SolidBrush goldAccent = new(Color.FromArgb(201, 164, 110)))
     {
-        g.FillRectangle(topBrush, 0, 0, width, 5f * scale);
+        g.FillRectangle(goldAccent, 0, 0, 5f * scale, height);
     }
 
-    int badgeSize = (int)(86 * scale);
-    using (Bitmap badge = RenderAppBadge(badgeSize))
+    float badgeSize = 92f * scale;
+    float bx = (width - badgeSize) / 2f;
+    float by = 38f * scale;
+    using (Bitmap badge = RenderCorporateBadge((int)badgeSize, emblem))
     {
-        g.DrawImage(badge, (width - badgeSize) / 2, (int)(50 * scale));
+        g.DrawImage(badge, bx, by, badgeSize, badgeSize);
     }
 
-    using (Pen divPen = new(Color.FromArgb(245, 158, 11), 1.5f * scale))
-    {
-        g.DrawLine(divPen, 20 * scale, 162 * scale, width - 20 * scale, 162 * scale);
-    }
-
-    using Font titleFont = new("Segoe UI", 12.5f * scale, FontStyle.Bold, GraphicsUnit.Point);
-    using Font subFont = new("Segoe UI", 8.5f * scale, FontStyle.Regular, GraphicsUnit.Point);
+    using Font titleFont = new("Segoe UI", 11f * scale, FontStyle.Bold, GraphicsUnit.Point);
+    using Font subFont = new("Segoe UI", 8.2f * scale, FontStyle.Regular, GraphicsUnit.Point);
+    using Font brandFont = new("Segoe UI", 7.8f * scale, FontStyle.Bold, GraphicsUnit.Point);
     using Font badgeFont = new("Segoe UI", 8.5f * scale, FontStyle.Bold, GraphicsUnit.Point);
-    using StringFormat sf = new() { Alignment = StringAlignment.Center };
-    using SolidBrush white = new(Color.White);
-    using SolidBrush cyan = new(Color.FromArgb(103, 232, 249));
-    using SolidBrush muted = new(Color.FromArgb(148, 163, 184));
-    using SolidBrush pillBrush = new(Color.FromArgb(15, 118, 110));
-    using Pen pillPen = new(Color.FromArgb(45, 212, 191), 1f * scale);
+    using SolidBrush whiteBrush = new(Color.White);
+    using SolidBrush goldBrush = new(Color.FromArgb(201, 164, 110));
+    using SolidBrush mutedBrush = new(Color.FromArgb(186, 210, 228));
+    using StringFormat center = new() { Alignment = StringAlignment.Center };
 
-    g.DrawString("GESTIÓN DE", titleFont, white, new RectangleF(8 * scale, 176 * scale, width - 16 * scale, 24 * scale), sf);
-    g.DrawString("SCRAP", titleFont, cyan, new RectangleF(8 * scale, 198 * scale, width - 16 * scale, 24 * scale), sf);
-    g.DrawString("Pesaje e Informes", subFont, muted, new RectangleF(8 * scale, 228 * scale, width - 16 * scale, 20 * scale), sf);
+    g.DrawString("CAMBIASO HNOS.", brandFont, goldBrush, width / 2f, 142f * scale, center);
+    g.DrawString("Gestión de\nScrap y Pesajes", titleFont, whiteBrush, width / 2f, 160f * scale, center);
+    g.DrawString("Grupos · Proveedores\nFirebird · SQLite", subFont, mutedBrush, width / 2f, 208f * scale, center);
 
-    RectangleF pillRect = new(20 * scale, 260 * scale, width - 40 * scale, 26 * scale);
-    using (GraphicsPath pillPath = RoundedRect(pillRect, 10 * scale))
+    RectangleF pill = new(24f * scale, 260f * scale, width - 48f * scale, 24f * scale);
+    using (GraphicsPath pillPath = RoundedRect(pill, 11f * scale))
+    using (SolidBrush pillFill = new(Color.FromArgb(14, 116, 144)))
+    using (Pen pillBorder = new(Color.FromArgb(201, 164, 110), 1f * scale))
     {
-        g.FillPath(pillBrush, pillPath);
-        g.DrawPath(pillPen, pillPath);
+        g.FillPath(pillFill, pillPath);
+        g.DrawPath(pillBorder, pillPath);
     }
-    g.DrawString($"{ver}  \u00B7  .NET 10", badgeFont, white, new RectangleF(pillRect.X, pillRect.Y + 4.5f * scale, pillRect.Width, pillRect.Height), sf);
 
+    g.DrawString($"{ver} · .NET 10", badgeFont, whiteBrush, width / 2f, 264f * scale, center);
     return bmp;
 }
 
-static Bitmap RenderWizardSmall(int width, int height)
+static Bitmap RenderWizardSmall(int width, int height, Bitmap emblem)
 {
     Bitmap bmp = new(width, height, PixelFormat.Format24bppRgb);
     using Graphics g = Graphics.FromImage(bmp);
     g.SmoothingMode = SmoothingMode.AntiAlias;
     g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-    g.Clear(Color.FromArgb(245, 247, 250));
-    int s = Math.Min(width, height) - 4;
-    using Bitmap badge = RenderAppBadge(s);
-    g.DrawImage(badge, (width - s) / 2, (height - s) / 2);
+
+    Rectangle full = new(0, 0, width, height);
+    using (LinearGradientBrush bg = new(full, Color.FromArgb(14, 72, 108), Color.FromArgb(11, 37, 58), 135f))
+    {
+        g.FillRectangle(bg, full);
+    }
+
+    int badgeSize = (int)(Math.Min(width, height) * 0.88f);
+    using Bitmap badge = RenderCorporateBadge(badgeSize, emblem);
+    g.DrawImage(badge, (width - badgeSize) / 2f, (height - badgeSize) / 2f, badgeSize, badgeSize);
     return bmp;
-}
-
-static void SaveBmp24(Bitmap bmp, string path)
-{
-    using (bmp)
-    {
-        bmp.Save(path, ImageFormat.Bmp);
-    }
-}
-
-static void WriteIco(string path, int[] icoSizes, List<byte[]> frames)
-{
-    using FileStream fs = new(path, FileMode.Create, FileAccess.Write);
-    using BinaryWriter bw = new(fs);
-    bw.Write((short)0);
-    bw.Write((short)1);
-    bw.Write((short)icoSizes.Length);
-    int offset = 6 + 16 * icoSizes.Length;
-    for (int i = 0; i < icoSizes.Length; i++)
-    {
-        byte dim = icoSizes[i] >= 256 ? (byte)0 : (byte)icoSizes[i];
-        bw.Write(dim);
-        bw.Write(dim);
-        bw.Write((byte)0);
-        bw.Write((byte)0);
-        bw.Write((short)1);
-        bw.Write((short)32);
-        bw.Write(frames[i].Length);
-        bw.Write(offset);
-        offset += frames[i].Length;
-    }
-    foreach (byte[] frame in frames)
-    {
-        bw.Write(frame);
-    }
 }
 
 static GraphicsPath RoundedRect(RectangleF bounds, float radius)
@@ -209,4 +191,41 @@ static GraphicsPath RoundedRect(RectangleF bounds, float radius)
     path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90);
     path.CloseFigure();
     return path;
+}
+
+static void SaveBmp24(Bitmap bmp, string filePath)
+{
+    using (bmp)
+    {
+        bmp.Save(filePath, ImageFormat.Bmp);
+    }
+}
+
+static void WriteIco(string filePath, int[] sizes, List<byte[]> pngFrames)
+{
+    using FileStream fs = File.Create(filePath);
+    using BinaryWriter bw = new(fs);
+    bw.Write((short)0);
+    bw.Write((short)1);
+    bw.Write((short)sizes.Length);
+
+    int offset = 6 + (sizes.Length * 16);
+    for (int i = 0; i < sizes.Length; i++)
+    {
+        byte dim = (byte)(sizes[i] >= 256 ? 0 : sizes[i]);
+        bw.Write(dim);
+        bw.Write(dim);
+        bw.Write((byte)0);
+        bw.Write((byte)0);
+        bw.Write((short)1);
+        bw.Write((short)32);
+        bw.Write(pngFrames[i].Length);
+        bw.Write(offset);
+        offset += pngFrames[i].Length;
+    }
+
+    for (int i = 0; i < pngFrames.Count; i++)
+    {
+        bw.Write(pngFrames[i]);
+    }
 }

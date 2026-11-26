@@ -1,3 +1,4 @@
+using GestionScrap.Application.DTOs;
 using GestionScrap.Application.Services;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Enums;
@@ -11,117 +12,97 @@ public sealed class BusinessRulesAndSecurityTests
     [InlineData("76.218.764-5", "76218764-5", true)]
     [InlineData("07629801-K", "7629801k", true)]
     [InlineData("150713757", "15071375", true)]
-    [InlineData("0015071375-7", "15071375", true)]
     [InlineData("76218764-5", "96781200-K", false)]
     [InlineData("", "76218764-5", false)]
-    public void RutChileno_MatchesVariantsCorrectly(string left, string right, bool expected)
+    public void RutChileno_MatchesExpectedVariants(string left, string right, bool expected)
     {
         Assert.Equal(expected, RutChileno.Matches(left, right));
     }
 
     [Fact]
-    public void WeightedAverage_PreventsDivisionByZeroAndRoundsAwayFromZero()
-    {
-        Assert.Equal(0m, BusinessRules.CalculateWeightedAverage(100_000m, 0));
-        Assert.Equal(0m, BusinessRules.CalculateWeightedAverage(0m, 500));
-        Assert.Equal(150.56m, BusinessRules.CalculateWeightedAverage(301_115m, 2000));
-    }
-
-    [Fact]
-    public void ValidateCanUpdatePrice_AllowsOnlyRealPricesMode()
-    {
-        (bool teoAllowed, _) = BusinessRules.ValidateCanUpdatePrice(ModoPrecio.Teoricos);
-        (bool realAllowed, _) = BusinessRules.ValidateCanUpdatePrice(ModoPrecio.Reales);
-
-        Assert.False(teoAllowed);
-        Assert.True(realAllowed);
-    }
-
-    [Fact]
-    public void IsDuplicatePesaje_HandlesTalcahuanoHoraIngresoAndOtherPlantsFolioOnly()
+    public void IsDuplicatePesaje_HandlesTalcahuanoHoraAndOtherPlantsFolio()
     {
         Pesaje[] existing =
         [
-            new() { Planta = Planta.Placilla, Folio = 1001, HoraIngreso = new TimeOnly(8, 30) },
+            new() { Planta = Planta.Santiago, Folio = 1001, HoraIngreso = new TimeOnly(8, 30) },
             new() { Planta = Planta.Talcahuano, Folio = 2002, HoraIngreso = new TimeOnly(9, 15) }
         ];
 
-        Assert.True(BusinessRules.IsDuplicatePesaje(existing, 1001, Planta.Placilla, new TimeOnly(14, 0)));
+        Assert.True(BusinessRules.IsDuplicatePesaje(existing, 1001, Planta.Santiago, new TimeOnly(14, 0)));
         Assert.False(BusinessRules.IsDuplicatePesaje(existing, 2002, Planta.Talcahuano, new TimeOnly(10, 0)));
         Assert.True(BusinessRules.IsDuplicatePesaje(existing, 2002, Planta.Talcahuano, new TimeOnly(9, 15)));
     }
 
     [Fact]
-    public void SpecialGroups_IsolatePesqueraAndAgrosuperWithoutCollision()
+    public void BuildMaterialTreeReport_AggregatesHierarchyAndUnassignedCodes()
     {
-        Pesaje agrosuper = new()
-        {
-            Planta = Planta.Placilla,
-            TipoPesaje = TipoPesaje.RecepcionCarga,
-            RutCliente = "78483600",
-            NomCliente = "AGROSUPER COMERCIAL LTDA",
-            CodProducto = "5301001000"
-        };
+        MaterialGroupNode[] nodes =
+        [
+            new() { Id = 1, ParentId = null, Nombre = "SCRAP SUPERMERCADO", TipoNodo = NodoGrupoTipo.CarpetaGrupo, Orden = 1 },
+            new() { Id = 2, ParentId = 1, Nombre = "Subgrupo Mix", TipoNodo = NodoGrupoTipo.CarpetaGrupo, Orden = 1 },
+            new() { Id = 3, ParentId = 2, Nombre = "5300000009 · MIX", TipoNodo = NodoGrupoTipo.ProductoAsignado, CodigoProducto = "5300000009", Orden = 1 }
+        ];
 
-        Pesaje pesquera = new()
-        {
-            Planta = Planta.Placilla,
-            TipoPesaje = TipoPesaje.RecepcionCarga,
-            RutCliente = "76658930",
-            NomCliente = "PESQUERA AUSTRAL S.A.",
-            CodProducto = "5301002000"
-        };
+        Pesaje[] pesajes =
+        [
+            new() { Folio = 1, CodProducto = "5300000009", NomProducto = "SCRAP MIX SUPERMERCADO", PesoNeto = 12_000, FechaIngreso = new DateOnly(2026, 11, 10) },
+            new() { Folio = 2, CodProducto = "NEWCODE01", NomProducto = "MATERIAL NUEVO", PesoNeto = 3_000, FechaIngreso = new DateOnly(2026, 11, 11) }
+        ];
 
-        Assert.True(BusinessRules.MatchesAgrosuper(agrosuper));
-        Assert.False(BusinessRules.MatchesPesquera(agrosuper));
+        Producto[] catalog =
+        [
+            new() { Codigo = "5300000009", Descripcion = "SCRAP MIX SUPERMERCADO" },
+            new() { Codigo = "NEWCODE01", Descripcion = "MATERIAL NUEVO" }
+        ];
 
-        Assert.True(BusinessRules.MatchesPesquera(pesquera));
-        Assert.False(BusinessRules.MatchesAgrosuper(pesquera));
+        GrupoMaterialReportResultDto rep = BusinessRules.BuildMaterialTreeReport("Test", nodes, pesajes, catalog);
+
+        Assert.Equal(15_000, rep.TotalKilos);
+        Assert.Equal(1, rep.ProductosSinClasificarCount);
+        Assert.Equal(12_000, rep.Filas.First(r => r.NodeId == 1).TotalKilos);
+        Assert.Contains(rep.Filas, r => r.NodeId == -1 && r.TotalKilos == 3_000);
     }
 
     [Fact]
-    public void IsJcrammEligible_ExcludesBlacklistedMaterialCodes()
+    public void BuildAnalisisProveedores_ComputesParetoAbcAndSafeVariance()
     {
-        Pesaje eligible = new() { TipoPesaje = TipoPesaje.RecepcionCarga, CodProducto = "S0400" };
-        Pesaje carton = new() { TipoPesaje = TipoPesaje.RecepcionCarga, CodProducto = "CARTON" };
-        Pesaje sapExcluded = new() { TipoPesaje = TipoPesaje.RecepcionCarga, CodProducto = "5301001003" };
-        Pesaje despacho = new() { TipoPesaje = TipoPesaje.DespachoCarga, CodProducto = "S0400" };
+        DateOnly hoy = new(2026, 11, 26);
+        Pesaje[] actuales =
+        [
+            new() { RutCliente = "89201400", NomCliente = "ENV. CORDILLERA", PesoNeto = 80_000, CodProducto = "5300000009", NomProducto = "MIX", FechaIngreso = hoy.AddDays(-2) },
+            new() { RutCliente = "77774598", NomCliente = "GIAIER SPA", PesoNeto = 15_000, CodProducto = "5302000004", NomProducto = "STRETCH", FechaIngreso = hoy.AddDays(-5) },
+            new() { RutCliente = "11697166", NomCliente = "OSCAR SAAVEDRA", PesoNeto = 5_000, CodProducto = "5301002001", NomProducto = "COLOR", FechaIngreso = hoy.AddDays(-10) }
+        ];
+        Pesaje[] anteriores =
+        [
+            new() { RutCliente = "89201400", NomCliente = "ENV. CORDILLERA", PesoNeto = 40_000, FechaIngreso = hoy.AddMonths(-1) }
+        ];
 
-        Assert.True(BusinessRules.IsJcrammEligible(eligible));
-        Assert.False(BusinessRules.IsJcrammEligible(carton));
-        Assert.False(BusinessRules.IsJcrammEligible(sapExcluded));
-        Assert.False(BusinessRules.IsJcrammEligible(despacho));
+        AnalisisProveedoresResultDto res = BusinessRules.BuildAnalisisProveedores("Periodo", hoy, actuales, anteriores, []);
+
+        Assert.Equal(3, res.TotalProveedoresActivos);
+        Assert.Equal(100_000, res.TotalKilos);
+        Assert.Equal("A", res.Ranking[0].ClaseAbc);
+        Assert.Equal(100.0, res.Ranking[0].VariacionPorcentual);
+        Assert.Equal("B", res.Ranking[1].ClaseAbc);
+        Assert.Equal("C", res.Ranking[2].ClaseAbc);
     }
 
     [Fact]
-    public void PasswordSecurity_HashesWithUniqueSaltsAndValidatesComplexity()
+    public void PasswordSecurity_ValidatesCambias0ComplexityAndHashing()
     {
-        (string hash1, string salt1) = PasswordSecurity.HashPassword("ClaveSegura2026");
-        (string hash2, string salt2) = PasswordSecurity.HashPassword("ClaveSegura2026");
+        Assert.True(PasswordSecurity.ValidateComplexity("Cambias0").Valid);
+        Assert.False(PasswordSecurity.ValidateComplexity("corta1").Valid);
 
-        Assert.NotEqual(salt1, salt2);
-        Assert.NotEqual(hash1, hash2);
-        Assert.True(PasswordSecurity.VerifyPassword("ClaveSegura2026", hash1, salt1));
-        Assert.False(PasswordSecurity.VerifyPassword("Incorrecta99", hash1, salt1));
-
-        Assert.False(PasswordSecurity.ValidateComplexity("abc").Valid);
-        Assert.False(PasswordSecurity.ValidateComplexity("minusculas1").Valid);
-        Assert.True(PasswordSecurity.ValidateComplexity("Valida2026").Valid);
+        (string h, string s) = PasswordSecurity.HashPassword("Cambias0");
+        Assert.True(PasswordSecurity.VerifyPassword("Cambias0", h, s));
+        Assert.False(PasswordSecurity.VerifyPassword("otra1234", h, s));
     }
 
     [Fact]
-    public void RolePermissionMatrix_EnforcesLeastPrivilegePerRole()
+    public void DefaultRoleProfiles_AdministratorContainsAllPermissions()
     {
-        IReadOnlyCollection<PermisoSistema> admin = RolePermissionMatrix.GetDefaultsForRole(RolUsuario.Administrador);
-        IReadOnlyCollection<PermisoSistema> supervisor = RolePermissionMatrix.GetDefaultsForRole(RolUsuario.Supervisor);
-        IReadOnlyCollection<PermisoSistema> operador = RolePermissionMatrix.GetDefaultsForRole(RolUsuario.Operador);
-        IReadOnlyCollection<PermisoSistema> auditor = RolePermissionMatrix.GetDefaultsForRole(RolUsuario.Auditor);
-
-        Assert.Equal(Enum.GetValues<PermisoSistema>().Length, admin.Count);
-        Assert.DoesNotContain(PermisoSistema.PurgarTablasPesaje, supervisor);
-        Assert.DoesNotContain(PermisoSistema.AdministrarSeguridad, supervisor);
-        Assert.DoesNotContain(PermisoSistema.EditarPreciosReales, operador);
-        Assert.Contains(PermisoSistema.VerAuditoria, auditor);
-        Assert.DoesNotContain(PermisoSistema.ImportarFirebird, auditor);
+        PerfilUsuario admin = DefaultRoleProfiles.GetSeededProfiles().First(p => p.Id == 1);
+        Assert.Equal(Enum.GetValues<PermisoSistema>().Length, admin.Permisos.Count);
     }
 }

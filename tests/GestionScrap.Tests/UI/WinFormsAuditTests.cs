@@ -4,6 +4,7 @@ using GestionScrap.Application.Services;
 using GestionScrap.Desktop.Controls;
 using GestionScrap.Desktop.Forms;
 using GestionScrap.Desktop.Forms.Dialogs;
+using GestionScrap.Desktop.Theme;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Enums;
 using GestionScrap.Infrastructure.Configuration;
@@ -15,11 +16,16 @@ using GestionScrap.Infrastructure.Persistence;
 namespace GestionScrap.Tests.UI;
 
 /// <summary>
-/// Pruebas automatizadas de auditoría UI WinForms en hilo STA: verifica iconos, textos, accesibilidad,
-/// dimensiones visibles, manejadores Click enlazados y restricciones visuales por perfil RBAC.
+/// Pruebas automatizadas STA para validar UI/UX, branding embebido sin dependencias externas,
+/// botones completos con iconos/acciones y permisos dinámicos de perfiles en MainForm.
 /// </summary>
 public sealed class WinFormsAuditTests
 {
+    private static readonly object? ClickEventKey =
+        typeof(Control).GetField("s_clickEvent", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
+        ?? typeof(Control).GetFields(BindingFlags.Static | BindingFlags.NonPublic)
+            .FirstOrDefault(f => f.Name.Contains("click", StringComparison.OrdinalIgnoreCase))?.GetValue(null);
+
     private static void RunInSta(Action action)
     {
         Exception? captured = null;
@@ -60,12 +66,6 @@ public sealed class WinFormsAuditTests
         }
     }
 
-    private static readonly object? ClickEventKey =
-        typeof(Control).GetField("EventClick", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
-        ?? typeof(Control).GetField("s_clickEvent", BindingFlags.Static | BindingFlags.NonPublic)?.GetValue(null)
-        ?? typeof(Control).GetFields(BindingFlags.Static | BindingFlags.NonPublic)
-            .FirstOrDefault(f => f.Name.Contains("click", StringComparison.OrdinalIgnoreCase))?.GetValue(null);
-
     private static bool HasClickHandler(Button btn)
     {
         if (btn.DialogResult != DialogResult.None)
@@ -84,9 +84,24 @@ public sealed class WinFormsAuditTests
 
     private static void AssertAllButtonsValid(Control root, string contextName)
     {
+        if (root is UserControl uc)
+        {
+            using Form host = new() { ClientSize = new Size(1280, 760) };
+            host.Controls.Add(uc);
+            host.CreateControl();
+            host.PerformLayout();
+            ValidateButtonsCore(uc, contextName);
+            host.Controls.Remove(uc);
+            return;
+        }
+
         root.CreateControl();
         root.PerformLayout();
+        ValidateButtonsCore(root, contextName);
+    }
 
+    private static void ValidateButtonsCore(Control root, string contextName)
+    {
         List<Button> buttons = [.. GetAllButtons(root)];
         Assert.NotEmpty(buttons);
 
@@ -96,20 +111,34 @@ public sealed class WinFormsAuditTests
             Assert.False(string.IsNullOrWhiteSpace(btn.Text), $"Botón sin texto en {contextName}");
             Assert.True(btn.Image is not null, $"Botón sin icono asignado: {id}");
             Assert.False(string.IsNullOrWhiteSpace(btn.AccessibleName), $"Botón sin AccessibleName: {id}");
-            Assert.True(HasClickHandler(btn), $"Botón sin evento Click funcional asociado: {id}");
+            Assert.True(HasClickHandler(btn), $"Botón sin evento Click funcional: {id}");
             Assert.True(btn.Width > 0 && btn.Height > 0, $"Botón con tamaño inválido: {id}");
-            Assert.True(btn.Left >= 0 && btn.Top >= 0, $"Botón fuera de límites (negativo): {id} ({btn.Bounds})");
+            Assert.True(btn.Left >= 0 && btn.Top >= 0, $"Botón fuera de área visible: {id} ({btn.Bounds})");
         }
     }
 
     [Fact]
-    public void AllFormsDialogsAndTabs_HaveValidButtonsIconsTextAndWiredHandlers()
+    public void EmbeddedCambiasoAssets_LoadWithZeroExternalDependencies()
+    {
+        using Image logo = AppTheme.LoadAppLogo();
+        using Image emblem = AppTheme.LoadCambiasoEmblem();
+        using Image wordmark = AppTheme.LoadCambiasoWordmark();
+        using Icon? icon = AppTheme.LoadAppIcon();
+
+        Assert.True(logo.Width >= 48);
+        Assert.True(emblem.Width >= 48);
+        Assert.True(wordmark.Width >= 100);
+        Assert.NotNull(icon);
+    }
+
+    [Fact]
+    public void AllFormsTabsAndDialogs_HaveValidButtonsIconsAndClickHandlers()
     {
         RunInSta(() =>
         {
-            string tempDir = Path.Combine(Path.GetTempPath(), "GestionScrap_UITests_" + Guid.NewGuid().ToString("N"));
+            string tempDir = Path.Combine(Path.GetTempPath(), "GestionScrap_UI_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(tempDir);
-            string dbPath = Path.Combine(tempDir, "ui_audit.db");
+            string dbPath = Path.Combine(tempDir, "ui.db");
             string settingsPath = Path.Combine(tempDir, "settings.json");
 
             try
@@ -117,7 +146,7 @@ public sealed class WinFormsAuditTests
                 using SqliteScrapRepository repo = new(dbPath);
                 repo.InitializeAsync().GetAwaiter().GetResult();
                 SecuritySessionService auth = new(repo);
-                auth.LoginAsync("admin", "Admin@2026").GetAwaiter().GetResult();
+                auth.LoginAsync("barriagada", "Cambias0").GetAwaiter().GetResult();
 
                 AppSettingsStore store = new(settingsPath);
                 AppSettings settings = store.Load();
@@ -130,6 +159,12 @@ public sealed class WinFormsAuditTests
                     new ClosedXmlExcelExportService(),
                     new MdbMigrationService(repo));
 
+                using (SplashForm splash = new())
+                {
+                    splash.CreateControl();
+                    splash.UpdateProgress(80, "Verificando UI...");
+                }
+
                 using (LoginForm login = new(auth))
                 {
                     AssertAllButtonsValid(login, nameof(LoginForm));
@@ -138,22 +173,17 @@ public sealed class WinFormsAuditTests
                 using (MainForm main = new(app, auth, store, settings))
                 {
                     AssertAllButtonsValid(main, nameof(MainForm));
-                    Assert.Equal(10, main.NavigationButtons.Count);
+                    Assert.Equal(5, main.NavigationButtons.Count);
                     Assert.All(main.NavigationButtons, b => Assert.True(b.Enabled));
                 }
 
                 UserControl[] tabs =
                 [
-                    new DashboardControl(app, auth, _ => { }),
+                    new InformeResumenControl(app, auth, _ => { }),
                     new GrupoMaterialControl(app, auth),
-                    new ComprasTrasladosControl(app, auth),
-                    new InformeClienteControl(app, auth),
-                    new GruposEspecialesControl(app, auth),
-                    new InformeJcrammControl(app, auth),
-                    new InformePreciosControl(app, auth),
-                    new MantenedorPreciosControl(app, auth),
-                    new ImportacionFirebirdControl(app, auth, store, settings),
-                    new AdministracionSeguridadControl(app, auth, settings)
+                    new AnalisisProveedoresControl(app, auth),
+                    new ImportadorControl(app, auth, store, settings),
+                    new SeguridadPerfilesControl(app, auth, settings)
                 ];
 
                 foreach (UserControl tab in tabs)
@@ -165,16 +195,16 @@ public sealed class WinFormsAuditTests
                     }
                 }
 
-                FirebirdPlantaEndpoint ep = settings.FirebirdEndpoints[0];
+                MaterialGroupNode[] nodes = [.. repo.GetMaterialNodesAsync().GetAwaiter().GetResult()];
+                Producto[] prods = [.. repo.GetProductosAsync().GetAwaiter().GetResult()];
+
                 Form[] dialogs =
                 [
-                    new ActualizarPrecioDialog(app, Planta.Placilla, ModoPrecio.Reales, 1001, "S0400", "SCRAP", "PROV", "RECAM", 150m),
                     new CambiarPasswordDialog(auth),
-                    new ClienteSelectorDialog(app, Planta.Placilla),
                     new ConfiguracionDbDialog(store, settings, app),
-                    new EjecutarPaFirebirdDialog(app, ep),
                     new LimpiarTablasDialog(app),
-                    new ProductoSelectorDialog(app)
+                    new MaterialNodeEditorDialog(NodoGrupoTipo.ProductoAsignado, nodes[0].Id, nodes[0].Nombre, prods),
+                    new MoverNodoDialog(nodes[^1], nodes)
                 ];
 
                 foreach (Form dlg in dialogs)
@@ -195,7 +225,7 @@ public sealed class WinFormsAuditTests
                     }
                     catch
                     {
-                        // Limpieza best-effort de carpeta temporal
+                        // Limpieza temporal best-effort
                     }
                 }
             }
@@ -203,7 +233,7 @@ public sealed class WinFormsAuditTests
     }
 
     [Fact]
-    public void MainForm_DisablesRestrictedNavigationModulesByUserRole()
+    public void MainForm_EnforcesDynamicProfileRestrictions()
     {
         RunInSta(() =>
         {
@@ -226,24 +256,25 @@ public sealed class WinFormsAuditTests
                     new ClosedXmlExcelExportService(),
                     new MdbMigrationService(repo));
 
-                // Rol Operador: no puede entrar a Seguridad y MDB (índice 9)
-                auth.LoginAsync("operador", "Oper@2026").GetAwaiter().GetResult();
-                using (MainForm mainOp = new(app, auth, store, settings))
+                // Crear usuario con perfil Analista (ID 3: sin ImportarDatos ni AdministrarSeguridadPerfiles)
+                auth.LoginAsync("barriagada", "Cambias0").GetAwaiter().GetResult();
+                app.SaveUsuarioAsync(new Usuario
                 {
-                    Assert.True(mainOp.NavigationButtons[0].Enabled);
-                    Assert.True(mainOp.NavigationButtons[8].Enabled);
-                    Assert.False(mainOp.NavigationButtons[9].Enabled);
-                }
-
+                    NombreUsuario = "analista1",
+                    NombreCompleto = "Analista Pruebas",
+                    PerfilId = 3,
+                    NombrePerfil = "Analista",
+                    Activo = true
+                }, "Analista2026").GetAwaiter().GetResult();
                 auth.Logout();
 
-                // Rol Auditor: sin Importar Firebird (índice 8), con Seguridad/Auditoría (índice 9)
-                auth.LoginAsync("auditor", "Audit@2026").GetAwaiter().GetResult();
-                using (MainForm mainAud = new(app, auth, store, settings))
-                {
-                    Assert.False(mainAud.NavigationButtons[8].Enabled);
-                    Assert.True(mainAud.NavigationButtons[9].Enabled);
-                }
+                auth.LoginAsync("analista1", "Analista2026").GetAwaiter().GetResult();
+                using MainForm mainAnalista = new(app, auth, store, settings);
+                Assert.True(mainAnalista.NavigationButtons[0].Enabled);  // Informe Resumen
+                Assert.True(mainAnalista.NavigationButtons[1].Enabled);  // Grupos de Material
+                Assert.True(mainAnalista.NavigationButtons[2].Enabled);  // Análisis Proveedores
+                Assert.False(mainAnalista.NavigationButtons[3].Enabled); // Importador BD
+                Assert.False(mainAnalista.NavigationButtons[4].Enabled); // Seguridad y Perfiles
             }
             finally
             {
@@ -255,7 +286,7 @@ public sealed class WinFormsAuditTests
                     }
                     catch
                     {
-                        // Ignorar en limpieza temporal
+                        // Ignorar limpieza temporal
                     }
                 }
             }

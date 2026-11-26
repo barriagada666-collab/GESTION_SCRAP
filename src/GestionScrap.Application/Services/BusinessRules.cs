@@ -1,3 +1,5 @@
+using System.Globalization;
+using GestionScrap.Application.DTOs;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Enums;
 using GestionScrap.Domain.ValueObjects;
@@ -5,90 +7,22 @@ using GestionScrap.Domain.ValueObjects;
 namespace GestionScrap.Application.Services;
 
 /// <summary>
-/// Reglas de negocio puras del dominio de pesajes, tarifas, agrupaciones y prevención de duplicados.
-/// Consolida y corrige la lógica migrada de los módulos legacy VBA y vistas Access.
+/// Motor de reglas de negocio puras: clasificación jerárquica de materiales, mapeo Firebird WMDBSPC,
+/// detección de duplicados y analítica Pareto ABC de proveedores.
 /// </summary>
 public static class BusinessRules
 {
-    private static readonly string[] RetailStgoRuts =
-        ["07629801", "76579070", "03649695", "13699851", "13681758", "77934420", "07955483", "76005403", "76032472", "05801156", "10894204", "09536956"];
-
-    private static readonly string[] RetailEmpresasRuts =
-        ["95293000", "84898000", "91362000", "96529310", "81201000", "89996200"];
-
-    private static readonly string[] RetailRegionesStgoRuts =
-        ["76047074", "06959040", "12245169", "09444237", "65313500", "11084756", "76064906", "02925626", "10015029", "12599861", "10038755", "77358680", "10913603", "10803189", "16986312", "15864708"];
-
-    private static readonly string[] MartinoSosRuts = ["12749419", "76029117"];
-    private static readonly string[] MartinoSosProds = ["5301003001", "5301003000", "5301002003", "5301002001"];
-
-    private static readonly string[] AgricolaRuts = ["09165318", "07377653", "10286881", "12821515", "76218764"];
-    private static readonly string[] AgricolaProds = ["5301001002", "5301002000", "5301002001", "5301002003", "5301003001"];
-
-    private static readonly string[] PesqueraRuts = ["76658930", "11919881", "76029117", "52003786", "12749419", "76064160"];
-    private static readonly string[] PesqueraProds = ["5301002000", "5301001000", "5301002002", "5300000006"];
-
-    private static readonly string[] AgrosuperRuts = ["78483600", "77476390"];
-
-    private static readonly string[] JcrammExcludedCodes =
-        ["CARTON", "5301001003", "0000000005", "XXXXXX", "5302000002", "PLASTICOS", "TIX-14", "CONO"];
-
-    public static (bool Allowed, string Message) ValidateCanUpdatePrice(ModoPrecio modo)
-    {
-        if (modo != ModoPrecio.Reales)
-        {
-            return (false, "Para actualizar el precio individual debe seleccionar la opción 'Precios Reales (Indexados)'.");
-        }
-
-        return (true, "Validación exitosa.");
-    }
-
-    public static decimal CalculateWeightedAverage(decimal totalPesos, long totalKilos)
-    {
-        if (totalKilos <= 0 || totalPesos <= 0)
-        {
-            return 0m;
-        }
-
-        return Math.Round(totalPesos / totalKilos, 2, MidpointRounding.AwayFromZero);
-    }
-
-    public static decimal FindTheoreticalPrice(
-        IEnumerable<PrecioProveedor> precios,
-        Planta planta,
-        string rut,
-        string codProducto)
-    {
-        string cleanCod = codProducto.Trim().ToUpperInvariant();
-        PrecioProveedor? found = precios.FirstOrDefault(p =>
-            p.Planta == planta &&
-            RutChileno.Matches(p.Rut, rut) &&
-            string.Equals(p.CodigoProducto.Trim(), cleanCod, StringComparison.OrdinalIgnoreCase));
-
-        return found?.Precio ?? 0m;
-    }
-
-    public static decimal FindRealPrice(
-        IEnumerable<IndexPrecioPesaje> indexPrecios,
-        Planta planta,
-        long folio)
-    {
-        IndexPrecioPesaje? found = indexPrecios.FirstOrDefault(ip => ip.Planta == planta && ip.Folio == folio);
-        return found?.Precio ?? 0m;
-    }
-
-    public static bool CheckProviderPriceExists(
-        IEnumerable<PrecioProveedor> precios,
-        Planta planta,
-        string rut,
-        string codProducto)
-    {
-        string cleanCod = codProducto.Trim().ToUpperInvariant();
-        return precios.Any(p =>
-            p.Planta == planta &&
-            RutChileno.Matches(p.Rut, rut) &&
-            string.Equals(p.CodigoProducto.Trim(), cleanCod, StringComparison.OrdinalIgnoreCase));
-    }
+    public static readonly (string Nombre, string ColorHex)[] DefaultParentGroups =
+    [
+        ("SCRAP SUPERMERCADO & MIX", "#0891B2"),
+        ("SCRAP PESQUERA", "#0B3C5D"),
+        ("SCRAP AGRÍCOLA", "#059669"),
+        ("SCRAP COLOR Y TRANSPARENTE", "#2563EB"),
+        ("SCRAP HDPE / ALTA", "#C9A46E"),
+        ("SCRAP STRETCH FILM", "#7C3AED"),
+        ("MAQUILADOS Y DESECHOS", "#D97706"),
+        ("PELLETS Y OTROS", "#475569")
+    ];
 
     public static bool IsDuplicatePesaje(
         IEnumerable<Pesaje> existingPesajes,
@@ -107,99 +41,76 @@ public static class BusinessRules
         return existingPesajes.Any(p => p.Planta == planta && p.Folio == folio);
     }
 
-    public static bool IsDateInRange(DateOnly fecha, DateOnly desde, DateOnly hasta) =>
-        fecha >= desde && fecha <= hasta;
-
-    public static bool IsExcludedInternalTransferClient(Pesaje p)
-    {
-        if (p.Planta == Planta.Placilla)
-        {
-            return RutChileno.Matches(p.RutCliente, "15071375") ||
-                   p.NomCliente.Contains("BODEGA SAN BERNARDO", StringComparison.OrdinalIgnoreCase) ||
-                   p.NomCliente.Contains("BODEGA CENTRAL SCRAP CAMBIASO", StringComparison.OrdinalIgnoreCase);
-        }
-
-        if (p.Planta == Planta.Santiago)
-        {
-            return RutChileno.Matches(p.RutCliente, "13856570") ||
-                   p.NomCliente.Equals("SCRAP SANTIAGO", StringComparison.OrdinalIgnoreCase) ||
-                   p.NomCliente.Contains("BODEGA CENTRAL SCRAP CAMBIASO", StringComparison.OrdinalIgnoreCase);
-        }
-
-        return RutChileno.Matches(p.RutCliente, "96781200");
-    }
-
-    public static bool IsCompra(Pesaje p) =>
-        !p.EsTraslado &&
-        p.TipoPesaje == TipoPesaje.RecepcionCarga &&
-        !IsExcludedInternalTransferClient(p);
-
-    public static bool IsTraslado(Pesaje p)
-    {
-        if (p.EsTraslado || p.TipoPesaje == TipoPesaje.MovimientoInterno || p.TipoPesaje == TipoPesaje.DespachoCarga)
-        {
-            return true;
-        }
-
-        return IsExcludedInternalTransferClient(p);
-    }
-
-    public static bool IsJcrammEligible(Pesaje p)
-    {
-        string code = p.CodProducto.Trim().ToUpperInvariant();
-        if (JcrammExcludedCodes.Contains(code, StringComparer.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        return p.TipoPesaje == TipoPesaje.RecepcionCarga;
-    }
-
-    public static string ClassifyGrupoMaterial(
-        string codProducto,
-        string nomProducto,
-        IReadOnlyDictionary<string, string>? catalogGroups = null)
+    public static string ClassifyProductoDefaultGroup(string codProducto, string nomProducto)
     {
         string code = codProducto.Trim().ToUpperInvariant();
-        if (catalogGroups is not null && catalogGroups.TryGetValue(code, out string? catGroup) && !string.IsNullOrWhiteSpace(catGroup))
+        string desc = nomProducto.Trim().ToUpperInvariant();
+
+        if (code == "5300000009" || code == "5300000010" || desc.Contains("SUPERMERCADO", StringComparison.Ordinal) || desc.Contains("MIX POST", StringComparison.Ordinal))
         {
-            return catGroup.Trim().ToUpperInvariant();
+            return "SCRAP SUPERMERCADO & MIX";
         }
 
-        string desc = nomProducto.Trim().ToUpperInvariant();
-        if (desc.Contains("SUPER-BASULIP", StringComparison.Ordinal) || desc.Contains("(SUP)", StringComparison.Ordinal))
+        if (desc.Contains("PESQUERA", StringComparison.Ordinal))
         {
-            return "SUPER-BASULIP";
+            return "SCRAP PESQUERA";
         }
-        if (desc.Contains("RECAM", StringComparison.Ordinal) || desc.Contains("TRANSPARENTE", StringComparison.Ordinal))
+
+        if (desc.Contains("AGRICOLA", StringComparison.Ordinal) || desc.Contains("AGRÍCOLA", StringComparison.Ordinal) || desc.Contains("MANGA DE RIEGO", StringComparison.Ordinal))
         {
-            return "RECAM";
+            return "SCRAP AGRÍCOLA";
         }
-        if (desc.Contains("HDPE", StringComparison.Ordinal) || desc.Contains("ALTA", StringComparison.Ordinal))
+
+        if (desc.Contains("HDPE", StringComparison.Ordinal) || desc.Contains("ALTA", StringComparison.Ordinal) || desc.Contains("PLUMILLA", StringComparison.Ordinal))
         {
-            return "ALTA";
+            return "SCRAP HDPE / ALTA";
         }
-        if (desc.Contains("MIX", StringComparison.Ordinal))
-        {
-            return "MIX SUPERMERCADO";
-        }
+
         if (desc.Contains("STRETCH", StringComparison.Ordinal))
         {
-            return "STRETCH";
+            return "SCRAP STRETCH FILM";
         }
-        if (desc.Contains("MAQUIL", StringComparison.Ordinal) || desc.Contains("MERMA", StringComparison.Ordinal) || desc.Contains("CARTON", StringComparison.Ordinal))
+
+        if (desc.Contains("MAQUIL", StringComparison.Ordinal) || desc.Contains("DESECHO", StringComparison.Ordinal) ||
+            desc.Contains("BASURA", StringComparison.Ordinal) || desc.Contains("MERMA", StringComparison.Ordinal) ||
+            desc.Contains("CARTON", StringComparison.Ordinal) || desc.Contains("FIERRO", StringComparison.Ordinal))
         {
-            return "MAQUILADO";
+            return "MAQUILADOS Y DESECHOS";
         }
-        if (desc.Contains("BASURA", StringComparison.Ordinal))
+
+        if (desc.Contains("COLOR", StringComparison.Ordinal) || desc.Contains("TRANSP", StringComparison.Ordinal) ||
+            desc.Contains("BOBINA", StringComparison.Ordinal) || desc.Contains("PICADO", StringComparison.Ordinal))
         {
-            return "BASURA";
+            return "SCRAP COLOR Y TRANSPARENTE";
         }
-        if (desc.Contains("SCRAP", StringComparison.Ordinal))
+
+        if (desc.Contains("PELLET", StringComparison.Ordinal) || desc.Contains("INTERNO", StringComparison.Ordinal) ||
+            desc.Contains("COAGULANTE", StringComparison.Ordinal) || desc.Contains("IMPORTADO", StringComparison.Ordinal))
         {
-            return "SUPER-BASULIP";
+            return "PELLETS Y OTROS";
         }
-        return "GENERAL";
+
+        return "PELLETS Y OTROS";
+    }
+
+    public static Dictionary<string, string> BuildProductToRootGroupMap(IReadOnlyList<MaterialGroupNode> nodes)
+    {
+        Dictionary<long, MaterialGroupNode> byId = nodes.ToDictionary(n => n.Id);
+        Dictionary<string, string> map = new(StringComparer.OrdinalIgnoreCase);
+
+        foreach (MaterialGroupNode node in nodes.Where(n => n.TipoNodo == NodoGrupoTipo.ProductoAsignado && !string.IsNullOrWhiteSpace(n.CodigoProducto)))
+        {
+            MaterialGroupNode root = node;
+            HashSet<long> visited = [root.Id];
+            while (root.ParentId.HasValue && byId.TryGetValue(root.ParentId.Value, out MaterialGroupNode? parent) && visited.Add(parent.Id))
+            {
+                root = parent;
+            }
+
+            map[node.CodigoProducto.Trim().ToUpperInvariant()] = root.Nombre;
+        }
+
+        return map;
     }
 
     public static Pesaje MapRemoteToPesaje(
@@ -209,7 +120,11 @@ public static class BusinessRules
     {
         TipoPesaje tipo = TipoPesajeExtensions.FromLegacyValue(raw.TipoPesajeRaw);
         int neto = raw.PesoNeto > 0 ? raw.PesoNeto : Math.Max(0, raw.PesoBruto - raw.PesoTara);
-        string grupo = ClassifyGrupoMaterial(raw.CodProducto, raw.NomProducto, catalogGroups);
+        string codeKey = raw.CodProducto.Trim().ToUpperInvariant();
+        string grupo = catalogGroups is not null && catalogGroups.TryGetValue(codeKey, out string? mapped) && !string.IsNullOrWhiteSpace(mapped)
+            ? mapped
+            : ClassifyProductoDefaultGroup(raw.CodProducto, raw.NomProducto);
+
         bool esTraslado = tipo != TipoPesaje.RecepcionCarga ||
                           RutChileno.Matches(raw.RutCliente, "15071375") ||
                           RutChileno.Matches(raw.RutCliente, "13856570") ||
@@ -221,16 +136,19 @@ public static class BusinessRules
             Planta = planta,
             TipoPesaje = tipo,
             Patente = string.IsNullOrWhiteSpace(raw.Patente) ? "S/P" : raw.Patente.Trim().ToUpperInvariant(),
+            Acoplado = raw.Acoplado.Trim().ToUpperInvariant(),
             PesoBruto = raw.PesoBruto,
             PesoTara = raw.PesoTara,
             PesoNeto = neto,
-            CodProducto = raw.CodProducto.Trim().ToUpperInvariant(),
-            NomProducto = string.IsNullOrWhiteSpace(raw.NomProducto) ? raw.CodProducto : raw.NomProducto.Trim().ToUpperInvariant(),
+            CodProducto = codeKey,
+            NomProducto = string.IsNullOrWhiteSpace(raw.NomProducto) ? codeKey : raw.NomProducto.Trim().ToUpperInvariant(),
             RutCliente = raw.RutCliente.Trim().ToUpperInvariant(),
-            NomCliente = string.IsNullOrWhiteSpace(raw.NomCliente) ? raw.RutCliente : raw.NomCliente.Trim(),
+            NomCliente = string.IsNullOrWhiteSpace(raw.NomCliente) ? raw.RutCliente.Trim() : raw.NomCliente.Trim(),
             Origen = raw.Origen.Trim(),
             Destino = raw.Destino.Trim(),
             GuiaDespacho = raw.GuiaDespacho.Trim(),
+            Chofer = raw.Chofer.Trim(),
+            Transportista = raw.Transportista.Trim(),
             FechaIngreso = raw.FechaIngreso,
             HoraIngreso = raw.HoraIngreso,
             FechaSalida = raw.FechaSalida,
@@ -241,81 +159,427 @@ public static class BusinessRules
         };
     }
 
-    public static bool MatchesRetailStgo(Pesaje p) =>
-        p.Planta == Planta.Santiago &&
-        p.TipoPesaje == TipoPesaje.RecepcionCarga &&
-        (RetailStgoRuts.Any(r => RutChileno.Matches(p.RutCliente, r)) ||
-         p.NomCliente.Contains("Retail", StringComparison.OrdinalIgnoreCase) ||
-         p.NomCliente.Contains("Cencosud", StringComparison.OrdinalIgnoreCase) ||
-         p.NomCliente.Contains("Walmart", StringComparison.OrdinalIgnoreCase) ||
-         p.NomCliente.Contains("SMU", StringComparison.OrdinalIgnoreCase));
-
-    public static bool MatchesRetailEmpresas(Pesaje p) =>
-        p.Planta == Planta.Santiago &&
-        (RetailEmpresasRuts.Any(r => RutChileno.Matches(p.RutCliente, r)) ||
-         p.NomCliente.Contains("Carozzi", StringComparison.OrdinalIgnoreCase) ||
-         p.NomCliente.Contains("Empresas", StringComparison.OrdinalIgnoreCase));
-
-    public static bool MatchesMixStgo(Pesaje p) =>
-        p.Planta == Planta.Santiago &&
-        p.TipoPesaje == TipoPesaje.RecepcionCarga &&
-        (string.Equals(p.CodProducto.Trim(), "5300000009", StringComparison.OrdinalIgnoreCase) ||
-         p.GrupoMaterial.Contains("MIX", StringComparison.OrdinalIgnoreCase) ||
-         p.NomProducto.Contains("MIX", StringComparison.OrdinalIgnoreCase));
-
-    public static bool MatchesMixPlacilla(Pesaje p) =>
-        p.Planta == Planta.Placilla &&
-        p.TipoPesaje == TipoPesaje.RecepcionCarga &&
-        (string.Equals(p.CodProducto.Trim(), "5300000009", StringComparison.OrdinalIgnoreCase) ||
-         p.GrupoMaterial.Contains("MIX", StringComparison.OrdinalIgnoreCase) ||
-         p.NomProducto.Contains("MIX", StringComparison.OrdinalIgnoreCase));
-
-    public static bool MatchesRetailRegiones(Pesaje p)
+    public static GrupoMaterialReportResultDto BuildMaterialTreeReport(
+        string periodoLabel,
+        IReadOnlyList<MaterialGroupNode> nodes,
+        IReadOnlyList<Pesaje> pesajes,
+        IReadOnlyList<Producto> catalogProductos,
+        long? filterSelectedNodeId = null)
     {
-        if (p.TipoPesaje != TipoPesaje.RecepcionCarga)
+        Dictionary<string, (int Viajes, long Kilos)> statsByCode = pesajes
+            .GroupBy(p => p.CodProducto.Trim().ToUpperInvariant())
+            .ToDictionary(
+                g => g.Key,
+                g => (g.Count(), g.Sum(x => (long)x.PesoNeto)),
+                StringComparer.OrdinalIgnoreCase);
+
+        long totalPeriodKilos = pesajes.Sum(p => (long)p.PesoNeto);
+        int totalPeriodViajes = pesajes.Count;
+
+        Dictionary<long, List<MaterialGroupNode>> childrenByParent = nodes
+            .GroupBy(n => n.ParentId ?? 0L)
+            .ToDictionary(
+                g => g.Key,
+                g => g.OrderBy(n => n.Orden).ThenBy(n => n.Nombre, StringComparer.OrdinalIgnoreCase).ToList());
+
+        (int Viajes, long Kilos) ComputeSubtreeStats(long nodeId, HashSet<long> guard)
         {
-            return false;
+            if (!guard.Add(nodeId))
+            {
+                return (0, 0);
+            }
+
+            MaterialGroupNode? current = nodes.FirstOrDefault(n => n.Id == nodeId);
+            if (current is null)
+            {
+                return (0, 0);
+            }
+
+            int v = 0;
+            long k = 0;
+
+            if (current.TipoNodo == NodoGrupoTipo.ProductoAsignado && !string.IsNullOrWhiteSpace(current.CodigoProducto))
+            {
+                if (statsByCode.TryGetValue(current.CodigoProducto.Trim().ToUpperInvariant(), out (int Viajes, long Kilos) s))
+                {
+                    v += s.Viajes;
+                    k += s.Kilos;
+                }
+            }
+
+            if (childrenByParent.TryGetValue(nodeId, out List<MaterialGroupNode>? kids))
+            {
+                foreach (MaterialGroupNode child in kids)
+                {
+                    (int cv, long ck) = ComputeSubtreeStats(child.Id, guard);
+                    v += cv;
+                    k += ck;
+                }
+            }
+
+            return (v, k);
         }
 
-        if (p.Planta == Planta.Santiago && RetailRegionesStgoRuts.Any(r => RutChileno.Matches(p.RutCliente, r)))
+        List<MaterialTreeFlatRowDto> flatRows = [];
+        void Traverse(long parentKey, int level)
         {
-            return true;
+            if (!childrenByParent.TryGetValue(parentKey, out List<MaterialGroupNode>? list))
+            {
+                return;
+            }
+
+            foreach (MaterialGroupNode node in list)
+            {
+                (int viajes, long kilos) = ComputeSubtreeStats(node.Id, []);
+                double pct = totalPeriodKilos > 0 ? Math.Round(kilos * 100.0 / totalPeriodKilos, 2) : 0.0;
+                double prom = viajes > 0 ? Math.Round((double)kilos / viajes, 1) : 0.0;
+                string prefix = level == 0 ? string.Empty : new string(' ', level * 4) + "└─ ";
+
+                flatRows.Add(new MaterialTreeFlatRowDto(
+                    node.Id,
+                    node.ParentId,
+                    level,
+                    prefix + node.Nombre,
+                    node.Nombre,
+                    node.TipoNodo,
+                    node.CodigoProducto,
+                    node.ColorHex,
+                    viajes,
+                    kilos,
+                    pct,
+                    prom));
+
+                Traverse(node.Id, level + 1);
+            }
         }
 
-        if (p.Planta == Planta.Placilla &&
-            MartinoSosRuts.Any(r => RutChileno.Matches(p.RutCliente, r)) &&
-            MartinoSosProds.Contains(p.CodProducto.Trim(), StringComparer.OrdinalIgnoreCase))
+        Traverse(0L, 0);
+
+        HashSet<string> assignedCodes = [.. nodes
+            .Where(n => n.TipoNodo == NodoGrupoTipo.ProductoAsignado && !string.IsNullOrWhiteSpace(n.CodigoProducto))
+            .Select(n => n.CodigoProducto.Trim().ToUpperInvariant())];
+
+        List<KeyValuePair<string, (int Viajes, long Kilos)>> unassignedWithActivity = [.. statsByCode
+            .Where(kv => !assignedCodes.Contains(kv.Key))
+            .OrderByDescending(kv => kv.Value.Kilos)];
+
+        int unassignedCatalogCount = catalogProductos.Count(p => !assignedCodes.Contains(p.Codigo.Trim().ToUpperInvariant()));
+
+        if (unassignedWithActivity.Count > 0)
         {
-            return true;
+            int unViajes = unassignedWithActivity.Sum(x => x.Value.Viajes);
+            long unKilos = unassignedWithActivity.Sum(x => x.Value.Kilos);
+            double unPct = totalPeriodKilos > 0 ? Math.Round(unKilos * 100.0 / totalPeriodKilos, 2) : 0.0;
+            double unProm = unViajes > 0 ? Math.Round((double)unKilos / unViajes, 1) : 0.0;
+
+            flatRows.Add(new MaterialTreeFlatRowDto(
+                -1,
+                null,
+                0,
+                "SIN ASIGNAR EN ÁRBOL",
+                "SIN ASIGNAR EN ÁRBOL",
+                NodoGrupoTipo.CarpetaGrupo,
+                string.Empty,
+                "#94A3B8",
+                unViajes,
+                unKilos,
+                unPct,
+                unProm));
+
+            foreach (KeyValuePair<string, (int Viajes, long Kilos)> u in unassignedWithActivity)
+            {
+                string prodName = catalogProductos.FirstOrDefault(p => string.Equals(p.Codigo, u.Key, StringComparison.OrdinalIgnoreCase))?.Descripcion ?? u.Key;
+                double pct = totalPeriodKilos > 0 ? Math.Round(u.Value.Kilos * 100.0 / totalPeriodKilos, 2) : 0.0;
+                double prom = u.Value.Viajes > 0 ? Math.Round((double)u.Value.Kilos / u.Value.Viajes, 1) : 0.0;
+                flatRows.Add(new MaterialTreeFlatRowDto(
+                    -1000,
+                    -1,
+                    1,
+                    $"    └─ {u.Key} · {prodName}",
+                    $"{u.Key} · {prodName}",
+                    NodoGrupoTipo.ProductoAsignado,
+                    u.Key,
+                    "#94A3B8",
+                    u.Value.Viajes,
+                    u.Value.Kilos,
+                    pct,
+                    prom));
+            }
         }
 
-        if (p.Planta == Planta.Placilla && RutChileno.Matches(p.RutCliente, "11548096"))
-        {
-            return true;
-        }
+        List<GrupoKilosItem> rootSummary = [.. flatRows
+            .Where(r => r.Nivel == 0 && r.TotalKilos > 0)
+            .OrderByDescending(r => r.TotalKilos)
+            .Select(r => new GrupoKilosItem(r.Nombre, r.TotalKilos, r.Viajes, r.Porcentaje))];
 
-        return p.NomCliente.Contains("Martino", StringComparison.OrdinalIgnoreCase) ||
-               p.NomCliente.Contains("Johnson", StringComparison.OrdinalIgnoreCase);
+        List<BarChartItemDto> selectedProducts = BuildSelectedNodeProductBreakdown(
+            filterSelectedNodeId, nodes, childrenByParent, statsByCode, catalogProductos);
+
+        int rootCount = nodes.Count(n => n.ParentId is null && n.TipoNodo == NodoGrupoTipo.CarpetaGrupo);
+
+        return new GrupoMaterialReportResultDto(
+            periodoLabel,
+            totalPeriodKilos,
+            totalPeriodViajes,
+            rootCount,
+            nodes.Count,
+            Math.Max(unassignedCatalogCount, unassignedWithActivity.Count),
+            flatRows,
+            rootSummary,
+            selectedProducts);
     }
 
-    public static bool MatchesAgricola(Pesaje p) =>
-        p.Planta == Planta.Placilla &&
-        ((AgricolaRuts.Any(r => RutChileno.Matches(p.RutCliente, r)) &&
-          AgricolaProds.Contains(p.CodProducto.Trim(), StringComparer.OrdinalIgnoreCase)) ||
-         p.NomCliente.Contains("Agricola", StringComparison.OrdinalIgnoreCase) ||
-         p.NomCliente.Contains("Agrícola", StringComparison.OrdinalIgnoreCase));
+    private static List<BarChartItemDto> BuildSelectedNodeProductBreakdown(
+        long? selectedNodeId,
+        IReadOnlyList<MaterialGroupNode> nodes,
+        Dictionary<long, List<MaterialGroupNode>> childrenByParent,
+        Dictionary<string, (int Viajes, long Kilos)> statsByCode,
+        IReadOnlyList<Producto> catalogProductos)
+    {
+        HashSet<string> targetCodes = new(StringComparer.OrdinalIgnoreCase);
 
-    public static bool MatchesPesquera(Pesaje p) =>
-        p.TipoPesaje == TipoPesaje.RecepcionCarga &&
-        ((p.Planta == Planta.Placilla &&
-          PesqueraRuts.Any(r => RutChileno.Matches(p.RutCliente, r)) &&
-          PesqueraProds.Contains(p.CodProducto.Trim(), StringComparer.OrdinalIgnoreCase)) ||
-         p.NomCliente.Contains("Pesquera", StringComparison.OrdinalIgnoreCase) ||
-         p.NomProducto.Contains("PESQUERA", StringComparison.OrdinalIgnoreCase));
+        if (selectedNodeId.HasValue && selectedNodeId.Value > 0)
+        {
+            void Collect(long id)
+            {
+                MaterialGroupNode? n = nodes.FirstOrDefault(x => x.Id == id);
+                if (n is null)
+                {
+                    return;
+                }
 
-    public static bool MatchesAgrosuper(Pesaje p) =>
-        p.Planta == Planta.Placilla &&
-        p.TipoPesaje == TipoPesaje.RecepcionCarga &&
-        (AgrosuperRuts.Any(r => RutChileno.Matches(p.RutCliente, r)) ||
-         p.NomCliente.Contains("Agrosuper", StringComparison.OrdinalIgnoreCase));
+                if (n.TipoNodo == NodoGrupoTipo.ProductoAsignado && !string.IsNullOrWhiteSpace(n.CodigoProducto))
+                {
+                    targetCodes.Add(n.CodigoProducto.Trim().ToUpperInvariant());
+                }
+
+                if (childrenByParent.TryGetValue(id, out List<MaterialGroupNode>? kids))
+                {
+                    foreach (MaterialGroupNode k in kids)
+                    {
+                        Collect(k.Id);
+                    }
+                }
+            }
+
+            Collect(selectedNodeId.Value);
+        }
+        else
+        {
+            foreach (string key in statsByCode.Keys)
+            {
+                targetCodes.Add(key);
+            }
+        }
+
+        return [.. targetCodes
+            .Select(code =>
+            {
+                long k = statsByCode.TryGetValue(code, out (int Viajes, long Kilos) st) ? st.Kilos : 0L;
+                string desc = catalogProductos.FirstOrDefault(p => string.Equals(p.Codigo, code, StringComparison.OrdinalIgnoreCase))?.Descripcion ?? code;
+                return new BarChartItemDto($"{code} · {desc}", k);
+            })
+            .Where(b => b.Value > 0)
+            .OrderByDescending(b => b.Value)
+            .Take(10)];
+    }
+
+    public static AnalisisProveedoresResultDto BuildAnalisisProveedores(
+        string periodoLabel,
+        DateOnly referenceDate,
+        IReadOnlyList<Pesaje> actuales,
+        IReadOnlyList<Pesaje> anteriores,
+        IReadOnlyList<Cliente> clientes,
+        IReadOnlyDictionary<string, string>? productToRootGroup = null)
+    {
+        Dictionary<string, Cliente> clientLookup = [];
+        foreach (Cliente c in clientes)
+        {
+            string body = RutChileno.NormalizeBody(c.Rut);
+            if (!string.IsNullOrEmpty(body) && !clientLookup.ContainsKey(body))
+            {
+                clientLookup[body] = c;
+            }
+        }
+
+        Dictionary<string, long> prevKilosByRut = anteriores
+            .GroupBy(p => RutChileno.NormalizeBody(p.RutCliente))
+            .Where(g => !string.IsNullOrEmpty(g.Key))
+            .ToDictionary(g => g.Key, g => g.Sum(x => (long)x.PesoNeto), StringComparer.OrdinalIgnoreCase);
+
+        var grouped = actuales
+            .GroupBy(p =>
+            {
+                string body = RutChileno.NormalizeBody(p.RutCliente);
+                return string.IsNullOrEmpty(body) ? p.NomCliente.Trim().ToUpperInvariant() : body;
+            })
+            .Select(g =>
+            {
+                Pesaje first = g.First();
+                string rutRaw = string.IsNullOrWhiteSpace(first.RutCliente) ? g.Key : first.RutCliente.Trim();
+                clientLookup.TryGetValue(g.Key, out Cliente? cli);
+                string nombre = cli is not null && !string.IsNullOrWhiteSpace(cli.RazonSocial)
+                    ? cli.RazonSocial
+                    : first.NomCliente;
+
+                long kilos = g.Sum(x => (long)x.PesoNeto);
+                int viajes = g.Count();
+                DateOnly primer = g.Min(x => x.FechaIngreso);
+                DateOnly ultimo = g.Max(x => x.FechaIngreso);
+
+                string prodTop = g
+                    .GroupBy(x =>
+                    {
+                        string code = x.CodProducto.Trim().ToUpperInvariant();
+                        return productToRootGroup is not null && productToRootGroup.TryGetValue(code, out string? grp)
+                            ? grp
+                            : x.NomProducto;
+                    })
+                    .OrderByDescending(pg => pg.Sum(x => (long)x.PesoNeto))
+                    .First().Key;
+
+                prevKilosByRut.TryGetValue(g.Key, out long prevKilos);
+                double varPct = prevKilos == 0
+                    ? (kilos > 0 ? 100.0 : 0.0)
+                    : Math.Round((kilos - prevKilos) * 100.0 / prevKilos, 1);
+
+                return new
+                {
+                    Key = g.Key,
+                    Rut = cli?.RutFormateado ?? rutRaw,
+                    Nombre = string.IsNullOrWhiteSpace(nombre) ? rutRaw : nombre,
+                    Ciudad = cli?.Ciudad ?? first.CiudadCliente ?? first.Origen,
+                    Giro = cli?.Giro ?? string.Empty,
+                    Telefono = cli?.Telefono ?? string.Empty,
+                    Viajes = viajes,
+                    Kilos = kilos,
+                    PromKg = viajes > 0 ? Math.Round((double)kilos / viajes, 1) : 0.0,
+                    Primer = primer,
+                    Ultimo = ultimo,
+                    DiasInactivo = Math.Max(0, referenceDate.DayNumber - ultimo.DayNumber),
+                    PrevKilos = prevKilos,
+                    VarPct = varPct,
+                    ProdTop = prodTop
+                };
+            })
+            .OrderByDescending(x => x.Kilos)
+            .ToList();
+
+        long totalKilos = grouped.Sum(x => x.Kilos);
+        int totalViajes = grouped.Sum(x => x.Viajes);
+        double runningPct = 0.0;
+
+        List<ProveedorRankingRowDto> ranking = new(grouped.Count);
+        foreach (var item in grouped)
+        {
+            double share = totalKilos > 0 ? Math.Round(item.Kilos * 100.0 / totalKilos, 2) : 0.0;
+            runningPct = Math.Min(100.0, Math.Round(runningPct + share, 2));
+            string abc = runningPct <= 80.0 || ranking.Count == 0
+                ? "A"
+                : runningPct <= 95.0 ? "B" : "C";
+
+            ranking.Add(new ProveedorRankingRowDto(
+                item.Rut,
+                item.Nombre,
+                item.Ciudad,
+                item.Giro,
+                item.Telefono,
+                item.Viajes,
+                item.Kilos,
+                share,
+                runningPct,
+                abc,
+                item.PromKg,
+                item.Primer,
+                item.Ultimo,
+                item.DiasInactivo,
+                item.PrevKilos,
+                item.VarPct,
+                item.ProdTop));
+        }
+
+        List<BarChartItemDto> paretoTop = [.. ranking.Take(10).Select(r => new BarChartItemDto(r.Nombre, r.TotalKilos))];
+
+        List<GrupoKilosItem> porClase = [.. ranking
+            .GroupBy(r => $"Clase {r.ClaseAbc}")
+            .OrderBy(g => g.Key)
+            .Select(g =>
+            {
+                long k = g.Sum(x => x.TotalKilos);
+                double p = totalKilos > 0 ? Math.Round(k * 100.0 / totalKilos, 1) : 0.0;
+                return new GrupoKilosItem($"{g.Key} ({g.Count()} prov.)", k, g.Sum(x => x.Viajes), p);
+            })];
+
+        List<ProveedorRankingRowDto> claseA = [.. ranking.Where(r => r.ClaseAbc == "A")];
+        double claseAPct = totalKilos > 0 ? Math.Round(claseA.Sum(x => x.TotalKilos) * 100.0 / totalKilos, 1) : 0.0;
+
+        return new AnalisisProveedoresResultDto(
+            periodoLabel,
+            ranking.Count,
+            totalKilos,
+            totalViajes,
+            totalViajes > 0 ? Math.Round((double)totalKilos / totalViajes, 1) : 0.0,
+            ranking.Count > 0 ? ranking[0].Nombre : "Sin datos",
+            ranking.Count > 0 ? ranking[0].PorcentajeParticipacion : 0.0,
+            claseA.Count,
+            claseAPct,
+            ranking,
+            paretoTop,
+            porClase);
+    }
+
+    public static ProveedorDetalleResultDto BuildProveedorDetalle(
+        ProveedorRankingRowDto resumen,
+        IReadOnlyList<Pesaje> entregasProveedor,
+        IReadOnlyDictionary<string, string>? productToRootGroup = null)
+    {
+        long totalKilos = entregasProveedor.Sum(p => (long)p.PesoNeto);
+        CultureInfo esCl = CultureInfo.GetCultureInfo("es-CL");
+
+        List<GrupoKilosItem> mixMateriales = [.. entregasProveedor
+            .GroupBy(p =>
+            {
+                string code = p.CodProducto.Trim().ToUpperInvariant();
+                return productToRootGroup is not null && productToRootGroup.TryGetValue(code, out string? g) ? g : p.GrupoMaterial;
+            })
+            .Select(g =>
+            {
+                long k = g.Sum(x => (long)x.PesoNeto);
+                double pct = totalKilos > 0 ? Math.Round(k * 100.0 / totalKilos, 1) : 0.0;
+                return new GrupoKilosItem(g.Key, k, g.Count(), pct);
+            })
+            .OrderByDescending(x => x.Kilos)];
+
+        List<BarChartItemDto> productos = [.. entregasProveedor
+            .GroupBy(p => $"{p.CodProducto} · {p.NomProducto}")
+            .Select(g => new BarChartItemDto(g.Key, g.Sum(x => (long)x.PesoNeto)))
+            .OrderByDescending(x => x.Value)
+            .Take(8)];
+
+        List<BarChartItemDto> evolucion = [.. entregasProveedor
+            .GroupBy(p => new DateOnly(p.FechaIngreso.Year, p.FechaIngreso.Month, 1))
+            .OrderBy(g => g.Key)
+            .Select(g => new BarChartItemDto(g.Key.ToString("MMM yyyy", esCl), g.Sum(x => (long)x.PesoNeto)))];
+
+        List<BarChartItemDto> patentes = [.. entregasProveedor
+            .GroupBy(p => string.IsNullOrWhiteSpace(p.Patente) ? "S/P" : p.Patente)
+            .Select(g => new BarChartItemDto($"{g.Key} ({g.Count()} v.)", g.Sum(x => (long)x.PesoNeto)))
+            .OrderByDescending(x => x.Value)
+            .Take(8)];
+
+        List<BarChartItemDto> origenes = [.. entregasProveedor
+            .GroupBy(p => string.IsNullOrWhiteSpace(p.Origen) ? "NO ESPECIFICADO" : p.Origen)
+            .Select(g => new BarChartItemDto(g.Key, g.Sum(x => (long)x.PesoNeto)))
+            .OrderByDescending(x => x.Value)
+            .Take(6)];
+
+        return new ProveedorDetalleResultDto(
+            resumen,
+            mixMateriales,
+            productos,
+            evolucion,
+            patentes,
+            origenes,
+            [.. entregasProveedor.OrderByDescending(p => p.FechaIngreso).ThenByDescending(p => p.Folio)]);
+    }
 }

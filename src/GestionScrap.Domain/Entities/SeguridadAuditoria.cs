@@ -2,18 +2,31 @@ using GestionScrap.Domain.Enums;
 
 namespace GestionScrap.Domain.Entities;
 
+/// <summary>
+/// Perfil de acceso administrable dinámicamente desde la interfaz de Seguridad y Perfiles.
+/// </summary>
+public sealed class PerfilUsuario
+{
+    public long Id { get; init; }
+    public string Nombre { get; init; } = string.Empty;
+    public string Descripcion { get; init; } = string.Empty;
+    public bool EsSistema { get; init; }
+    public IReadOnlyCollection<PermisoSistema> Permisos { get; init; } = [];
+}
+
 public sealed class Usuario
 {
     public long Id { get; init; }
     public string NombreUsuario { get; init; } = string.Empty;
     public string NombreCompleto { get; init; } = string.Empty;
-    public RolUsuario Rol { get; init; }
+    public long PerfilId { get; init; }
+    public string NombrePerfil { get; init; } = "Operador";
     public string PasswordHash { get; init; } = string.Empty;
     public string PasswordSalt { get; init; } = string.Empty;
     public bool Activo { get; init; } = true;
     public int IntentosFallidos { get; init; }
     public DateTime? BloqueadoHastaUtc { get; init; }
-    public IReadOnlyCollection<PermisoSistema> PermisosPersonalizados { get; init; } = Array.Empty<PermisoSistema>();
+    public IReadOnlyCollection<PermisoSistema> PermisosPersonalizados { get; init; } = [];
     public DateTime CreadoEnUtc { get; init; } = DateTime.UtcNow;
 }
 
@@ -45,6 +58,7 @@ public sealed class FirebirdRemotePesaje
     public long Folio { get; init; }
     public string TipoPesajeRaw { get; init; } = "1";
     public string Patente { get; init; } = string.Empty;
+    public string Acoplado { get; init; } = string.Empty;
     public int PesoBruto { get; init; }
     public int PesoTara { get; init; }
     public int PesoNeto { get; init; }
@@ -55,12 +69,21 @@ public sealed class FirebirdRemotePesaje
     public string Origen { get; init; } = string.Empty;
     public string Destino { get; init; } = string.Empty;
     public string GuiaDespacho { get; init; } = string.Empty;
+    public string Chofer { get; init; } = string.Empty;
+    public string Transportista { get; init; } = string.Empty;
     public DateOnly FechaIngreso { get; init; }
     public TimeOnly HoraIngreso { get; init; }
     public DateOnly FechaSalida { get; init; }
     public TimeOnly HoraSalida { get; init; }
     public string Observacion { get; init; } = string.Empty;
 }
+
+public sealed record FirebirdExtractPackage(
+    IReadOnlyList<FirebirdRemotePesaje> Pesajes,
+    IReadOnlyList<Cliente> Clientes,
+    IReadOnlyList<Producto> Productos,
+    bool UsedSimulatedFallback,
+    string StatusMessage);
 
 public sealed class AppSettings
 {

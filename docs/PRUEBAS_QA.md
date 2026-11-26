@@ -2,24 +2,18 @@
 
 ## 1. Estrategia de Verificación (`GestionScrap.Tests`)
 
-La solución incluye una suite automatizada en **xUnit (`2.9.3`)** ejecutada sobre `.NET 10` con compilación estricta (`TreatWarningsAsErrors=true`).
+Suite automatizada en **xUnit (`2.9.3`)** sobre **.NET 10** bajo compilación estricta (`TreatWarningsAsErrors=true`, `WarningLevel=9999`):
 
 | Categoría | Archivo de Pruebas | Alcance Verificado |
 | :--- | :--- | :--- |
-| **Unit Testing** | [BusinessRulesAndSecurityTests.cs](../tests/GestionScrap.Tests/Unit/BusinessRulesAndSecurityTests.cs) | `RutChileno`, promedio ponderado sin división por cero, modo precios reales vs teóricos, detección de duplicados por planta (incluyendo `HoraIngreso` en Talcahuano), aislamiento Agrosuper vs Pesquera, exclusiones JCRAMM, hashing PBKDF2 y matriz RBAC. |
-| **Integration & Functional** | [SqliteExportAndSecurityIntegrationTests.cs](../tests/GestionScrap.Tests/Integration/SqliteExportAndSecurityIntegrationTests.cs) | Bloqueo tras 5 intentos fallidos, rechazo RBAC (`UnauthorizedAccessException`) en Operador y Auditor, flujo completo Dashboard/Reportes/Precios/JCRAMM, validación de libros `.xlsx` reabiertos con `ClosedXML`, respaldo SQLite en caliente, cambio de clave y purga confirmada con palabra `"ELIMINAR"`. |
-| **MDB Migration Testing** | [MdbMigrationIntegrationTests.cs](../tests/GestionScrap.Tests/Integration/MdbMigrationIntegrationTests.cs) | Manejo de archivo inexistente (`FileNotFoundException`) e importación real desde `BD_SCRAP.mdb` (puente x86 SysWOW64 / OleDb) verificando registros importados en Placilla, Santiago y Talcahuano. |
-| **UI / UX Testing (STA)** | [WinFormsAuditTests.cs](../tests/GestionScrap.Tests/UI/WinFormsAuditTests.cs) | Inspección recursiva de todos los botones en `LoginForm`, `MainForm`, los 10 `UserControl` de pestañas y los 7 diálogos modales: texto no vacío, icono renderizado no nulo, `AccessibleName`, tamaño y coordenadas válidas, evento `Click`/`DialogResult` enlazado y deshabilitación visual por rol (`Operador` y `Auditor`). |
-| **Stress & Performance** | [PerformanceAndStressTests.cs](../tests/GestionScrap.Tests/Stress/PerformanceAndStressTests.cs) | Inserción masiva de **10.000** pesajes en SQLite WAL, validación de 100 % detección de duplicados al reimportar y ejecución concurrente de 6 consultas pesadas en paralelo (`< 10 s`). |
+| **Unit Testing** | [BusinessRulesAndSecurityTests.cs](../tests/GestionScrap.Tests/Unit/BusinessRulesAndSecurityTests.cs) | `RutChileno`, clasificación por defecto de grupos, detección de duplicados por planta (incluyendo `HoraIngreso` en Talcahuano), mapeo de árbol padre/hijo, hashing PBKDF2-SHA256 y validación de perfiles RBAC. |
+| **Integration & Tree CRUD** | [SqliteAndTreeWorkflowIntegrationTests.cs](../tests/GestionScrap.Tests/Integration/SqliteAndTreeWorkflowIntegrationTests.cs) | Inicialización `barriagada`/`Cambias0`, bloqueo tras `5` intentos fallidos, CRUD completo de **Perfiles** dinámicos y verificación `UnauthorizedAccessException`, flujo completo de Árbol de Grupos (Padre/Subgrupo/Producto/Mover/Reordenar/Eliminar), Pareto ABC de proveedores, exportación `.xlsx` reabierta con `ClosedXML`, respaldo SQLite en caliente y purga `"ELIMINAR"`. |
+| **Real Databases (Firebird & Access)** | [RealDatabasesIntegrationTests.cs](../tests/GestionScrap.Tests/Integration/RealDatabasesIntegrationTests.cs) | Conexión e importación real desde `\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB` verificando caracteres especiales (`VIÑA`) cuando el servidor está alcanzable, más manejo de archivo `.mdb` inexistente / importación real cuando existe `BD_SCRAP.mdb`. |
+| **UI / UX Testing (STA)** | [WinFormsAuditTests.cs](../tests/GestionScrap.Tests/UI/WinFormsAuditTests.cs) | Auditoría STA completa de `SplashForm`, `LoginForm`, `MainForm`, los `5` `UserControl` modulares y los `5` diálogos modales: texto no vacío, icono asignado, tamaño/coordenadas válidas, `AccessibleName`, evento `Click`/`DialogResult` y visibilidad/habilitación según perfil RBAC. |
+| **Stress & Performance** | [PerformanceAndStressTests.cs](../tests/GestionScrap.Tests/Stress/PerformanceAndStressTests.cs) | Inserción masiva de **10.000** pesajes en SQLite WAL, validación de 100 % de detección de duplicados y ejecución paralela de consultas de Informe Resumen, Árbol de Grupos y Análisis Pareto ABC. |
 
-## 2. Resultados Verificados
+## 2. Criterios de Aceptación
 
-- **Compilación `Debug`:** `0 advertencias`, `0 errores`.
-- **Compilación `Release`:** `0 advertencias`, `0 errores`.
-- **Ejecución `dotnet test -c Release`:** **22/22 pruebas exitosas** (`Correcto: 22`, `Incorrecto: 0`, `Omitido: 0`).
-- **Compilación Inno Setup 7 (`7.1.1`):** Ambos instaladores (`SelfContained` y `FrameworkDependent`) generados con código de salida `0` y sin advertencias.
-- **Ciclo Instalador Validado:**
-  1. Instalación silenciosa limpia (`/VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER`) -> código `0`.
-  2. Arranque verificado de `GestionScrap.exe` con creación de `gestion_scrap.db`.
-  3. Actualización silenciosa sobre directorio existente preservando `gestion_scrap.db` -> código `0`.
-  4. Desinstalación silenciosa (`unins000.exe`) con limpieza íntegra de binarios -> código `0`.
+- **Compilación `Debug` y `Release`:** `0 errores` y `0 advertencias`.
+- **Suite Automatizada (`dotnet test -c Release`):** **`19/19` pruebas exitosas** (`0` fallidas, `0` omitidas).
+- **Empaquetado Inno Setup 7 (`7.1.1`):** Generación sin errores ni advertencias de `SelfContained` y `FrameworkDependent`, verificando instalación silenciosa, arranque con creación de `gestion_scrap.db`, actualización conservando datos locales y desinstalación limpia.

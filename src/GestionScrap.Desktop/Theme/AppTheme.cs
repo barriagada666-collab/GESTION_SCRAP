@@ -1,3 +1,5 @@
+using System.Reflection;
+
 namespace GestionScrap.Desktop.Theme;
 
 public enum ButtonVariant
@@ -7,23 +9,26 @@ public enum ButtonVariant
     Secondary,
     Warning,
     Danger,
+    Gold,
     GhostDark
 }
 
 /// <summary>
-/// Sistema visual unificado para formularios, controles y botones del sistema.
+/// Sistema visual corporativo Cambiaso (Azul Petróleo + Cian Técnico + Dorado 1875)
+/// con recursos gráficos embebidos en ensamblado sin dependencias externas.
 /// </summary>
 public static class AppTheme
 {
-    public static readonly Color HeaderDark = Color.FromArgb(15, 23, 42);        // #0F172A
-    public static readonly Color SidebarDark = Color.FromArgb(22, 33, 54);       // #162136
+    public static readonly Color HeaderDark = Color.FromArgb(11, 37, 58);        // #0B253A
+    public static readonly Color SidebarDark = Color.FromArgb(11, 60, 93);       // #0B3C5D
     public static readonly Color CanvasLight = Color.FromArgb(241, 245, 249);    // #F1F5F9
     public static readonly Color CardSurface = Color.White;
     public static readonly Color CardBorder = Color.FromArgb(203, 213, 225);     // #CBD5E1
     public static readonly Color TextPrimary = Color.FromArgb(15, 23, 42);       // #0F172A
     public static readonly Color TextSecondary = Color.FromArgb(71, 85, 105);    // #475569
     public static readonly Color AccentCyan = Color.FromArgb(8, 145, 178);       // #0891B2
-    public static readonly Color AccentBlue = Color.FromArgb(37, 99, 235);       // #2563EB
+    public static readonly Color AccentBlue = Color.FromArgb(14, 96, 138);       // #0E608A
+    public static readonly Color AccentGold = Color.FromArgb(201, 164, 110);     // #C9A46E
     public static readonly Color AccentEmerald = Color.FromArgb(5, 150, 105);    // #059669
     public static readonly Color AccentAmber = Color.FromArgb(217, 119, 6);      // #D97706
     public static readonly Color AccentRed = Color.FromArgb(220, 38, 38);        // #DC2626
@@ -54,7 +59,8 @@ public static class AppTheme
             ButtonVariant.Success => (AccentEmerald, Color.White, AccentEmerald, Color.FromArgb(4, 120, 87)),
             ButtonVariant.Warning => (AccentAmber, Color.White, AccentAmber, Color.FromArgb(180, 83, 9)),
             ButtonVariant.Danger => (AccentRed, Color.White, AccentRed, Color.FromArgb(185, 28, 28)),
-            ButtonVariant.GhostDark => (Color.FromArgb(30, 41, 59), Color.FromArgb(226, 232, 240), Color.FromArgb(51, 65, 85), Color.FromArgb(51, 65, 85)),
+            ButtonVariant.Gold => (Color.FromArgb(180, 140, 82), Color.White, AccentGold, Color.FromArgb(156, 118, 64)),
+            ButtonVariant.GhostDark => (Color.FromArgb(17, 52, 82), Color.FromArgb(226, 232, 240), Color.FromArgb(30, 80, 115), Color.FromArgb(24, 72, 108)),
             _ => (Color.White, TextPrimary, CardBorder, Color.FromArgb(241, 245, 249))
         };
 
@@ -72,7 +78,7 @@ public static class AppTheme
             Cursor = Cursors.Hand,
             Height = height,
             AutoSize = width <= 0,
-            MinimumSize = new Size(width > 0 ? width : 110, height),
+            MinimumSize = new Size(width > 0 ? width : 100, height),
             Padding = new Padding(10, 0, 12, 0),
             AccessibleName = text,
             AccessibleDescription = tooltip ?? text
@@ -171,38 +177,43 @@ public static class AppTheme
         dtp.Width = 115;
     }
 
-    public static Image? LoadAppLogo()
+    private static Image? LoadEmbeddedImage(string resourceName)
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "app_logo.png");
-        if (!File.Exists(path))
+        Assembly asm = typeof(AppTheme).Assembly;
+        using Stream? s = asm.GetManifestResourceStream(resourceName);
+        if (s is null)
         {
-            string devPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "installer", "assets", "app_logo.png"));
-            if (File.Exists(devPath))
-            {
-                path = devPath;
-            }
+            return null;
         }
 
-        if (File.Exists(path))
-        {
-            return Image.FromFile(path);
-        }
-
-        return IconFactory.GetIcon(IconKind.Layers, AccentCyan, 48);
+        using MemoryStream copy = new();
+        s.CopyTo(copy);
+        copy.Position = 0;
+        return Image.FromStream(copy);
     }
+
+    public static Image LoadAppLogo() =>
+        LoadEmbeddedImage("GestionScrap.Desktop.Assets.app_logo.png")
+        ?? IconFactory.GetIcon(IconKind.Layers, AccentGold, 48);
+
+    public static Image LoadCambiasoEmblem() =>
+        LoadEmbeddedImage("GestionScrap.Desktop.Assets.cambiaso_emblem.png")
+        ?? LoadAppLogo();
+
+    public static Image LoadCambiasoWordmark() =>
+        LoadEmbeddedImage("GestionScrap.Desktop.Assets.cambiaso_wordmark.png")
+        ?? LoadAppLogo();
 
     public static Icon? LoadAppIcon()
     {
-        string path = Path.Combine(AppContext.BaseDirectory, "app_icon.ico");
-        if (!File.Exists(path))
+        Assembly asm = typeof(AppTheme).Assembly;
+        using Stream? s = asm.GetManifestResourceStream("GestionScrap.Desktop.Assets.app_icon.ico");
+        if (s is not null)
         {
-            string devPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", "..", "..", "..", "installer", "assets", "app_icon.ico"));
-            if (File.Exists(devPath))
-            {
-                path = devPath;
-            }
+            return new Icon(s);
         }
 
-        return File.Exists(path) ? new Icon(path) : null;
+        string diskPath = Path.Combine(AppContext.BaseDirectory, "app_icon.ico");
+        return File.Exists(diskPath) ? new Icon(diskPath) : null;
     }
 }

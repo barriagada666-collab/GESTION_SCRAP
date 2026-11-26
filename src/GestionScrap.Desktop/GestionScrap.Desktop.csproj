@@ -19,10 +19,11 @@
   </ItemGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="..\..\installer\assets\app_icon.ico" LogicalName="GestionScrap.Desktop.Assets.app_icon.ico" />
+    <EmbeddedResource Include="..\..\installer\assets\app_logo.png" LogicalName="GestionScrap.Desktop.Assets.app_logo.png" />
+    <EmbeddedResource Include="..\..\installer\assets\cambiaso_emblem.png" LogicalName="GestionScrap.Desktop.Assets.cambiaso_emblem.png" />
+    <EmbeddedResource Include="..\..\installer\assets\cambiaso_wordmark.png" LogicalName="GestionScrap.Desktop.Assets.cambiaso_wordmark.png" />
     <Content Include="..\..\installer\assets\app_icon.ico" Link="app_icon.ico">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
-    <Content Include="..\..\installer\assets\app_logo.png" Link="app_logo.png">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>
   </ItemGroup>

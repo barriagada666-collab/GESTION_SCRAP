@@ -3,7 +3,7 @@ using GestionScrap.Domain.Enums;
 namespace GestionScrap.Domain.Entities;
 
 /// <summary>
-/// Registro consolidado de pesaje de camión en báscula.
+/// Registro consolidado de pesaje de camión importado desde báscula Firebird / Access.
 /// </summary>
 public sealed class Pesaje
 {
@@ -12,6 +12,7 @@ public sealed class Pesaje
     public Planta Planta { get; init; }
     public TipoPesaje TipoPesaje { get; init; }
     public string Patente { get; init; } = string.Empty;
+    public string Acoplado { get; init; } = string.Empty;
     public int PesoBruto { get; init; }
     public int PesoTara { get; init; }
     public int PesoNeto { get; init; }
@@ -22,6 +23,8 @@ public sealed class Pesaje
     public string Origen { get; init; } = string.Empty;
     public string Destino { get; init; } = string.Empty;
     public string GuiaDespacho { get; init; } = string.Empty;
+    public string Chofer { get; init; } = string.Empty;
+    public string Transportista { get; init; } = string.Empty;
     public DateOnly FechaIngreso { get; init; }
     public TimeOnly HoraIngreso { get; init; }
     public DateOnly FechaSalida { get; init; }
