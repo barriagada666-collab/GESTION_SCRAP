@@ -3,7 +3,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 
 string outDir = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "assets");
-string versionText = args.Length > 1 ? args[1] : "v4.0";
+string versionText = args.Length > 1 ? args[1] : "v4.1.0";
 
 Directory.CreateDirectory(outDir);
 
@@ -63,7 +63,7 @@ SaveBmp24(RenderWizardBanner(328, 628, versionText, croppedEmblem), Path.Combine
 SaveBmp24(RenderWizardSmall(55, 58, croppedEmblem), Path.Combine(outDir, "wizard_small.bmp"));
 SaveBmp24(RenderWizardSmall(110, 116, croppedEmblem), Path.Combine(outDir, "wizard_small_2x.bmp"));
 
-Console.WriteLine($"Assets corporativos Cambiaso v4.0 generados correctamente en: {outDir}");
+Console.WriteLine($"Assets corporativos Cambiaso {versionText} generados correctamente en: {outDir}");
 return 0;
 
 static Bitmap RenderCorporateBadge(int size, Bitmap emblem)

@@ -1,5 +1,6 @@
 using System.Drawing.Drawing2D;
 using GestionScrap.Desktop.Theme;
+using GestionScrap.Domain;
 
 namespace GestionScrap.Desktop.Forms;
 
@@ -51,7 +52,7 @@ public sealed class SplashForm : Form
         Label lblDiv = new()
         {
             Text = "DIVISIÓN SCRAP & BÁSCULAS\nPlacilla · Santiago · Talcahuano",
-            Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+            Font = AppTheme.FontSmallBold,
             ForeColor = Color.FromArgb(226, 232, 240),
             TextAlign = ContentAlignment.MiddleCenter,
             BackColor = Color.Transparent,
@@ -61,7 +62,7 @@ public sealed class SplashForm : Form
         Label lblYear = new()
         {
             Text = "CAMBIASO · DESDE 1875",
-            Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+            Font = AppTheme.FontSmallBold,
             ForeColor = AppTheme.AccentGold,
             TextAlign = ContentAlignment.MiddleCenter,
             BackColor = Color.Transparent,
@@ -88,7 +89,7 @@ public sealed class SplashForm : Form
         Label lblAppTitle = new()
         {
             Text = "Sistema de Gestión",
-            Font = new Font("Segoe UI", 16F, FontStyle.Bold),
+            Font = AppTheme.FontSplashTitle,
             ForeColor = AppTheme.HeaderDark,
             Location = new Point(28, 122),
             AutoSize = true
@@ -97,7 +98,7 @@ public sealed class SplashForm : Form
         Label lblAppSub = new()
         {
             Text = "Pesajes, Grupos de Material y Proveedores",
-            Font = new Font("Segoe UI", 10F, FontStyle.Regular),
+            Font = AppTheme.FontSubtitle,
             ForeColor = AppTheme.TextSecondary,
             Location = new Point(29, 154),
             AutoSize = true
@@ -119,17 +120,17 @@ public sealed class SplashForm : Form
 
         Label lblVersion = new()
         {
-            Text = "Versión 4.0 · .NET 10 LTS",
-            Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+            Text = $"Versión {AppMetadata.Version} · .NET 10 LTS",
+            Font = AppTheme.FontSmallBold,
             ForeColor = AppTheme.AccentCyan,
-            Location = new Point(185, 290),
+            Location = new Point(172, 290),
             AutoSize = true
         };
 
         Label lblCopy = new()
         {
             Text = "Cambiaso Hnos. S.A.C. · 2026",
-            Font = new Font("Segoe UI", 8F),
+            Font = AppTheme.FontCaption,
             ForeColor = AppTheme.TextSecondary,
             Location = new Point(165, 310),
             AutoSize = true

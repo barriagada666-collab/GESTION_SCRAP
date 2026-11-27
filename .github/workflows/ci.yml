@@ -1,41 +1,103 @@
-name: .NET 10 Build, Test & Installer CI
+name: CI — Build, Audit & Test (.NET 10)
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main, 'chore/**', 'fix/**', 'feat/**' ]
   pull_request:
     branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-and-test:
+  audit-build-test:
+    name: Audit, Build (Debug & Release) & xUnit Tests
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Setup .NET 10 SDK
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '10.0.x'
 
-      - name: Restore dependencies
-        run: dotnet restore GestionScrap.sln
-
-      - name: Build Debug & Release (Zero Warnings)
+      - name: Static Audit (Zero Suppressions, Zero async void, Zero Secrets)
+        shell: pwsh
         run: |
-          dotnet build GestionScrap.sln -c Debug --no-restore
-          dotnet build GestionScrap.sln -c Release --no-restore
+          $ErrorActionPreference = "Stop"
+          $codeFiles = @(Get-ChildItem -Path src,tests -Recurse -File -Include *.cs,*.csproj | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' }) + @(Get-Item Directory.Build.props)
+          $supp = $codeFiles | Select-String -Pattern "NoWarn|#pragma warning disable|SuppressMessage|TreatWarningsAsErrors>false"
+          if (@($supp).Count -gt 0) {
+            $supp | ForEach-Object { Write-Error "Supresion prohibida: $($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
+            exit 1
+          }
+          $srcCs = $codeFiles | Where-Object { $_.FullName -match '[\\/]src[\\/]' -and $_.Extension -eq '.cs' }
+          $av = $srcCs | Select-String -Pattern "\basync\s+void\b"
+          if (@($av).Count -gt 0) {
+            $av | ForEach-Object { Write-Error "async void detectado: $($_.Path):$($_.LineNumber): $($_.Line.Trim())" }
+            exit 1
+          }
+          $allTextFiles = $codeFiles + @(Get-ChildItem -Path docs,.github\workflows -Recurse -File -Include *.md,*.yml,*.yaml) + @(Get-Item README.md)
+          $tokens = $allTextFiles | Select-String -Pattern "ghp_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
+          if (@($tokens).Count -gt 0) {
+            Write-Error "Se detectó un token secreto en el repositorio."
+            exit 1
+          }
+          Write-Host "Static Audit OK: 0 supresiones, 0 async void, 0 tokens."
 
-      - name: Run Automated Tests
-        run: dotnet test GestionScrap.sln -c Release --no-build --verbosity normal
-
-      - name: Publish Release x64
+      - name: Restore Dependencies & NuGet Vulnerability Gate
+        shell: pwsh
         run: |
-          dotnet publish src/GestionScrap.Desktop/GestionScrap.Desktop.csproj -c Release -r win-x64 --self-contained true -p:DebugType=none -p:DebugSymbols=false -o publish/win-x64
+          $ErrorActionPreference = "Stop"
+          New-Item -ItemType Directory -Force -Path "ci-logs" | Out-Null
+          dotnet restore GestionScrap.sln
+          dotnet restore src/GestionScrap.Desktop/GestionScrap.Desktop.csproj -r win-x64
+          $vulnOut = dotnet list GestionScrap.sln package --vulnerable --include-transitive 2>&1
+          $vulnOut | Tee-Object -FilePath "ci-logs/nuget_vulnerabilities.log"
+          if ($vulnOut -match ">\s+\S+\s+\d") {
+            Write-Error "Se detectaron paquetes NuGet vulnerables."
+            exit 1
+          }
 
-      - name: Upload Published Artifact
+      - name: Build Debug (0 Errors, 0 Warnings)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet build GestionScrap.sln -c Debug --no-restore --no-incremental --disable-build-servers 2>&1 | Tee-Object -FilePath "ci-logs/build_debug.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build Release (0 Errors, 0 Warnings)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet build GestionScrap.sln -c Release --no-restore --no-incremental --disable-build-servers 2>&1 | Tee-Object -FilePath "ci-logs/build_release.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run Full xUnit Test Suite (Release)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet test GestionScrap.sln -c Release --no-build --disable-build-servers --verbosity normal --logger "trx;LogFileName=test_results.trx" --results-directory "ci-logs" 2>&1 | Tee-Object -FilePath "ci-logs/tests_release.log"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish Release x64 Smoke Check
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          dotnet publish src/GestionScrap.Desktop/GestionScrap.Desktop.csproj -c Release -r win-x64 --self-contained true --no-restore -p:DebugType=none -p:DebugSymbols=false -o publish/win-x64
+          if (-not (Test-Path "publish/win-x64/GestionScrap.exe")) { throw "No se generó GestionScrap.exe" }
+
+      - name: Upload CI Diagnostic Logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: GestionScrap-win-x64
-          path: publish/win-x64
+          name: ci-logs-${{ github.run_number }}
+          path: ci-logs/
+          retention-days: 14

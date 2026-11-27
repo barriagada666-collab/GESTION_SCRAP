@@ -2,6 +2,7 @@ using GestionScrap.Application.Services;
 using GestionScrap.Desktop.Controls;
 using GestionScrap.Desktop.Forms.Dialogs;
 using GestionScrap.Desktop.Theme;
+using GestionScrap.Domain;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Enums;
 using GestionScrap.Domain.Interfaces;
@@ -61,7 +62,7 @@ public sealed class MainForm : Form
         _settingsStore = settingsStore;
         _settings = settings;
 
-        Text = "Cambiaso · Gestión de Scrap y Pesajes v4.0";
+        Text = $"Cambiaso · Gestión de Scrap y Pesajes {AppMetadata.ShortVersion}";
         WindowState = FormWindowState.Maximized;
         MinimumSize = new Size(1180, 720);
         Size = new Size(1380, 840);
@@ -97,15 +98,15 @@ public sealed class MainForm : Form
         Label lblBrandTitle = new()
         {
             Text = "CAMBIASO SCRAP",
-            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+            Font = AppTheme.FontBrandTitle,
             ForeColor = AppTheme.AccentGold,
             Location = new Point(68, 17),
             AutoSize = true
         };
         Label lblBrandVer = new()
         {
-            Text = "v4.0 · .NET 10 · SQLite",
-            Font = new Font("Segoe UI", 8.5F),
+            Text = $"{AppMetadata.ShortVersion} · .NET 10 · SQLite",
+            Font = AppTheme.FontSmall,
             ForeColor = Color.FromArgb(186, 210, 228),
             Location = new Point(69, 41),
             AutoSize = true
@@ -148,13 +149,13 @@ public sealed class MainForm : Form
 
         Panel headerTitleBox = new() { Dock = DockStyle.Fill };
         _lblHeaderModule.Text = "Informe Resumen";
-        _lblHeaderModule.Font = new Font("Segoe UI", 12.5F, FontStyle.Bold);
+        _lblHeaderModule.Font = AppTheme.FontHeaderModule;
         _lblHeaderModule.ForeColor = Color.White;
         _lblHeaderModule.Location = new Point(0, 2);
         _lblHeaderModule.AutoSize = true;
 
         _lblHeaderSub.Text = "Resumen ejecutivo operativo";
-        _lblHeaderSub.Font = new Font("Segoe UI", 8.5F);
+        _lblHeaderSub.Font = AppTheme.FontSmall;
         _lblHeaderSub.ForeColor = Color.FromArgb(186, 210, 228);
         _lblHeaderSub.Location = new Point(1, 27);
         _lblHeaderSub.AutoSize = true;

@@ -3,6 +3,64 @@ using GestionScrap.Domain.Enums;
 
 namespace GestionScrap.Domain.Interfaces;
 
+public enum DiagnosticLogLevel
+{
+    Info = 0,
+    Warning = 1,
+    Error = 2,
+    Critical = 3
+}
+
+public sealed record DatabaseSummaryMetrics(
+    int TotalPesajes,
+    long TotalKilos,
+    int TotalClientes,
+    int TotalProductos,
+    int TotalImportaciones,
+    DateOnly? PrimeraFecha,
+    DateOnly? UltimaFecha,
+    DateTime? UltimaImportacionUtc,
+    string UltimoOrigenResumen);
+
+public sealed record DatabaseIntegrityReport(
+    bool IsHealthy,
+    string QuickCheckResult,
+    int ForeignKeyViolations,
+    int AppliedSchemaVersion,
+    long PesajesCount,
+    string Summary);
+
+public interface IAppLogger
+{
+    string CurrentLogFilePath { get; }
+
+    void Log(
+        DiagnosticLogLevel level,
+        string component,
+        string message,
+        string? context = null,
+        Exception? exception = null,
+        string? remediation = null,
+        string? verification = null);
+}
+
+public sealed class NullAppLogger : IAppLogger
+{
+    public static readonly NullAppLogger Instance = new();
+    public string CurrentLogFilePath => string.Empty;
+
+    public void Log(
+        DiagnosticLogLevel level,
+        string component,
+        string message,
+        string? context = null,
+        Exception? exception = null,
+        string? remediation = null,
+        string? verification = null)
+    {
+    }
+}
+
 public interface IScrapRepository
 {
     string DatabasePath { get; }
@@ -38,6 +96,8 @@ public interface IScrapRepository
     Task SaveUsuarioAsync(Usuario usuario, string actor, CancellationToken ct = default);
     Task DeleteUsuarioAsync(long id, string actor, CancellationToken ct = default);
     Task<string> BackupDatabaseAsync(string destinationPath, CancellationToken ct = default);
+    Task<DatabaseSummaryMetrics> GetDatabaseSummaryMetricsAsync(CancellationToken ct = default);
+    Task<DatabaseIntegrityReport> VerifyIntegrityAsync(CancellationToken ct = default);
 }
 
 public interface IFirebirdSyncService

@@ -1,4 +1,4 @@
-# Seguridad, Perfiles RBAC y Auditoría · Gestión de Scrap v4.0
+# Seguridad, Perfiles RBAC y Auditoría · Gestión de Scrap v4.1.0
 
 ## 1. Modelo de Seguridad Implementado
 
@@ -33,11 +33,11 @@ Además de los `5` perfiles iniciales (`DefaultRoleProfiles`), desde **Seguridad
 
 ## 3. Cuenta Inicial de Administrador
 
-Al crear una base SQLite nueva, el sistema siembra los `5` perfiles base y la cuenta inicial de administrador:
-- **Usuario:** `barriagada`
-- **Contraseña inicial:** `Cambias0` *(Perfil `Administrador`)*
+Al crear una base SQLite nueva, el sistema siembra los `5` perfiles base y aprovisiona la cuenta inicial de administrador:
+- **Usuario:** `barriagada` *(Perfil `Administrador`, protegido contra eliminación/desactivación/degradación cuando es el último administrador activo)*
+- **Contraseña inicial:** entregada exclusivamente por canal administrativo interno (no publicada en el repositorio).
 
-> **Nota de Seguridad en Producción:** Cambie esta contraseña inicial después del primer inicio de sesión desde **Mi Clave** o **Seguridad y Perfiles (`Ctrl+5`)**.
+> **Nota de Seguridad en Producción:** Cambie la contraseña inicial en el primer inicio de sesión desde **Mi Clave** o **Seguridad y Perfiles (`Ctrl+5`)**.
 
 ## 4. Auditoría Forense (`audit_log`)
 

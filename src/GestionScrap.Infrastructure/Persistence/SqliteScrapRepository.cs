@@ -95,6 +95,9 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
     {
         SqliteConnection conn = new(_connectionString);
         await conn.OpenAsync(ct).ConfigureAwait(false);
+        await using SqliteCommand pragma = conn.CreateCommand();
+        pragma.CommandText = "PRAGMA foreign_keys = ON; PRAGMA busy_timeout = 5000;";
+        await pragma.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
         return conn;
     }
 
@@ -239,6 +242,12 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_import_hist_ts ON import_history(timestamp_utc DESC);
+
+                CREATE TABLE IF NOT EXISTS schema_migrations (
+                    version INTEGER PRIMARY KEY,
+                    description TEXT NOT NULL,
+                    applied_at_utc TEXT NOT NULL
+                );
                 """;
 
             await using (SqliteCommand cmd = conn.CreateCommand())
@@ -247,6 +256,7 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
                 await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             }
 
+            await ApplyMigrationsAsync(conn, ct).ConfigureAwait(false);
             await SeedProfilesAndAdminAsync(conn, ct).ConfigureAwait(false);
             await SeedInitialCatalogAndMaterialTreeAsync(conn, ct).ConfigureAwait(false);
 
@@ -256,6 +266,58 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         {
             _initLock.Release();
         }
+    }
+
+    private static async Task ApplyMigrationsAsync(SqliteConnection conn, CancellationToken ct)
+    {
+        await using SqliteTransaction tx = conn.BeginTransaction();
+
+        HashSet<int> applied = [];
+        await using (SqliteCommand q = conn.CreateCommand())
+        {
+            q.Transaction = tx;
+            q.CommandText = "SELECT version FROM schema_migrations";
+            await using SqliteDataReader rd = await q.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await rd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                applied.Add(rd.GetInt32(0));
+            }
+        }
+
+        if (!applied.Contains(1))
+        {
+            await RecordMigrationTxAsync(conn, tx, 1, "v4.0.0 base schema (WAL, pesajes, arbol, perfiles RBAC, import_history)", ct).ConfigureAwait(false);
+        }
+
+        if (!applied.Contains(2))
+        {
+            const string perfIndexesSql = """
+                CREATE INDEX IF NOT EXISTS idx_pesajes_planta_fecha_folio ON pesajes(planta, fecha_ingreso DESC, folio DESC);
+                CREATE INDEX IF NOT EXISTS idx_pesajes_fecha_folio ON pesajes(fecha_ingreso DESC, folio DESC);
+                CREATE INDEX IF NOT EXISTS idx_pesajes_folio_hora ON pesajes(planta, folio, hora_ingreso);
+                CREATE INDEX IF NOT EXISTS idx_audit_accion_id ON audit_log(accion, id DESC);
+                CREATE INDEX IF NOT EXISTS idx_audit_usuario_id ON audit_log(usuario COLLATE NOCASE, id DESC);
+                """;
+            await using SqliteCommand idxCmd = conn.CreateCommand();
+            idxCmd.Transaction = tx;
+            idxCmd.CommandText = perfIndexesSql;
+            await idxCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+
+            await RecordMigrationTxAsync(conn, tx, 2, "v4.1.0 composite covering indexes for pesajes and audit_log", ct).ConfigureAwait(false);
+        }
+
+        await tx.CommitAsync(ct).ConfigureAwait(false);
+    }
+
+    private static async Task RecordMigrationTxAsync(SqliteConnection conn, SqliteTransaction tx, int version, string description, CancellationToken ct)
+    {
+        await using SqliteCommand ins = conn.CreateCommand();
+        ins.Transaction = tx;
+        ins.CommandText = "INSERT OR IGNORE INTO schema_migrations(version, description, applied_at_utc) VALUES(@v, @d, @ts)";
+        ins.Parameters.AddWithValue("@v", version);
+        ins.Parameters.AddWithValue("@d", description);
+        ins.Parameters.AddWithValue("@ts", DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        await ins.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     private static async Task SeedProfilesAndAdminAsync(SqliteConnection conn, CancellationToken ct)
@@ -742,16 +804,38 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         CancellationToken ct = default)
     {
         await InitializeAsync(ct).ConfigureAwait(false);
-        IReadOnlyList<Pesaje> existing = await GetPesajesAsync(planta, ct: ct).ConfigureAwait(false);
 
-        HashSet<long> existingFolios = [.. existing.Select(e => e.Folio)];
-        HashSet<(long Folio, TimeOnly Hora)> existingThno = [.. existing.Select(e => (e.Folio, e.HoraIngreso))];
+        HashSet<long> existingFolios = [];
+        HashSet<(long Folio, TimeOnly Hora)> existingThno = [];
+
+        await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
+
+        // Proyección liviana indexada (evita hidratar las 26 columnas de decenas de miles de registros)
+        await using (SqliteCommand keysCmd = conn.CreateCommand())
+        {
+            keysCmd.CommandText = "SELECT folio, hora_ingreso FROM pesajes WHERE planta = @planta";
+            keysCmd.Parameters.AddWithValue("@planta", (int)planta);
+            await using SqliteDataReader rd = await keysCmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await rd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                long folio = rd.GetInt64(0);
+                if (planta == Planta.Talcahuano)
+                {
+                    TimeOnly hora = TimeOnly.ParseExact(rd.GetString(1), "HH:mm:ss", CultureInfo.InvariantCulture);
+                    existingThno.Add((folio, hora));
+                }
+                else
+                {
+                    existingFolios.Add(folio);
+                }
+            }
+        }
 
         int imported = 0;
         int duplicates = 0;
 
-        await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
         await using SqliteTransaction tx = conn.BeginTransaction();
+        await using SqliteCommand insertCmd = CreateInsertPesajeCommand(conn, tx);
 
         foreach (Pesaje p in pesajes)
         {
@@ -774,7 +858,8 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
                 existingFolios.Add(p.Folio);
             }
 
-            await InsertPesajeTxAsync(conn, tx, p, ct).ConfigureAwait(false);
+            BindInsertPesajeParameters(insertCmd, p);
+            await insertCmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             imported++;
         }
 
@@ -1046,8 +1131,27 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
 
     public async Task<PerfilUsuario?> GetPerfilByIdAsync(long id, CancellationToken ct = default)
     {
-        IReadOnlyList<PerfilUsuario> all = await GetPerfilesAsync(ct).ConfigureAwait(false);
-        return all.FirstOrDefault(p => p.Id == id);
+        await InitializeAsync(ct).ConfigureAwait(false);
+        await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
+        await using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = "SELECT id, nombre, descripcion, es_sistema, permisos_json FROM role_profiles WHERE id = @id LIMIT 1";
+        cmd.Parameters.AddWithValue("@id", id);
+
+        await using SqliteDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        if (!await rd.ReadAsync(ct).ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        PermisoSistema[] perms = JsonSerializer.Deserialize<PermisoSistema[]>(rd.GetString(4)) ?? [];
+        return new PerfilUsuario
+        {
+            Id = rd.GetInt64(0),
+            Nombre = rd.GetString(1),
+            Descripcion = rd.GetString(2),
+            EsSistema = rd.GetInt32(3) == 1,
+            Permisos = perms
+        };
     }
 
     public async Task<PerfilUsuario> SavePerfilAsync(PerfilUsuario perfil, string actor, CancellationToken ct = default)
@@ -1200,6 +1304,8 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         cmd.Transaction = tx;
         if (usuario.Id > 0)
         {
+            await EnsureNotRemovingLastActiveAdminAsync(conn, tx, usuario.Id, usuario.PerfilId, usuario.Activo, ct).ConfigureAwait(false);
+
             cmd.CommandText = """
                 UPDATE usuarios
                 SET nombre_usuario = @u, nombre_completo = @nc, perfil_id = @pid,
@@ -1244,6 +1350,8 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
         await using SqliteTransaction tx = conn.BeginTransaction();
 
+        await EnsureNotRemovingLastActiveAdminAsync(conn, tx, id, newPerfilId: 0, newActivo: false, ct).ConfigureAwait(false);
+
         await using SqliteCommand cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = "DELETE FROM usuarios WHERE id = @id";
@@ -1264,11 +1372,203 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
             Directory.CreateDirectory(dir);
         }
 
-        await using SqliteConnection source = await OpenConnectionAsync(ct).ConfigureAwait(false);
-        await using SqliteConnection dest = new($"Data Source={destinationPath}");
-        await dest.OpenAsync(ct).ConfigureAwait(false);
-        source.BackupDatabase(dest);
+        string destCs = new SqliteConnectionStringBuilder
+        {
+            DataSource = destinationPath,
+            Pooling = false
+        }.ToString();
+
+        await using (SqliteConnection source = await OpenConnectionAsync(ct).ConfigureAwait(false))
+        await using (SqliteConnection dest = new(destCs))
+        {
+            await dest.OpenAsync(ct).ConfigureAwait(false);
+            source.BackupDatabase(dest);
+
+            await using SqliteCommand checkCmd = dest.CreateCommand();
+            checkCmd.CommandText = "PRAGMA quick_check;";
+            string check = Convert.ToString(await checkCmd.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture) ?? string.Empty;
+            if (!string.Equals(check, "ok", StringComparison.OrdinalIgnoreCase))
+            {
+                throw new InvalidOperationException($"El archivo de respaldo generado no superó PRAGMA quick_check ({check}).");
+            }
+        }
+
         return destinationPath;
+    }
+
+    public async Task<DatabaseSummaryMetrics> GetDatabaseSummaryMetricsAsync(CancellationToken ct = default)
+    {
+        await InitializeAsync(ct).ConfigureAwait(false);
+        await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
+
+        int totalPesajes = 0;
+        long totalKilos = 0;
+        DateOnly? primeraFecha = null;
+        DateOnly? ultimaFecha = null;
+        int totalClientes = 0;
+        int totalProductos = 0;
+        int totalImportaciones = 0;
+
+        await using (SqliteCommand aggCmd = conn.CreateCommand())
+        {
+            aggCmd.CommandText = """
+                SELECT
+                    COUNT(*),
+                    COALESCE(SUM(peso_neto), 0),
+                    MIN(fecha_ingreso),
+                    MAX(fecha_ingreso),
+                    (SELECT COUNT(*) FROM clientes),
+                    (SELECT COUNT(*) FROM productos),
+                    (SELECT COUNT(*) FROM import_history)
+                FROM pesajes
+                """;
+            await using SqliteDataReader rd = await aggCmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await rd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                totalPesajes = rd.GetInt32(0);
+                totalKilos = rd.GetInt64(1);
+                if (!rd.IsDBNull(2) && DateOnly.TryParseExact(rd.GetString(2), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly dMin))
+                {
+                    primeraFecha = dMin;
+                }
+
+                if (!rd.IsDBNull(3) && DateOnly.TryParseExact(rd.GetString(3), "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out DateOnly dMax))
+                {
+                    ultimaFecha = dMax;
+                }
+
+                totalClientes = rd.GetInt32(4);
+                totalProductos = rd.GetInt32(5);
+                totalImportaciones = rd.GetInt32(6);
+            }
+        }
+
+        DateTime? ultimaImportacionUtc = null;
+        string ultimoOrigenResumen = "Sin importaciones registradas aún";
+        await using (SqliteCommand lastCmd = conn.CreateCommand())
+        {
+            lastCmd.CommandText = "SELECT timestamp_utc, tipo_origen, origen_detalle FROM import_history ORDER BY id DESC LIMIT 1";
+            await using SqliteDataReader rd = await lastCmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            if (await rd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                ultimaImportacionUtc = DateTime.Parse(rd.GetString(0), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind);
+                ultimoOrigenResumen = $"{rd.GetString(1)}: {rd.GetString(2)}";
+            }
+        }
+
+        return new DatabaseSummaryMetrics(
+            totalPesajes,
+            totalKilos,
+            totalClientes,
+            totalProductos,
+            totalImportaciones,
+            primeraFecha,
+            ultimaFecha,
+            ultimaImportacionUtc,
+            ultimoOrigenResumen);
+    }
+
+    public async Task<DatabaseIntegrityReport> VerifyIntegrityAsync(CancellationToken ct = default)
+    {
+        await InitializeAsync(ct).ConfigureAwait(false);
+        await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
+
+        string quickCheck;
+        await using (SqliteCommand qc = conn.CreateCommand())
+        {
+            qc.CommandText = "PRAGMA quick_check;";
+            quickCheck = Convert.ToString(await qc.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture) ?? "unknown";
+        }
+
+        int fkViolations = 0;
+        await using (SqliteCommand fkc = conn.CreateCommand())
+        {
+            fkc.CommandText = "PRAGMA foreign_key_check;";
+            await using SqliteDataReader rd = await fkc.ExecuteReaderAsync(ct).ConfigureAwait(false);
+            while (await rd.ReadAsync(ct).ConfigureAwait(false))
+            {
+                fkViolations++;
+            }
+        }
+
+        int schemaVer;
+        await using (SqliteCommand sv = conn.CreateCommand())
+        {
+            sv.CommandText = "SELECT COALESCE(MAX(version), 0) FROM schema_migrations;";
+            schemaVer = Convert.ToInt32(await sv.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture);
+        }
+
+        long pesajesCount;
+        await using (SqliteCommand pc = conn.CreateCommand())
+        {
+            pc.CommandText = "SELECT COUNT(*) FROM pesajes;";
+            pesajesCount = Convert.ToInt64(await pc.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture);
+        }
+
+        bool healthy = string.Equals(quickCheck, "ok", StringComparison.OrdinalIgnoreCase) && fkViolations == 0;
+        string summary = healthy
+            ? $"Integridad SQLite OK (quick_check=ok, fk_errors=0, schema=v{schemaVer}, pesajes={pesajesCount:N0})."
+            : $"ALERTA DE INTEGRIDAD SQLite: quick_check={quickCheck}, fk_errors={fkViolations}, schema=v{schemaVer}.";
+
+        return new DatabaseIntegrityReport(healthy, quickCheck, fkViolations, schemaVer, pesajesCount, summary);
+    }
+
+    private static async Task EnsureNotRemovingLastActiveAdminAsync(
+        SqliteConnection conn,
+        SqliteTransaction tx,
+        long targetUserId,
+        long newPerfilId,
+        bool newActivo,
+        CancellationToken ct)
+    {
+        bool targetIsCurrentlyActiveAdmin = false;
+        await using (SqliteCommand chkTarget = conn.CreateCommand())
+        {
+            chkTarget.Transaction = tx;
+            chkTarget.CommandText = """
+                SELECT COUNT(*)
+                FROM usuarios u
+                JOIN role_profiles rp ON rp.id = u.perfil_id
+                WHERE u.id = @id AND u.activo = 1 AND rp.es_sistema = 1
+                """;
+            chkTarget.Parameters.AddWithValue("@id", targetUserId);
+            targetIsCurrentlyActiveAdmin = Convert.ToInt64(await chkTarget.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture) > 0;
+        }
+
+        if (!targetIsCurrentlyActiveAdmin)
+        {
+            return;
+        }
+
+        bool remainsAdmin = false;
+        if (newActivo && newPerfilId > 0)
+        {
+            await using SqliteCommand chkNewRole = conn.CreateCommand();
+            chkNewRole.Transaction = tx;
+            chkNewRole.CommandText = "SELECT COALESCE(es_sistema, 0) FROM role_profiles WHERE id = @pid";
+            chkNewRole.Parameters.AddWithValue("@pid", newPerfilId);
+            remainsAdmin = Convert.ToInt64(await chkNewRole.ExecuteScalarAsync(ct).ConfigureAwait(false) ?? 0L, CultureInfo.InvariantCulture) == 1;
+        }
+
+        if (remainsAdmin)
+        {
+            return;
+        }
+
+        await using SqliteCommand chkOthers = conn.CreateCommand();
+        chkOthers.Transaction = tx;
+        chkOthers.CommandText = """
+            SELECT COUNT(*)
+            FROM usuarios u
+            JOIN role_profiles rp ON rp.id = u.perfil_id
+            WHERE u.id <> @id AND u.activo = 1 AND rp.es_sistema = 1
+            """;
+        chkOthers.Parameters.AddWithValue("@id", targetUserId);
+        long otherActiveAdmins = Convert.ToInt64(await chkOthers.ExecuteScalarAsync(ct).ConfigureAwait(false), CultureInfo.InvariantCulture);
+        if (otherActiveAdmins == 0)
+        {
+            throw new InvalidOperationException("No se puede eliminar, desactivar ni degradar al último administrador activo del sistema.");
+        }
     }
 
     private static Usuario MapUsuario(SqliteDataReader rd)
@@ -1291,9 +1591,9 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         };
     }
 
-    private static async Task InsertPesajeTxAsync(SqliteConnection conn, SqliteTransaction tx, Pesaje p, CancellationToken ct)
+    private static SqliteCommand CreateInsertPesajeCommand(SqliteConnection conn, SqliteTransaction tx)
     {
-        await using SqliteCommand cmd = conn.CreateCommand();
+        SqliteCommand cmd = conn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = """
             INSERT INTO pesajes(folio, planta, tipo_pesaje, patente, acoplado, peso_bruto, peso_tara, peso_neto,
@@ -1303,32 +1603,62 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
             VALUES(@folio, @pl, @tp, @pat, @aco, @br, @ta, @ne, @cp, @np, @rc, @nc, @or, @de, @gu, @ch, @tr,
                    @fi, @hi, @fs, @hs, @ob, @gm, @et, @ci)
             """;
-        cmd.Parameters.AddWithValue("@folio", p.Folio);
-        cmd.Parameters.AddWithValue("@pl", (int)p.Planta);
-        cmd.Parameters.AddWithValue("@tp", (int)p.TipoPesaje);
-        cmd.Parameters.AddWithValue("@pat", p.Patente);
-        cmd.Parameters.AddWithValue("@aco", p.Acoplado);
-        cmd.Parameters.AddWithValue("@br", p.PesoBruto);
-        cmd.Parameters.AddWithValue("@ta", p.PesoTara);
-        cmd.Parameters.AddWithValue("@ne", p.PesoNeto);
-        cmd.Parameters.AddWithValue("@cp", p.CodProducto);
-        cmd.Parameters.AddWithValue("@np", p.NomProducto);
-        cmd.Parameters.AddWithValue("@rc", p.RutCliente);
-        cmd.Parameters.AddWithValue("@nc", p.NomCliente);
-        cmd.Parameters.AddWithValue("@or", p.Origen);
-        cmd.Parameters.AddWithValue("@de", p.Destino);
-        cmd.Parameters.AddWithValue("@gu", p.GuiaDespacho);
-        cmd.Parameters.AddWithValue("@ch", p.Chofer);
-        cmd.Parameters.AddWithValue("@tr", p.Transportista);
-        cmd.Parameters.AddWithValue("@fi", p.FechaIngreso.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        cmd.Parameters.AddWithValue("@hi", p.HoraIngreso.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
-        cmd.Parameters.AddWithValue("@fs", p.FechaSalida.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture));
-        cmd.Parameters.AddWithValue("@hs", p.HoraSalida.ToString("HH:mm:ss", CultureInfo.InvariantCulture));
-        cmd.Parameters.AddWithValue("@ob", p.Observacion);
-        cmd.Parameters.AddWithValue("@gm", p.GrupoMaterial);
-        cmd.Parameters.AddWithValue("@et", p.EsTraslado ? 1 : 0);
-        cmd.Parameters.AddWithValue("@ci", (object?)p.CiudadCliente ?? DBNull.Value);
-        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        cmd.Parameters.Add("@folio", SqliteType.Integer);
+        cmd.Parameters.Add("@pl", SqliteType.Integer);
+        cmd.Parameters.Add("@tp", SqliteType.Integer);
+        cmd.Parameters.Add("@pat", SqliteType.Text);
+        cmd.Parameters.Add("@aco", SqliteType.Text);
+        cmd.Parameters.Add("@br", SqliteType.Integer);
+        cmd.Parameters.Add("@ta", SqliteType.Integer);
+        cmd.Parameters.Add("@ne", SqliteType.Integer);
+        cmd.Parameters.Add("@cp", SqliteType.Text);
+        cmd.Parameters.Add("@np", SqliteType.Text);
+        cmd.Parameters.Add("@rc", SqliteType.Text);
+        cmd.Parameters.Add("@nc", SqliteType.Text);
+        cmd.Parameters.Add("@or", SqliteType.Text);
+        cmd.Parameters.Add("@de", SqliteType.Text);
+        cmd.Parameters.Add("@gu", SqliteType.Text);
+        cmd.Parameters.Add("@ch", SqliteType.Text);
+        cmd.Parameters.Add("@tr", SqliteType.Text);
+        cmd.Parameters.Add("@fi", SqliteType.Text);
+        cmd.Parameters.Add("@hi", SqliteType.Text);
+        cmd.Parameters.Add("@fs", SqliteType.Text);
+        cmd.Parameters.Add("@hs", SqliteType.Text);
+        cmd.Parameters.Add("@ob", SqliteType.Text);
+        cmd.Parameters.Add("@gm", SqliteType.Text);
+        cmd.Parameters.Add("@et", SqliteType.Integer);
+        cmd.Parameters.Add("@ci", SqliteType.Text);
+        cmd.Prepare();
+        return cmd;
+    }
+
+    private static void BindInsertPesajeParameters(SqliteCommand cmd, Pesaje p)
+    {
+        cmd.Parameters["@folio"].Value = p.Folio;
+        cmd.Parameters["@pl"].Value = (int)p.Planta;
+        cmd.Parameters["@tp"].Value = (int)p.TipoPesaje;
+        cmd.Parameters["@pat"].Value = p.Patente;
+        cmd.Parameters["@aco"].Value = p.Acoplado;
+        cmd.Parameters["@br"].Value = p.PesoBruto;
+        cmd.Parameters["@ta"].Value = p.PesoTara;
+        cmd.Parameters["@ne"].Value = p.PesoNeto;
+        cmd.Parameters["@cp"].Value = p.CodProducto;
+        cmd.Parameters["@np"].Value = p.NomProducto;
+        cmd.Parameters["@rc"].Value = p.RutCliente;
+        cmd.Parameters["@nc"].Value = p.NomCliente;
+        cmd.Parameters["@or"].Value = p.Origen;
+        cmd.Parameters["@de"].Value = p.Destino;
+        cmd.Parameters["@gu"].Value = p.GuiaDespacho;
+        cmd.Parameters["@ch"].Value = p.Chofer;
+        cmd.Parameters["@tr"].Value = p.Transportista;
+        cmd.Parameters["@fi"].Value = p.FechaIngreso.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        cmd.Parameters["@hi"].Value = p.HoraIngreso.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        cmd.Parameters["@fs"].Value = p.FechaSalida.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        cmd.Parameters["@hs"].Value = p.HoraSalida.ToString("HH:mm:ss", CultureInfo.InvariantCulture);
+        cmd.Parameters["@ob"].Value = p.Observacion;
+        cmd.Parameters["@gm"].Value = p.GrupoMaterial;
+        cmd.Parameters["@et"].Value = p.EsTraslado ? 1 : 0;
+        cmd.Parameters["@ci"].Value = (object?)p.CiudadCliente ?? DBNull.Value;
     }
 
     private static async Task AddAuditTxAsync(
@@ -1356,5 +1686,18 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
-    public void Dispose() => _initLock.Dispose();
+    public void Dispose()
+    {
+        try
+        {
+            using SqliteConnection poolKey = new(_connectionString);
+            SqliteConnection.ClearPool(poolKey);
+        }
+        catch
+        {
+            // Liberación best-effort del pool SQLite
+        }
+
+        _initLock.Dispose();
+    }
 }
