@@ -9,12 +9,12 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Deterministic>true</Deterministic>
-    <Version>4.1.1</Version>
-    <AssemblyVersion>4.1.1.0</AssemblyVersion>
-    <FileVersion>4.1.1.0</FileVersion>
+    <Version>5.0.0</Version>
+    <AssemblyVersion>5.0.0.0</AssemblyVersion>
+    <FileVersion>5.0.0.0</FileVersion>
     <Product>Gestión de Scrap</Product>
     <Company>Cambiaso Hnos. S.A.C.</Company>
-    <Description>Sistema de escritorio para gestión de scrap, control de pesajes, analítica YoY/MoM e informes operativos (.NET 10).</Description>
+    <Description>Plataforma empresarial CRM, ERP, gestión integral de pesajes industriales (1 y 2 mediciones), flota, inventario trazable e informes multi-selección (.NET 10).</Description>
     <Copyright>Copyright © 2026 Cambiaso Hnos. S.A.C.</Copyright>
   </PropertyGroup>
   <ItemGroup>

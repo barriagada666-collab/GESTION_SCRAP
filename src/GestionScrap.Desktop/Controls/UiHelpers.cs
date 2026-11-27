@@ -38,12 +38,12 @@ public static class UiHelpers
         Panel card = new()
         {
             Dock = DockStyle.Top,
-            AutoSize = true,
-            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            AutoSize = false,
             BackColor = AppTheme.CardSurface,
             BorderStyle = BorderStyle.FixedSingle,
             Padding = new Padding(12, 8, 12, 8),
-            Margin = new Padding(0, 0, 0, 10)
+            Margin = new Padding(0, 0, 0, 10),
+            Height = 48
         };
 
         TableLayoutPanel stack = new()
@@ -67,20 +67,56 @@ public static class UiHelpers
             row.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             row.WrapContents = true;
             row.FlowDirection = FlowDirection.LeftToRight;
-            row.Margin = i == 0 ? new Padding(0, 0, 0, 2) : new Padding(0, 4, 0, 0);
+            row.Margin = i == 0 ? new Padding(0, 0, 0, 4) : new Padding(0, 4, 0, 0);
             stack.Controls.Add(row, 0, i);
         }
 
-        card.Controls.Add(stack);
-        card.SizeChanged += (_, _) =>
+        bool syncing = false;
+        int lastAvail = -1;
+
+        void SyncCardHeight(bool force = false)
         {
-            int avail = Math.Max(120, card.ClientSize.Width - card.Padding.Horizontal);
-            if (stack.MaximumSize.Width != avail)
+            if (syncing)
             {
-                stack.MaximumSize = new Size(avail, 0);
-                stack.PerformLayout();
+                return;
             }
-        };
+
+            int avail = Math.Max(200, card.ClientSize.Width - card.Padding.Horizontal);
+            if (!force && avail == lastAvail)
+            {
+                return;
+            }
+
+            syncing = true;
+            try
+            {
+                lastAvail = avail;
+                stack.MaximumSize = new Size(avail, 0);
+
+                int totalStackHeight = 0;
+                foreach (FlowLayoutPanel row in rows)
+                {
+                    row.MaximumSize = new Size(avail, 0);
+                    Size pref = row.GetPreferredSize(new Size(avail, 0));
+                    totalStackHeight += pref.Height + row.Margin.Vertical;
+                }
+
+                int borderAllowance = card.BorderStyle == BorderStyle.None ? 0 : 2;
+                int needed = totalStackHeight + card.Padding.Vertical + borderAllowance + 4;
+                if (card.Height != needed)
+                {
+                    card.Height = needed;
+                }
+            }
+            finally
+            {
+                syncing = false;
+            }
+        }
+
+        card.Controls.Add(stack);
+        card.HandleCreated += (_, _) => SyncCardHeight(force: true);
+        card.SizeChanged += (_, _) => SyncCardHeight(force: false);
         return card;
     }
 
@@ -350,6 +386,151 @@ public static class UiHelpers
 
     public static DataGridViewTextBoxColumn AddCurrencyCol(string header, string dataProperty, float fillWeight = 75f) =>
         AddNumberCol(header, dataProperty, "C0", fillWeight);
+
+    public static DateTime CurrentMonthStartLocal => new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+    public static DateTime CurrentDateLocal => DateTime.Today;
+
+    /// <summary>
+    /// Selecciona automáticamente la fila bajo el puntero al hacer clic derecho antes de desplegar un ContextMenuStrip.
+    /// </summary>
+    public static void AttachGridContextMenu(DataGridView dgv, ContextMenuStrip menu)
+    {
+        dgv.ContextMenuStrip = menu;
+        dgv.CellMouseDown += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right && e.RowIndex >= 0 && e.RowIndex < dgv.Rows.Count)
+            {
+                if (!dgv.Rows[e.RowIndex].Selected)
+                {
+                    dgv.ClearSelection();
+                    dgv.Rows[e.RowIndex].Selected = true;
+                }
+
+                if (e.ColumnIndex >= 0 && e.ColumnIndex < dgv.Columns.Count)
+                {
+                    dgv.CurrentCell = dgv.Rows[e.RowIndex].Cells[e.ColumnIndex];
+                }
+            }
+        };
+    }
+
+    /// <summary>
+    /// Muestra un diálogo modal limpio para solicitar un motivo auditable o texto breve.
+    /// </summary>
+    public static string? PromptAuditReason(IWin32Window owner, string title, string prompt, string defaultValue = "")
+    {
+        using Form dlg = new()
+        {
+            Text = title,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false,
+            StartPosition = FormStartPosition.CenterParent,
+            ClientSize = new Size(470, 210),
+            BackColor = AppTheme.CanvasLight
+        };
+
+        Label lbl = new()
+        {
+            Text = prompt,
+            Font = AppTheme.FontBodyBold,
+            ForeColor = AppTheme.TextPrimary,
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            MaximumSize = new Size(430, 0),
+            Margin = new Padding(0, 0, 0, 8)
+        };
+
+        TextBox txt = new()
+        {
+            Multiline = true,
+            Height = 76,
+            Dock = DockStyle.Fill,
+            Text = defaultValue,
+            ScrollBars = ScrollBars.Vertical
+        };
+        AppTheme.ApplyInputStyle(txt);
+
+        TableLayoutPanel body = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(16, 14, 16, 10)
+        };
+        body.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        body.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        body.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        body.Controls.Add(lbl, 0, 0);
+        body.Controls.Add(txt, 0, 1);
+
+        Button btnCancel = AppTheme.CreateButton("Cancelar", IconKind.Close, ButtonVariant.Secondary, null, null, null, 0, 34);
+        btnCancel.DialogResult = DialogResult.Cancel;
+        Button btnOk = AppTheme.CreateButton("Confirmar", IconKind.Check, ButtonVariant.Primary, (_, _) =>
+        {
+            if (string.IsNullOrWhiteSpace(txt.Text))
+            {
+                MessageBox.Show(dlg, "Debe ingresar un motivo válido para continuar.", "Campo Obligatorio", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                txt.Focus();
+                return;
+            }
+
+            dlg.DialogResult = DialogResult.OK;
+            dlg.Close();
+        }, null, null, 0, 34);
+
+        Panel footer = AppTheme.CreateDialogFooter(btnCancel, btnOk);
+        dlg.CancelButton = btnCancel;
+        dlg.Controls.Add(body);
+        dlg.Controls.Add(footer);
+
+        return dlg.ShowDialog(owner) == DialogResult.OK ? txt.Text.Trim() : null;
+    }
+
+    /// <summary>
+    /// Exporta las filas seleccionadas (o todas si no hay selección) de cualquier DataGridView a Excel (.xlsx).
+    /// </summary>
+    public static void ExportDataGridViewToExcel(
+        IWin32Window owner,
+        DataGridView dgv,
+        GestionScrap.Domain.Interfaces.IExcelExportService exporter,
+        string reportTitle,
+        string sheetName,
+        bool onlySelected,
+        Action<string>? notifyStatus = null)
+    {
+        List<DataGridViewColumn> visibleCols = [.. dgv.Columns.Cast<DataGridViewColumn>().Where(c => c.Visible).OrderBy(c => c.DisplayIndex)];
+        if (visibleCols.Count == 0 || dgv.Rows.Count == 0)
+        {
+            MessageBox.Show(owner, "No hay filas disponibles para exportar.", "Sin Datos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        List<DataGridViewRow> targetRows = onlySelected && dgv.SelectedRows.Count > 0
+            ? [.. dgv.SelectedRows.Cast<DataGridViewRow>().OrderBy(r => r.Index)]
+            : [.. dgv.Rows.Cast<DataGridViewRow>()];
+
+        string? path = PromptSaveExcelPath(owner, $"{sheetName.Replace(' ', '_')}_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        string[] headers = [.. visibleCols.Select(c => c.HeaderText)];
+        List<object?[]> rows = [.. targetRows.Select(r => visibleCols.Select(c => r.Cells[c.Index].Value).ToArray())];
+
+        string saved = exporter.ExportReportePersonalizado(
+            path,
+            new GestionScrap.Domain.Entities.ReportePersonalizadoPayload(
+                reportTitle,
+                $"Exportado el {DateTime.Now:dd-MM-yyyy HH:mm} · {rows.Count:N0} registro(s)",
+                [("Registros Exportados", rows.Count.ToString("N0", EsCl), onlySelected ? "Selección del usuario" : "Tabla completa")],
+                [new GestionScrap.Domain.Entities.ExportTableSection(sheetName, reportTitle, headers, rows)]));
+
+        notifyStatus?.Invoke($"Exportado Excel: {saved}");
+        MessageBox.Show(owner, $"Archivo Excel generado correctamente:\n{saved}", "Exportación Exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+    }
 
     public static DataGridViewTextBoxColumn AddDateCol(string header, string dataProperty, float fillWeight = 70f) => new()
     {

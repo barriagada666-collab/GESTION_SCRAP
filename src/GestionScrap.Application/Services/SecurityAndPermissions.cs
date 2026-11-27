@@ -14,7 +14,7 @@ public static class DefaultRoleProfiles
         {
             Id = 1,
             Nombre = "Administrador",
-            Descripcion = "Acceso completo a informes, árbol de grupos, proveedores, importador, perfiles y auditoría.",
+            Descripcion = "Acceso completo a CRM, ERP, pesajes, inventario, informes, grupos, importador, perfiles y auditoría.",
             EsSistema = true,
             Permisos = Enum.GetValues<PermisoSistema>()
         },
@@ -22,7 +22,7 @@ public static class DefaultRoleProfiles
         {
             Id = 2,
             Nombre = "Supervisor",
-            Descripcion = "Acceso operativo completo, edición de árbol de grupos, importación y revisión de auditoría.",
+            Descripcion = "Acceso operativo completo, CRM, ERP, autorización/anulación de pesajes, inventario y auditoría.",
             EsSistema = false,
             Permisos =
             [
@@ -32,14 +32,18 @@ public static class DefaultRoleProfiles
                 PermisoSistema.VerAnalisisProveedores,
                 PermisoSistema.ImportarDatos,
                 PermisoSistema.ExportarExcel,
-                PermisoSistema.VerAuditoria
+                PermisoSistema.VerAuditoria,
+                PermisoSistema.AdministrarCrmEntidades,
+                PermisoSistema.AdministrarMaterialesVehiculos,
+                PermisoSistema.GestionarPesajesOperaciones,
+                PermisoSistema.AutorizarAnularPesajesInventario
             ]
         },
         new PerfilUsuario
         {
             Id = 3,
             Nombre = "Analista",
-            Descripcion = "Gestión completa de grupos de material, informes resumen, análisis de proveedores y Excel.",
+            Descripcion = "Gestión de grupos de material, informes empresariales, análisis de proveedores y Excel.",
             EsSistema = false,
             Permisos =
             [
@@ -54,7 +58,7 @@ public static class DefaultRoleProfiles
         {
             Id = 4,
             Nombre = "Operador",
-            Descripcion = "Consulta de informes, importación desde básculas Firebird/Access y exportación Excel.",
+            Descripcion = "Registro de pesajes (1 y 2 pasos), órdenes ERP, importación Firebird/Access y consultas.",
             EsSistema = false,
             Permisos =
             [
@@ -62,7 +66,8 @@ public static class DefaultRoleProfiles
                 PermisoSistema.VerGrupoMaterial,
                 PermisoSistema.VerAnalisisProveedores,
                 PermisoSistema.ImportarDatos,
-                PermisoSistema.ExportarExcel
+                PermisoSistema.ExportarExcel,
+                PermisoSistema.GestionarPesajesOperaciones
             ]
         },
         new PerfilUsuario

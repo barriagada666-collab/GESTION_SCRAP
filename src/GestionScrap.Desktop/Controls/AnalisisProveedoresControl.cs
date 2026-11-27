@@ -49,6 +49,7 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
     private readonly DoubleBufferedDataGridView _dgvOrigenes = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
     private readonly DoubleBufferedDataGridView _dgvEntregas = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
 
+    private readonly List<ContextMenuStrip> _menus = [];
     private AnalisisProveedoresResultDto? _lastResult;
     private ProveedorDetalleResultDto? _lastDetail;
 
@@ -73,8 +74,8 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         _cmbGrupo.Items.Add(new GrupoOpt(null, "Todos los Grupos"));
         _cmbGrupo.SelectedIndex = 0;
 
-        _dtpDesde.Value = new DateTime(2024, 1, 1);
-        _dtpHasta.Value = DateTime.Today;
+        _dtpDesde.Value = UiHelpers.CurrentMonthStartLocal;
+        _dtpHasta.Value = UiHelpers.CurrentDateLocal;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
         _dtpDesde.Margin = new Padding(0, 3, 6, 3);
@@ -274,10 +275,37 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         pnlFicha.Controls.Add(_lblProveedorSeleccionado);
         mainSplit.Panel2.Controls.Add(pnlFicha);
 
+        AttachGridMenu(_dgvRanking, "Ranking Pareto Proveedores", "RankingProveedores");
+        AttachGridMenu(_dgvEntregas, "Historial de Entregas Proveedor", "EntregasProveedor");
+
         Controls.Add(mainSplit);
         Controls.Add(kpis);
         Controls.Add(filterCard);
         RefreshPermissions();
+    }
+
+    private void AttachGridMenu(DataGridView dgv, string title, string sheet)
+    {
+        ContextMenuStrip menu = new();
+        menu.Items.Add("Exportar selección a Excel (.xlsx)", null, (_, _) =>
+        {
+            if (_auth.HasPermission(PermisoSistema.ExportarExcel))
+            {
+                UiHelpers.ExportDataGridViewToExcel(this, dgv, _app.ExcelExporter, title, sheet, onlySelected: true, NotifyStatus);
+            }
+        });
+        menu.Items.Add("Exportación Personalizada...", null, (_, _) => ExportarPersonalizado());
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Copiar valor de celda", null, (_, _) =>
+        {
+            string? val = dgv.CurrentCell?.Value?.ToString();
+            if (!string.IsNullOrEmpty(val))
+            {
+                Clipboard.SetText(val);
+            }
+        });
+        _menus.Add(menu);
+        UiHelpers.AttachGridContextMenu(dgv, menu);
     }
 
     public override void RefreshPermissions()
@@ -580,5 +608,18 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         {
             MessageBox.Show(this, ex.Message, "Error al Exportar", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            foreach (ContextMenuStrip m in _menus)
+            {
+                m.Dispose();
+            }
+        }
+
+        base.Dispose(disposing);
     }
 }

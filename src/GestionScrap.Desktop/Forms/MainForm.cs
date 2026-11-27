@@ -11,12 +11,13 @@ using GestionScrap.Infrastructure.Configuration;
 namespace GestionScrap.Desktop.Forms;
 
 /// <summary>
-/// Ventana principal Cambiaso con los 5 módulos activos: Informe Resumen, Grupos de Material (Árbol CRUD),
-/// Análisis de Proveedores, Importador Multi-Origen y Seguridad / Perfiles.
+/// Ventana principal Cambiaso con los 8 módulos integrados: Informe Resumen, Centro de Informes Empresariales,
+/// Pesajes Industriales y ERP, CRM y Maestros, Grupos de Material, Análisis Proveedores, Importador BD y Seguridad RBAC.
 /// </summary>
 public sealed class MainForm : Form
 {
     private readonly ScrapApplicationService _app;
+    private readonly EnterpriseApplicationService _enterprise;
     private readonly IAuthService _auth;
     private readonly AppSettingsStore _settingsStore;
     private readonly AppSettings _settings;
@@ -53,11 +54,13 @@ public sealed class MainForm : Form
 
     public MainForm(
         ScrapApplicationService app,
+        EnterpriseApplicationService enterprise,
         IAuthService auth,
         AppSettingsStore settingsStore,
         AppSettings settings)
     {
         _app = app;
+        _enterprise = enterprise;
         _auth = auth;
         _settingsStore = settingsStore;
         _settings = settings;
@@ -120,19 +123,27 @@ public sealed class MainForm : Form
             Padding = new Padding(8, 12, 8, 10)
         };
 
-        RegisterNavItem(navContainer, 0, "Informe Resumen", "Resumen ejecutivo de volumen, plantas y movimientos", IconKind.Dashboard,
+        RegisterNavItem(navContainer, 0, "Informe Resumen", "Resumen ejecutivo de volumen, comparativos YoY/MoM y segmentación", IconKind.Dashboard,
             () => _auth.HasPermission(PermisoSistema.VerInformeResumen), "Atajo Ctrl+1");
-        RegisterNavItem(navContainer, 1, "Grupos de Material", "Árbol editable (Nodos Padre/Hijo) e informe consolidado", IconKind.Layers,
-            () => _auth.HasPermission(PermisoSistema.VerGrupoMaterial), "Atajo Ctrl+2");
-        RegisterNavItem(navContainer, 2, "Análisis Proveedores", "Ranking Pareto ABC, evolución, flota y detalle de entregas", IconKind.Store,
-            () => _auth.HasPermission(PermisoSistema.VerAnalisisProveedores), "Atajo Ctrl+3");
-        RegisterNavItem(navContainer, 3, "Importador BD", "Conexión directa Firebird WMDBSPC.GDB y migración Access", IconKind.Database,
-            () => _auth.HasPermission(PermisoSistema.ImportarDatos), "Atajo Ctrl+4");
-        RegisterNavItem(navContainer, 4, "Seguridad y Perfiles", "Gestión de usuarios, perfiles RBAC, auditoría y respaldo SQLite", IconKind.Shield,
+        RegisterNavItem(navContainer, 1, "Informes Pesajes", "Centro de informes por Patente, Material, Proveedor, Cliente, RUT y Tipo", IconKind.Document,
+            () => _auth.HasPermission(PermisoSistema.VerInformeResumen), "Atajo Ctrl+2");
+        RegisterNavItem(navContainer, 2, "Pesajes y ERP", "Pesajes 1/2 mediciones, órdenes comerciales, inventario y tipos de pesaje", IconKind.ShoppingCart,
+            () => _auth.HasPermission(PermisoSistema.GestionarPesajesOperaciones) || _auth.HasPermission(PermisoSistema.VerInformeResumen), "Atajo Ctrl+3");
+        RegisterNavItem(navContainer, 3, "CRM y Maestros", "CRM clientes/proveedores por RUT único, catálogo de materiales y flota", IconKind.User,
+            () => _auth.HasPermission(PermisoSistema.AdministrarCrmEntidades)
+                  || _auth.HasPermission(PermisoSistema.AdministrarMaterialesVehiculos)
+                  || _auth.HasPermission(PermisoSistema.VerInformeResumen), "Atajo Ctrl+4");
+        RegisterNavItem(navContainer, 4, "Grupos de Material", "Árbol editable (Nodos Padre/Hijo) e informe consolidado", IconKind.Layers,
+            () => _auth.HasPermission(PermisoSistema.VerGrupoMaterial), "Atajo Ctrl+5");
+        RegisterNavItem(navContainer, 5, "Análisis Proveedores", "Ranking Pareto ABC, evolución, flota y detalle de entregas", IconKind.Store,
+            () => _auth.HasPermission(PermisoSistema.VerAnalisisProveedores), "Atajo Ctrl+6");
+        RegisterNavItem(navContainer, 6, "Importador BD", "Conexión directa Firebird WMDBSPC.GDB y migración Access", IconKind.Database,
+            () => _auth.HasPermission(PermisoSistema.ImportarDatos), "Atajo Ctrl+7");
+        RegisterNavItem(navContainer, 7, "Seguridad y Perfiles", "Gestión de usuarios, perfiles RBAC, auditoría y respaldo SQLite", IconKind.Shield,
             () => _auth.HasPermission(PermisoSistema.AdministrarSeguridadPerfiles)
                   || _auth.HasPermission(PermisoSistema.VerAuditoria)
                   || _auth.HasPermission(PermisoSistema.MantenimientoBaseDatos),
-            "Atajo Ctrl+5");
+            "Atajo Ctrl+8");
 
         _sidebar.Controls.Add(navContainer);
         _sidebar.Controls.Add(brandPanel);
@@ -360,16 +371,19 @@ public sealed class MainForm : Form
     private ScrapTabControlBase CreateTabControl(int index) => index switch
     {
         0 => new InformeResumenControl(_app, _auth, NavigateTo),
-        1 => new GrupoMaterialControl(_app, _auth),
-        2 => new AnalisisProveedoresControl(_app, _auth),
-        3 => new ImportadorControl(_app, _auth, _settingsStore, _settings, RefreshDataTabsIfLoadedAsync),
-        4 => new SeguridadPerfilesControl(_app, _auth, _settings),
+        1 => new CentroInformesEnterpriseControl(_enterprise, _app, _auth),
+        2 => new OperacionesPesajesErpControl(_enterprise, _app, _auth),
+        3 => new CrmMaestrosControl(_enterprise, _app, _auth),
+        4 => new GrupoMaterialControl(_app, _auth),
+        5 => new AnalisisProveedoresControl(_app, _auth),
+        6 => new ImportadorControl(_app, _auth, _settingsStore, _settings, RefreshDataTabsIfLoadedAsync),
+        7 => new SeguridadPerfilesControl(_app, _auth, _settings),
         _ => new InformeResumenControl(_app, _auth, NavigateTo)
     };
 
     private async Task RefreshDataTabsIfLoadedAsync()
     {
-        foreach (int idx in new[] { 0, 1, 2 })
+        foreach (int idx in new[] { 0, 1, 2, 3, 4, 5 })
         {
             if (_tabs.TryGetValue(idx, out ScrapTabControlBase? tab) && tab.Visible)
             {
@@ -399,6 +413,9 @@ public sealed class MainForm : Form
             Keys.D3 => 2,
             Keys.D4 => 3,
             Keys.D5 => 4,
+            Keys.D6 => 5,
+            Keys.D7 => 6,
+            Keys.D8 => 7,
             _ => null
         };
 

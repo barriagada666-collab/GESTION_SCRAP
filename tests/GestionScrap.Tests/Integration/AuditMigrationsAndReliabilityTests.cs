@@ -178,7 +178,7 @@ public sealed partial class AuditMigrationsAndReliabilityTests : IDisposable
         DatabaseIntegrityReport integrity = await repo.VerifyIntegrityAsync();
         Assert.True(integrity.IsHealthy, integrity.Summary);
         Assert.Equal(expectedPesajes, integrity.PesajesCount);
-        Assert.Equal(2, integrity.AppliedSchemaVersion);
+        Assert.Equal(3, integrity.AppliedSchemaVersion);
 
         Stopwatch sw = Stopwatch.StartNew();
         DatabaseSummaryMetrics metrics = await repo.GetDatabaseSummaryMetricsAsync();
@@ -227,8 +227,8 @@ public sealed partial class AuditMigrationsAndReliabilityTests : IDisposable
     [Fact]
     public void AppMetadata_And_PublicRepositoryDocs_ContainValidVersionAndNoExposedSecrets()
     {
-        Assert.StartsWith("4.1.", AppMetadata.Version, StringComparison.Ordinal);
-        Assert.StartsWith("v4.1.", AppMetadata.ShortVersion, StringComparison.Ordinal);
+        Assert.StartsWith("5.0.", AppMetadata.Version, StringComparison.Ordinal);
+        Assert.StartsWith("v5.0.", AppMetadata.ShortVersion, StringComparison.Ordinal);
 
         string? repoRoot = FindRepoRoot();
         if (repoRoot is null)

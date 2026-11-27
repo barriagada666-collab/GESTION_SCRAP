@@ -1,67 +1,52 @@
-# Arquitectura Técnica · Gestión de Scrap v4.1.0 (.NET 10)
+# Arquitectura Técnica · Gestión de Scrap v5.0.0 (.NET 10)
 
 ## 1. Visión General
 
-**Gestión de Scrap v4.1.0** implementa una arquitectura limpia de cuatro capas sobre **.NET 10 (`net10.0` / `net10.0-windows`)**, consolidando en cinco módulos enfocados el monitoreo operativo, clasificación jerárquica de materiales, analítica Pareto de proveedores, importación Firebird (`WMDBSPC.GDB`) / Access, trazabilidad estructurada y seguridad dinámica basada en perfiles (**RBAC**).
+**Gestión de Scrap v5.0.0** implementa una arquitectura limpia de cuatro capas sobre **.NET 10 (`net10.0` / `net10.0-windows`)**, consolidando en **8 módulos integrados** la gestión unificada **CRM (Clientes/Proveedores)**, **Operaciones ERP**, **Pesajes Industriales (1 y 2 mediciones)**, **Flota de Vehículos/Patentes**, **Libro Mayor Inmutable de Inventario**, **Centro de Informes con 9 segmentadores multi-selección**, **Árbol de Grupos de Material**, **Análisis Pareto ABC**, **Importador Firebird/Access** y **Seguridad RBAC (`13` permisos)**.
 
 ```text
-+-------------------------------------------------------------------------+
-|                    GestionScrap.Desktop (WinForms UI)                   |
-|  SplashForm · LoginForm · MainForm · 5 Módulos · 6 Diálogos · GDI+      |
-|  AppTheme (Paleta Cambiaso) · IconFactory · Assets Embebidos (0 Ext.)   |
-+------------------------------------+------------------------------------+
-                                     |
-                                     v
-+-------------------------------------------------------------------------+
-|                  GestionScrap.Application (Casos de Uso)                |
-|  ScrapApplicationService · BusinessRules · SecuritySessionService       |
-|  DefaultRoleProfiles · PasswordSecurity (PBKDF2-SHA256) · ReportDtos    |
-+------------------------------------+------------------------------------+
-                                     |
-                 +-------------------+-------------------+
-                 |                                       |
-                 v                                       v
-+----------------------------------+   +----------------------------------+
-|   GestionScrap.Domain (Núcleo)   |   |  GestionScrap.Infrastructure     |
-|  Entidades · Enums · RutChileno  |   |  SqliteScrapRepository (WAL)     |
-|  Contratos IScrapRepository /    |   |  FirebirdSyncService (TCP 3050)  |
-|  IFirebirdSyncService / Export   |   |  ClosedXmlExcelExportService     |
-+----------------------------------+   |  MdbMigrationService (x64/x86)   |
-                                       |  AppSettingsStore (DPAPI)        |
-+----------------------------------+   +----------------------------------+
++-----------------------------------------------------------------------------+
+|                      GestionScrap.Desktop (WinForms UI)                     |
+|  SplashForm · LoginForm · MainForm (8 Módulos Ctrl+1..8) · 15 Diálogos      |
+|  MultiSelectSlicerButton · ContextMenuStrip · AppTheme High-DPI · GDI+      |
++--------------------------------------+--------------------------------------+
+                                       |
+                                       v
++-----------------------------------------------------------------------------+
+|                    GestionScrap.Application (Casos de Uso)                  |
+|  EnterpriseApplicationService · WeighingRules · ScrapApplicationService     |
+|  BusinessRules · SecuritySessionService · DefaultRoleProfiles · DTOs        |
++--------------------------------------+--------------------------------------+
+                                       |
+                   +-------------------+-------------------+
+                   |                                       |
+                   v                                       v
++------------------------------------+   +------------------------------------+
+|     GestionScrap.Domain (Núcleo)   |   |    GestionScrap.Infrastructure     |
+|  Entidades CRM/ERP/Pesajes/Flota/  |   |  SqliteScrapRepository (WAL v3)    |
+|  Inventario · RutChileno (Mod-11)  |   |  FirebirdSyncService (TCP 3050)    |
+|  PatenteChilena · IScrapRepository |   |  ClosedXmlExcelExportService       |
+|  IEnterpriseRepository · Enums     |   |  MdbMigrationService (x64/x86)     |
++------------------------------------+   |  AppSettingsStore (DPAPI) · Logger |
+                                         +------------------------------------+
 ```
 
 ## 2. Capas y Responsabilidades
 
 ### 2.1 `GestionScrap.Domain` (`net10.0`, cero dependencias externas)
-- **Entidades:**
-  - `Pesaje`: Registro de báscula con `Folio`, `Planta`, `TipoPesaje`, `Patente`, pesos (`PesoBruto`, `PesoTara`, `PesoNeto`), `CodProducto`, `NomProducto`, `GrupoMaterial`, `RutCliente`, `NomCliente`, trazabilidad de fechas/horas, `Origen`, `Destino`, `Chofer` y `EsTraslado`.
-  - `Cliente` y `Producto`: Catálogos operativos sincronizados desde Firebird / Access o inicializados con los `48` productos reales de `WMDBSPC.GDB`.
-  - `MaterialGroupNode`: Nodo jerárquico editable (`Id`, `ParentId`, `Nombre`, `TipoNodo`, `CodigoProducto`, `ColorHex`, `Orden`).
-  - `PerfilUsuario`, `Usuario`, `AuditLogEntry`, `ImportacionHistorial`, `FirebirdPlantaEndpoint`, `AppSettings`: Modelos de perfiles RBAC, usuarios, auditoría, trazabilidad Origen -> Destino y configuración.
-- **Enumeraciones:** `Planta`, `TipoPesaje`, `PermisoSistema` (`9` permisos granulares), `NodoGrupoTipo` (`CarpetaGrupo`, `ProductoAsignado`), `SegmentacionDimension`.
-- **Objeto de Valor (`RutChileno`):** Normalización de RUT chileno (`NormalizeBody`, `Clean`, `Matches`).
-- **Contratos:** `IScrapRepository`, `IFirebirdSyncService`, `IExcelExportService`, `IMdbMigrationService`, `IAuthService`.
+- **Entidades:** `Pesaje` (extendido con `FolioCodigo`, `UnidadMedida`, `Estado`, `OperacionId`, `VehiculoId`, `PrimeraMedicionKg/Utc`, `SegundaMedicionKg/Utc`, `PesoEsperadoKg`, `AjusteManualAutorizado`), `Cliente` (CRM unificado `EsCliente`/`EsProveedor`/`RutNormalizado`), `Producto` (catálogo extendido con `ToleranciaDiferenciaPct` y `Activo`), `Vehiculo`, `TipoPesajeConfig`, `OperacionComercial`, `InventarioMovimiento`, `InventarioExistencia`, `PesajeHistorialCambio`, `DocumentoAsociado`, `MaterialGroupNode`, `PerfilUsuario`, `Usuario`, `AuditLogEntry`, `ImportacionHistorial`.
+- **Objetos de Valor:** `RutChileno` (`Clean`, `NormalizeBody`, `Matches`, `ComputeDv`, `ValidateAndFormat`) y `PatenteChilena` (`Normalize`, `IsValidFormat`, `FormatDisplay`, `MatchesExact`, `MatchesPartial`).
+- **Contratos:** `IScrapRepository`, `IEnterpriseRepository`, `IFirebirdSyncService`, `IExcelExportService`, `IMdbMigrationService`, `IAuthService`, `IAppLogger`.
 
 ### 2.2 `GestionScrap.Application` (`net10.0`)
-- **`BusinessRules`:**
-  - Reglas por defecto de agrupación en `DefaultParentGroups` (`8` ramas iniciales), clasificación `ClassifyProductoDefaultGroup` y soporte transversal de exclusión de totales en cero.
-  - Resolución recursiva de árbol (`BuildProductToRootGroupMap`) y consolidación jerárquica por nodo/rama.
-  - Detección de duplicados (`IsDuplicatePesaje`: `Planta + Folio` en Placilla/Santiago; `Planta + Folio + HoraIngreso` en Talcahuano).
-  - Ficha estadística cuantitativa (`ComputeEstadisticas`), comparativos **MoM** / **YoY** (`BuildComparativoMensual`, `BuildComparativoAnual`), segmentación dinámica (`BuildSegmentacion`) y analítica Pareto ABC.
-- **`SecuritySessionService` y `DefaultRoleProfiles`:**
-  - `5` perfiles iniciales (`Administrador`, `Supervisor`, `Analista`, `Operador`, `Auditor`) editables dinámicamente y extensibles con nuevos perfiles personalizados.
-  - Hashing `PBKDF2-SHA256` (`100.000` iteraciones, comparación en tiempo constante) y bloqueo temporal tras `5` intentos fallidos.
-- **`ScrapApplicationService`:** Puerta de acceso única con validación previa `_auth.EnsurePermission(...)` en cada operación de lectura, edición, exportación o administración.
+- **`WeighingRules`:** Reglas puras deterministas de cálculo `Neto = Bruto - Tara`, validación de consistencia de unidades (`KG`/`TON`), bloqueo de sobrescritura manual sin autorización, resolución de 2 mediciones (`Bruto = max`, `Tara = min`), evaluación de tolerancias y determinación del signo de impacto en inventario.
+- **`EnterpriseApplicationService`:** Casos de uso CRM 360°, materiales, flota, tipos de pesaje, pesajes de 1 y 2 pasos, autorizaciones/correcciones/anulaciones, órdenes ERP, libro mayor de inventario y motor unificado de informes con 9 segmentadores multi-selección.
+- **`ScrapApplicationService` y `BusinessRules`:** Analítica ejecutiva YoY/MoM, árbol jerárquico de materiales, Pareto ABC de proveedores, importación Firebird/Access y administración RBAC.
 
 ### 2.3 `GestionScrap.Infrastructure` (`net10.0`)
-- **`SqliteScrapRepository`:** Persistencia embebida vía `Microsoft.Data.Sqlite` `10.0.15` + `SQLitePCLRaw.lib.e_sqlite3` `2.1.14` con `PRAGMA journal_mode=WAL;`, activación obligatoria por conexión de `PRAGMA foreign_keys=ON;` y `PRAGMA busy_timeout=5000;`, migraciones versionadas e idempotentes (`schema_migrations`), índices compuestos para consultas analíticas y de auditoría, consultas SQL agregadas para resúmenes de base de datos, protección contra eliminación/degradación del último administrador activo, verificación de integridad (`PRAGMA quick_check` + `PRAGMA foreign_key_check`) y respaldo en caliente post-verificado (`BackupDatabaseAsync`).
-- **`FileAppLogger`:** Bitácora diagnóstica diaria en `%LocalAppData%\GestionScrap\logs\gestionscrap_YYYY-MM-DD.log` con retención automática de 30 días y redacción automática de contraseñas, tokens Bearer/PAT y cadenas cifradas DPAPI.
-- **`FirebirdSyncService`:** Conector TCP/IP (`FirebirdSql.Data.FirebirdClient` `10.3.4`) configurado con `Charset=NONE` y `CodePagesEncodingProvider` para interoperar limpiamente con `\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB`, `placilla\WMDBSPC.GDB` y `thno\PWAREHOUSE.FDB` preservando caracteres latinos (`VIÑA`).
-- **`ClosedXmlExcelExportService`:** Exportación `.xlsx` sin dependencia de Microsoft Excel COM mediante `ClosedXML` `0.105.1` (informes estándar, por selección, personalizados y bitácora de importaciones).
-- **`MdbMigrationService`:** Lectura directa vía `System.Data.OleDb` (64 bits) o puente seguro x86 PowerShell (`SysWOW64`) cuando solo existe Access Database Engine de 32 bits.
-- **`AppSettingsStore`:** Persistencia de configuración local en `%LocalAppData%\GestionScrap\settings.json` con protección **Windows DPAPI** para contraseñas Firebird.
+- **`SqliteScrapRepository` (partial + `.Enterprise.cs`):** Persistencia embebida SQLite WAL con `PRAGMA foreign_keys = ON` y `busy_timeout = 5000` por conexión, migraciones idempotentes `v1 -> v2 -> v3`, índice único parcial `idx_inv_mov_pesaje_activo` garantizando idempotencia de inventario por pesaje, respaldo post-verificado y verificación `PRAGMA quick_check` + `foreign_key_check`.
+- **`FirebirdSyncService`, `MdbMigrationService`, `ClosedXmlExcelExportService`, `AppSettingsStore` (DPAPI), `FileAppLogger` (redacción automática de secretos).**
 
 ### 2.4 `GestionScrap.Desktop` (`net10.0-windows`, WinForms `PerMonitorV2`)
-- **Identidad Visual Cambiaso Sin Dependencias Externas:** Paleta corporativa (`#0B253A`, `#0B3C5D`, `#0891B2`, `#0E608A`, `#C9A46E`) y recursos gráficos (`app_icon.ico`, `app_logo.png`, `cambiaso_emblem.png`, `cambiaso_wordmark.png`) embebidos como `EmbeddedResource` en el ensamblado principal junto a iconos vectoriales GDI+ (`IconFactory`).
-- **Componentes de UI:** `SplashForm`, `LoginForm`, `MainForm`, `5` controles modulares (`InformeResumenControl`, `GrupoMaterialControl`, `AnalisisProveedoresControl`, `ImportadorControl`, `SeguridadPerfilesControl`) y `6` diálogos (`ExportacionPersonalizadaDialog`, `MaterialNodeEditorDialog`, `MoverNodoDialog`, `ConfiguracionDbDialog`, `CambiarPasswordDialog`, `LimpiarTablasDialog`).
+- **8 Módulos Modulares (`Ctrl+1..Ctrl+8`):** `InformeResumenControl`, `CentroInformesEnterpriseControl`, `OperacionesPesajesErpControl`, `CrmMaestrosControl`, `GrupoMaterialControl`, `AnalisisProveedoresControl`, `ImportadorControl` y `SeguridadPerfilesControl`.
+- **15 Diálogos Modales High-DPI:** Todos construidos con `TableLayoutPanel` y `AppTheme.CreateDialogFooter` sin desbordamientos, acompañados de `MultiSelectSlicerButton` y menús contextuales `ContextMenuStrip` en todas las grillas operacionales.
