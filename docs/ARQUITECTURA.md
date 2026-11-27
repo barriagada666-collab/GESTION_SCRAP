@@ -1,8 +1,8 @@
-# Arquitectura Técnica · Gestión de Scrap v4.0 (.NET 10)
+# Arquitectura Técnica · Gestión de Scrap v4.1.0 (.NET 10)
 
 ## 1. Visión General
 
-**Gestión de Scrap v4.0** implementa una arquitectura limpia de cuatro capas sobre **.NET 10 (`net10.0` / `net10.0-windows`)**, consolidando en cinco módulos enfocados el monitoreo operativo, clasificación jerárquica de materiales, analítica Pareto de proveedores, importación Firebird (`WMDBSPC.GDB`) / Access y seguridad dinámica basada en perfiles (**RBAC**).
+**Gestión de Scrap v4.1.0** implementa una arquitectura limpia de cuatro capas sobre **.NET 10 (`net10.0` / `net10.0-windows`)**, consolidando en cinco módulos enfocados el monitoreo operativo, clasificación jerárquica de materiales, analítica Pareto de proveedores, importación Firebird (`WMDBSPC.GDB`) / Access, trazabilidad estructurada y seguridad dinámica basada en perfiles (**RBAC**).
 
 ```text
 +-------------------------------------------------------------------------+
@@ -55,7 +55,8 @@
 - **`ScrapApplicationService`:** Puerta de acceso única con validación previa `_auth.EnsurePermission(...)` en cada operación de lectura, edición, exportación o administración.
 
 ### 2.3 `GestionScrap.Infrastructure` (`net10.0`)
-- **`SqliteScrapRepository`:** Persistencia embebida vía `Microsoft.Data.Sqlite` `10.0.15` + `SQLitePCLRaw.lib.e_sqlite3` `2.1.14` con `PRAGMA journal_mode=WAL;`, consultas parametrizadas, tabla `import_history`, inicialización del administrador `barriagada` / `Cambias0` y respaldo en caliente (`BackupDatabaseAsync`).
+- **`SqliteScrapRepository`:** Persistencia embebida vía `Microsoft.Data.Sqlite` `10.0.15` + `SQLitePCLRaw.lib.e_sqlite3` `2.1.14` con `PRAGMA journal_mode=WAL;`, activación obligatoria por conexión de `PRAGMA foreign_keys=ON;` y `PRAGMA busy_timeout=5000;`, migraciones versionadas e idempotentes (`schema_migrations`), índices compuestos para consultas analíticas y de auditoría, consultas SQL agregadas para resúmenes de base de datos, protección contra eliminación/degradación del último administrador activo, verificación de integridad (`PRAGMA quick_check` + `PRAGMA foreign_key_check`) y respaldo en caliente post-verificado (`BackupDatabaseAsync`).
+- **`FileAppLogger`:** Bitácora diagnóstica diaria en `%LocalAppData%\GestionScrap\logs\gestionscrap_YYYY-MM-DD.log` con retención automática de 30 días y redacción automática de contraseñas, tokens Bearer/PAT y cadenas cifradas DPAPI.
 - **`FirebirdSyncService`:** Conector TCP/IP (`FirebirdSql.Data.FirebirdClient` `10.3.4`) configurado con `Charset=NONE` y `CodePagesEncodingProvider` para interoperar limpiamente con `\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB`, `placilla\WMDBSPC.GDB` y `thno\PWAREHOUSE.FDB` preservando caracteres latinos (`VIÑA`).
 - **`ClosedXmlExcelExportService`:** Exportación `.xlsx` sin dependencia de Microsoft Excel COM mediante `ClosedXML` `0.105.1` (informes estándar, por selección, personalizados y bitácora de importaciones).
 - **`MdbMigrationService`:** Lectura directa vía `System.Data.OleDb` (64 bits) o puente seguro x86 PowerShell (`SysWOW64`) cuando solo existe Access Database Engine de 32 bits.

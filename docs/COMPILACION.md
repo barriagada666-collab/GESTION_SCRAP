@@ -1,4 +1,4 @@
-# Guía de Compilación y Construcción · Gestión de Scrap v4.0
+# Guía de Compilación y Construcción · Gestión de Scrap v4.1.0
 
 ## 1. Requisitos del Entorno de Desarrollo
 
@@ -44,18 +44,14 @@ dotnet build GestionScrap.sln -c Release --no-restore
 dotnet test GestionScrap.sln -c Release --no-build --verbosity normal
 
 # Regenerar iconos y gráficos HiDPI Cambiaso (si se modifica la imagen fuente)
-dotnet run --project installer\AssetBuilder -- "installer\assets" "v4.0"
+dotnet run --project installer\AssetBuilder -- "installer\assets" "v4.1.0"
 
-# Publicar binarios win-x64 (Autocontenido y Framework-Dependent)
-dotnet publish src\GestionScrap.Desktop\GestionScrap.Desktop.csproj -c Release -r win-x64 --self-contained true -p:DebugType=none -p:DebugSymbols=false -o publish\win-x64
-dotnet publish src\GestionScrap.Desktop\GestionScrap.Desktop.csproj -c Release -r win-x64 --self-contained false -p:DebugType=none -p:DebugSymbols=false -o publish\win-x64-fdd
-
-# Compilar ambos instaladores con Inno Setup 7
-$iscc = "$env:LOCALAPPDATA\Programs\Inno Setup 7\ISCC.exe"
-& $iscc --quiet-progress -DVariant=selfcontained installer\GestionScrap.iss
-& $iscc --quiet-progress -DVariant=framework installer\GestionScrap.iss
+# Construcción automatizada completa (Build Release + Publish x64 + Instaladores Inno Setup 7 + Portable ZIP + SHA-256)
+pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\Build-Release.ps1 -Version 4.1.0
 ```
 
-Los instaladores resultantes quedan en `Instalador\`:
-1. `GestionScrap_Setup_v4.0.0_x64_SelfContained.exe`
-2. `GestionScrap_Setup_v4.0.0_x64_FrameworkDependent.exe`
+Los artefactos resultantes quedan en `Instalador\`:
+1. `GestionScrap_Setup_v4.1.0_x64_SelfContained.exe`
+2. `GestionScrap_Setup_v4.1.0_x64_FrameworkDependent.exe`
+3. `GestionScrap_Portable_v4.1.0_win-x64.zip`
+4. `checksums_sha256.txt`

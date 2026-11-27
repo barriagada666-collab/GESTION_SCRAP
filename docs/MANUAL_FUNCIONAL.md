@@ -1,8 +1,8 @@
-# Manual Funcional · Gestión de Scrap v4.0
+# Manual Funcional · Gestión de Scrap v4.1.0
 
 ## 1. Inicio de Sesión y Navegación
 
-Al abrir **Gestión de Scrap**, el sistema presenta `SplashForm` y luego `LoginForm` (cuenta inicial de fábrica: `barriagada` / `Cambias0`). Tras **5 intentos fallidos consecutivos**, la cuenta se bloquea por **5 minutos**.
+Al abrir **Gestión de Scrap**, el sistema ejecuta una verificación automática de integridad de SQLite (`PRAGMA quick_check` y `PRAGMA foreign_key_check`), presenta `SplashForm` y luego `LoginForm` (la cuenta administrativa inicial se aprovisiona mediante TI / Operaciones; cambie la clave en el primer inicio de sesión). Tras **5 intentos fallidos consecutivos**, la cuenta se bloquea por **5 minutos**.
 
 ### Atajos de Teclado
 - `Ctrl+1`: **Informe Resumen**
