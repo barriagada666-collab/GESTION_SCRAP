@@ -204,7 +204,8 @@ public sealed class WinFormsAuditTests
                     new ConfiguracionDbDialog(store, settings, app),
                     new LimpiarTablasDialog(app),
                     new MaterialNodeEditorDialog(NodoGrupoTipo.ProductoAsignado, nodes[0].Id, nodes[0].Nombre, prods),
-                    new MoverNodoDialog(nodes[^1], nodes)
+                    new MoverNodoDialog(nodes[^1], nodes),
+                    new ExportacionPersonalizadaDialog("Informe Personalizado", 2, ["KPIs y Estadísticas", "Segmentación"])
                 ];
 
                 foreach (Form dlg in dialogs)

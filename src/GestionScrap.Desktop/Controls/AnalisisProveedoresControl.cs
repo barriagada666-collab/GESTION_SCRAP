@@ -1,5 +1,6 @@
 using GestionScrap.Application.DTOs;
 using GestionScrap.Application.Services;
+using GestionScrap.Desktop.Forms.Dialogs;
 using GestionScrap.Desktop.Theme;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Enums;
@@ -9,21 +10,23 @@ namespace GestionScrap.Desktop.Controls;
 
 /// <summary>
 /// Módulo 3: Análisis Completo y Robusto de Proveedores (Ranking Pareto ABC, Tendencia vs período anterior,
-/// Mix de Materiales, Patentes/Orígenes frecuentes y Ficha Histórica de Entregas).
+/// exclusión de totales en cero, selección múltiple y exportación personalizada).
 /// </summary>
 public sealed class AnalisisProveedoresControl : ScrapTabControlBase
 {
     private readonly ScrapApplicationService _app;
     private readonly IAuthService _auth;
 
-    private readonly ComboBox _cmbPlanta = new() { Width = 135, DropDownStyle = ComboBoxStyle.DropDownList };
-    private readonly ComboBox _cmbTipo = new() { Width = 145, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _cmbPlanta = new() { Width = 140 };
+    private readonly ComboBox _cmbTipo = new() { Width = 155 };
     private readonly ComboBox _cmbGrupo = new() { Width = 165, DropDownStyle = ComboBoxStyle.DropDownList };
     private readonly DateTimePicker _dtpDesde = new();
     private readonly DateTimePicker _dtpHasta = new();
     private readonly TextBox _txtBuscar = new() { Width = 180 };
+    private readonly CheckBox _chkExcluirCeros = new() { Text = "Excluir totales en 0", AutoSize = true };
     private readonly Button _btnAnalizar;
     private readonly Button _btnExportar;
+    private readonly Button _btnExportarSeleccion;
 
     private readonly Label _lblProvActivosVal;
     private readonly Label _lblProvActivosSub;
@@ -34,23 +37,21 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
     private readonly Label _lblParetoVal;
     private readonly Label _lblParetoSub;
 
-    private readonly DoubleBufferedDataGridView _dgvRanking = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
+    private readonly DoubleBufferedDataGridView _dgvRanking = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
     private readonly DashboardChartControl _chartTop10 = new() { Dock = DockStyle.Fill };
     private readonly DashboardChartControl _chartAbc = new() { Dock = DockStyle.Fill };
 
     private readonly Label _lblProveedorSeleccionado = new();
     private readonly TabControl _detailTabs = new() { Dock = DockStyle.Fill };
-    private readonly DoubleBufferedDataGridView _dgvMix = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
+    private readonly DoubleBufferedDataGridView _dgvMix = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
     private readonly DashboardChartControl _chartEvolucion = new() { Dock = DockStyle.Fill };
     private readonly DashboardChartControl _chartPatentes = new() { Dock = DockStyle.Fill };
-    private readonly DoubleBufferedDataGridView _dgvOrigenes = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
-    private readonly DoubleBufferedDataGridView _dgvEntregas = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
+    private readonly DoubleBufferedDataGridView _dgvOrigenes = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
+    private readonly DoubleBufferedDataGridView _dgvEntregas = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
 
     private AnalisisProveedoresResultDto? _lastResult;
     private ProveedorDetalleResultDto? _lastDetail;
 
-    private sealed record PlantaOpt(Planta? Planta, string Label) { public override string ToString() => Label; }
-    private sealed record TipoOpt(TipoPesaje? Tipo, string Label) { public override string ToString() => Label; }
     private sealed record GrupoOpt(long? NodeId, string Label) { public override string ToString() => Label; }
 
     public AnalisisProveedoresControl(ScrapApplicationService app, IAuthService auth)
@@ -65,25 +66,8 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         Panel filterCard = UiHelpers.BuildFilterCard(90);
         filterCard.BorderStyle = BorderStyle.FixedSingle;
 
-        _cmbPlanta.Font = AppTheme.FontBody;
-        _cmbPlanta.Items.AddRange(
-        [
-            new PlantaOpt(null, "Todas las Plantas"),
-            new PlantaOpt(Planta.Santiago, "Santiago (Placilla 2)"),
-            new PlantaOpt(Planta.Placilla, "Placilla"),
-            new PlantaOpt(Planta.Talcahuano, "Talcahuano")
-        ]);
-        _cmbPlanta.SelectedIndex = 0;
-
-        _cmbTipo.Font = AppTheme.FontBody;
-        _cmbTipo.Items.AddRange(
-        [
-            new TipoOpt(TipoPesaje.RecepcionCarga, "Solo Recepción / Compras"),
-            new TipoOpt(null, "Todos los Movimientos"),
-            new TipoOpt(TipoPesaje.DespachoCarga, "Despachos"),
-            new TipoOpt(TipoPesaje.MovimientoInterno, "Movimientos Internos")
-        ]);
-        _cmbTipo.SelectedIndex = 0;
+        UiHelpers.PopulatePlantaFilterCombo(_cmbPlanta);
+        UiHelpers.PopulateTipoFilterCombo(_cmbTipo, defaultRecepcion: true);
 
         _cmbGrupo.Font = AppTheme.FontBody;
         _cmbGrupo.Items.Add(new GrupoOpt(null, "Todos los Grupos"));
@@ -105,10 +89,16 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
             }
         };
 
+        _chkExcluirCeros.Font = AppTheme.FontBodyBold;
+        _chkExcluirCeros.Margin = new Padding(10, 7, 6, 0);
+        _chkExcluirCeros.CheckedChanged += async (_, _) => await LoadAnalisisAsync();
+
         _btnAnalizar = AppTheme.CreateButton("Analizar Proveedores", IconKind.Search, ButtonVariant.Primary,
             async (_, _) => await LoadAnalisisAsync(), "Ejecuta ranking Pareto ABC, variaciones y detalle de entregas", Tip, 175, 32);
-        _btnExportar = AppTheme.CreateButton("Exportar Análisis", IconKind.Excel, ButtonVariant.Success,
-            (_, _) => Exportar(), "Exporta Ranking ABC y Ficha del Proveedor seleccionado a Excel", Tip, 155, 32);
+        _btnExportar = AppTheme.CreateButton("Exportar Todo", IconKind.Excel, ButtonVariant.Success,
+            (_, _) => ExportarDirecto(), "Exporta Ranking ABC y Ficha del Proveedor seleccionado a Excel", Tip, 145, 32);
+        _btnExportarSeleccion = AppTheme.CreateButton("Exportar Selección...", IconKind.Save, ButtonVariant.Gold,
+            (_, _) => ExportarPersonalizado(), "Exportar solo proveedores o entregas seleccionadas / secciones elegidas", Tip, 172, 32);
 
         TableLayoutPanel fRows = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
         fRows.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
@@ -134,8 +124,10 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         [
             new Label { Text = "Buscar:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 0) },
             _txtBuscar,
+            _chkExcluirCeros,
             _btnAnalizar,
-            _btnExportar
+            _btnExportar,
+            _btnExportarSeleccion
         ]);
 
         fRows.Controls.Add(r1, 0, 0);
@@ -167,13 +159,12 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
             }
         };
 
-        // Top Pane: Ranking Grid + Charts
         TableLayoutPanel topGridCharts = new() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         topGridCharts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 64F));
         topGridCharts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36F));
 
         Panel pnlRank = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(8), Margin = new Padding(0, 0, 4, 0), BorderStyle = BorderStyle.FixedSingle };
-        Label lblRankT = new() { Text = "Ranking ABC / Pareto de Proveedores (clic para inspeccionar ficha)", Font = AppTheme.FontSection, ForeColor = AppTheme.SidebarDark, Dock = DockStyle.Top, Height = 24 };
+        Label lblRankT = new() { Text = "Ranking ABC / Pareto de Proveedores (Ctrl/Shift + clic para seleccionar múltiples)", Font = AppTheme.FontSection, ForeColor = AppTheme.SidebarDark, Dock = DockStyle.Top, Height = 24 };
 
         _dgvRanking.Columns.AddRange(
         [
@@ -191,10 +182,16 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         ]);
         _dgvRanking.CellFormatting += (_, e) =>
         {
-            if (e.RowIndex >= 0 && _dgvRanking.Columns[e.ColumnIndex].DataPropertyName == nameof(ProveedorRankingRowDto.ClaseAbc))
+            if (e.RowIndex < 0)
+            {
+                return;
+            }
+
+            string prop = _dgvRanking.Columns[e.ColumnIndex].DataPropertyName;
+            if (prop == nameof(ProveedorRankingRowDto.ClaseAbc) && e.CellStyle is not null)
             {
                 string? cls = e.Value?.ToString();
-                e.CellStyle!.Font = AppTheme.FontBodyBold;
+                e.CellStyle.Font = AppTheme.FontBodyBold;
                 e.CellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
                 e.CellStyle.ForeColor = cls switch
                 {
@@ -202,6 +199,10 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
                     "B" => AppTheme.AccentBlue,
                     _ => AppTheme.TextSecondary
                 };
+            }
+            else if (prop == nameof(ProveedorRankingRowDto.VariacionPorcentual))
+            {
+                UiHelpers.FormatVarianceCell(e);
             }
         };
         _dgvRanking.SelectionChanged += async (_, _) => await LoadSelectedSupplierDetailAsync();
@@ -221,7 +222,6 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         topGridCharts.Controls.Add(rightCharts, 1, 0);
         mainSplit.Panel1.Controls.Add(topGridCharts);
 
-        // Bottom Pane: Ficha Robusta de Proveedor
         Panel pnlFicha = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
         _lblProveedorSeleccionado.Text = "Ficha Detallada: Seleccione un proveedor del ranking superior";
         _lblProveedorSeleccionado.Font = AppTheme.FontSection;
@@ -231,7 +231,6 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
 
         _detailTabs.Font = AppTheme.FontBodyBold;
 
-        // SubTab 1: Evolución y Mix de Materiales
         TabPage tpMix = new("Evolución Mensual y Mix de Materiales") { BackColor = AppTheme.CanvasLight, Padding = new Padding(6) };
         TableLayoutPanel mixSplit = new() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         mixSplit.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48F));
@@ -247,7 +246,6 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         mixSplit.Controls.Add(_dgvMix, 1, 0);
         tpMix.Controls.Add(mixSplit);
 
-        // SubTab 2: Patentes y Orígenes
         TabPage tpFlota = new("Patentes / Camiones y Orígenes") { BackColor = AppTheme.CanvasLight, Padding = new Padding(6) };
         TableLayoutPanel flotaSplit = new() { Dock = DockStyle.Fill, ColumnCount = 2, RowCount = 1 };
         flotaSplit.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 55F));
@@ -261,7 +259,6 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         flotaSplit.Controls.Add(_dgvOrigenes, 1, 0);
         tpFlota.Controls.Add(flotaSplit);
 
-        // SubTab 3: Entregas / Folios
         TabPage tpEntregas = new("Historial de Entregas (Folios)") { BackColor = AppTheme.CanvasLight, Padding = new Padding(6) };
         _dgvEntregas.Columns.AddRange(
         [
@@ -293,8 +290,10 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
 
     public override void RefreshPermissions()
     {
+        bool canExport = _auth.HasPermission(PermisoSistema.ExportarExcel);
         _btnAnalizar.Enabled = _auth.HasPermission(PermisoSistema.VerAnalisisProveedores);
-        _btnExportar.Enabled = _auth.HasPermission(PermisoSistema.ExportarExcel);
+        _btnExportar.Enabled = canExport;
+        _btnExportarSeleccion.Enabled = canExport;
     }
 
     public override async Task ActivateAsync(CancellationToken ct = default)
@@ -340,16 +339,17 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
     {
         await UiHelpers.RunSafeAsync(this, async () =>
         {
-            Planta? planta = (_cmbPlanta.SelectedItem as PlantaOpt)?.Planta;
-            TipoPesaje? tipo = (_cmbTipo.SelectedItem as TipoOpt)?.Tipo;
+            Planta? planta = UiHelpers.GetSelectedNullablePlanta(_cmbPlanta);
+            TipoPesaje? tipo = UiHelpers.GetSelectedNullableTipo(_cmbTipo);
             long? groupNodeId = (_cmbGrupo.SelectedItem as GrupoOpt)?.NodeId;
             DateOnly desde = DateOnly.FromDateTime(_dtpDesde.Value);
             DateOnly hasta = DateOnly.FromDateTime(_dtpHasta.Value);
 
-            _lastResult = await _app.GetAnalisisProveedoresAsync(planta, desde, hasta, tipo, groupNodeId, _txtBuscar.Text, ct);
+            _lastResult = await _app.GetAnalisisProveedoresAsync(
+                planta, desde, hasta, tipo, groupNodeId, _txtBuscar.Text, _chkExcluirCeros.Checked, ct);
 
             _lblProvActivosVal.Text = _lastResult.TotalProveedoresActivos.ToString("N0", UiHelpers.EsCl);
-            _lblProvActivosSub.Text = "Proveedores / Clientes con entregas";
+            _lblProvActivosSub.Text = _chkExcluirCeros.Checked ? "Proveedores con > 0 Kg" : "Proveedores / Clientes activos";
 
             _lblVolumenVal.Text = string.Create(UiHelpers.EsCl, $"{_lastResult.TotalKilos:N0} Kg");
             _lblVolumenSub.Text = string.Create(UiHelpers.EsCl, $"{_lastResult.TotalViajes:N0} viajes · Prom. {_lastResult.PromedioGeneralKgViaje:N0} Kg/viaje");
@@ -402,16 +402,16 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
 
         await UiHelpers.RunSafeAsync(this, async () =>
         {
-            Planta? planta = (_cmbPlanta.SelectedItem as PlantaOpt)?.Planta;
-            TipoPesaje? tipo = (_cmbTipo.SelectedItem as TipoOpt)?.Tipo;
+            Planta? planta = UiHelpers.GetSelectedNullablePlanta(_cmbPlanta);
+            TipoPesaje? tipo = UiHelpers.GetSelectedNullableTipo(_cmbTipo);
             DateOnly desde = DateOnly.FromDateTime(_dtpDesde.Value);
             DateOnly hasta = DateOnly.FromDateTime(_dtpHasta.Value);
 
-            _lastDetail = await _app.GetProveedorDetalleAsync(row, planta, desde, hasta, tipo, ct);
+            _lastDetail = await _app.GetProveedorDetalleAsync(row, planta, desde, hasta, tipo, _chkExcluirCeros.Checked, ct);
 
             _lblProveedorSeleccionado.Text = string.Create(
                 UiHelpers.EsCl,
-                $"Ficha: {row.Nombre} ({row.Rut}) · Clase {row.ClaseAbc} · {row.Ciudad} · Tel: {(string.IsNullOrWhiteSpace(row.Telefono) ? "-" : row.Telefono)} · Inactivo: {row.DiasInactivo} días");
+                $"Ficha: {row.Nombre} ({row.Rut}) · Clase {row.ClaseAbc} · {row.Ciudad} · Var: {row.VariacionPorcentual:N1}% · Inactivo: {row.DiasInactivo} días");
 
             _dgvMix.DataSource = null;
             _dgvMix.DataSource = _lastDetail.MixMateriales;
@@ -426,7 +426,7 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         }, NotifyStatus);
     }
 
-    private void Exportar()
+    private void ExportarDirecto()
     {
         if (_lastResult is null || _lastResult.Ranking.Count == 0)
         {
@@ -452,6 +452,137 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
 
             NotifyStatus($"Análisis exportado en: {saved}");
             MessageBox.Show(this, $"Análisis Pareto de proveedores generado:\n{saved}", "Exportación Exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Error al Exportar", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private void ExportarPersonalizado()
+    {
+        if (_lastResult is null || _lastResult.Ranking.Count == 0)
+        {
+            MessageBox.Show(this, "No hay proveedores en el análisis actual para exportar.", "Sin Datos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        List<ProveedorRankingRowDto> selRanking = [.. _dgvRanking.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as ProveedorRankingRowDto).OfType<ProveedorRankingRowDto>()];
+        List<Pesaje> selEntregas = [.. _dgvEntregas.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as Pesaje).OfType<Pesaje>()];
+        int selCount = selRanking.Count + selEntregas.Count;
+
+        string[] sections =
+        [
+            "KPIs Pareto de Proveedores",
+            "Ranking Pareto ABC",
+            "Mix Materiales del Proveedor",
+            "Evolución Mensual del Proveedor",
+            "Orígenes Frecuentes",
+            "Entregas / Folios del Proveedor"
+        ];
+
+        using ExportacionPersonalizadaDialog dlg = new(
+            "Cambiaso · Análisis Personalizado de Proveedores",
+            selCount,
+            sections,
+            _chkExcluirCeros.Checked,
+            selCount > 0 ? $"{selRanking.Count} proveedor(es), {selEntregas.Count} entrega(s)" : null);
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        string? path = UiHelpers.PromptSaveExcelPath(this, $"Proveedores_Personalizado_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            bool onlySel = dlg.SoloSeleccionActual;
+            bool exZero = dlg.ExcluirCeros;
+            IReadOnlyList<string> inc = dlg.SeccionesSeleccionadas;
+
+            IEnumerable<ProveedorRankingRowDto> rankingRows = onlySel && selRanking.Count > 0 ? selRanking : _lastResult.Ranking;
+            if (exZero) rankingRows = rankingRows.Where(r => r.TotalKilos > 0);
+            List<ProveedorRankingRowDto> finalRank = [.. rankingRows];
+
+            List<(string Indicador, string Valor, string Detalle)> kpis = [];
+            if (inc.Contains("KPIs Pareto de Proveedores"))
+            {
+                kpis.Add(("Proveedores Analizados", finalRank.Count.ToString("N0", UiHelpers.EsCl), _lastResult.PeriodoLabel));
+                kpis.Add(("Volumen Total", $"{finalRank.Sum(r => r.TotalKilos):N0} Kg", $"{finalRank.Sum(r => r.Viajes):N0} viajes"));
+                kpis.Add(("Proveedor Líder", _lastResult.ProveedorLiderNombre, $"{_lastResult.ProveedorLiderParticipacion:N1}% del total"));
+                kpis.Add(("Concentración Clase A", $"{_lastResult.ProveedoresClaseACount} proveedores", $"{_lastResult.ConcentracionClaseAPorcentaje:N1}% del volumen"));
+            }
+
+            List<ExportTableSection> exportSections = [];
+            if (inc.Contains("Ranking Pareto ABC"))
+            {
+                exportSections.Add(new ExportTableSection(
+                    "Ranking Pareto",
+                    onlySel ? "Proveedores Seleccionados" : "Ranking Completo Pareto ABC",
+                    ["RUT", "Proveedor", "Ciudad", "ABC", "Viajes", "Kilos Netos", "% Part.", "% Acum.", "Kg/Viaje", "Var % Periodo", "Último Envío", "Días Inactivo", "Material Top"],
+                    [.. finalRank.Select(r => new object?[]
+                    {
+                        r.Rut, r.Nombre, r.Ciudad, r.ClaseAbc, r.Viajes, r.TotalKilos,
+                        r.PorcentajeParticipacion, r.PorcentajeAcumulado, r.PromedioKgViaje,
+                        r.VariacionPorcentual, r.UltimoEnvio, r.DiasInactivo, r.ProductoPrincipal
+                    })]));
+            }
+
+            if (_lastDetail is not null)
+            {
+                if (inc.Contains("Mix Materiales del Proveedor"))
+                {
+                    IEnumerable<GrupoKilosItem> mix = exZero ? _lastDetail.MixMateriales.Where(m => m.Kilos > 0) : _lastDetail.MixMateriales;
+                    exportSections.Add(new ExportTableSection(
+                        "Mix Materiales",
+                        $"Mix de {_lastDetail.Resumen.Nombre}",
+                        ["Grupo Material", "Viajes", "Kilos Netos", "% Mix"],
+                        [.. mix.Select(m => new object?[] { m.Grupo, m.Viajes, m.Kilos, m.Porcentaje })]));
+                }
+
+                if (inc.Contains("Evolución Mensual del Proveedor"))
+                {
+                    IEnumerable<BarChartItemDto> ev = exZero ? _lastDetail.EvolucionMensual.Where(e => e.Value > 0) : _lastDetail.EvolucionMensual;
+                    exportSections.Add(new ExportTableSection(
+                        "Evolución Mensual",
+                        $"Evolución {_lastDetail.Resumen.Nombre}",
+                        ["Mes", "Kilos Netos"],
+                        [.. ev.Select(e => new object?[] { e.Label, e.Value })]));
+                }
+
+                if (inc.Contains("Orígenes Frecuentes"))
+                {
+                    IEnumerable<BarChartItemDto> origs = exZero ? _lastDetail.OrigenesFrecuentes.Where(o => o.Value > 0) : _lastDetail.OrigenesFrecuentes;
+                    exportSections.Add(new ExportTableSection(
+                        "Orígenes",
+                        $"Orígenes de {_lastDetail.Resumen.Nombre}",
+                        ["Origen", "Kilos Acumulados"],
+                        [.. origs.Select(o => new object?[] { o.Label, o.Value })]));
+                }
+
+                if (inc.Contains("Entregas / Folios del Proveedor"))
+                {
+                    IEnumerable<Pesaje> ent = onlySel && selEntregas.Count > 0 ? selEntregas : _lastDetail.Entregas;
+                    if (exZero) ent = ent.Where(p => p.PesoNeto > 0);
+                    exportSections.Add(new ExportTableSection(
+                        "Entregas Proveedor",
+                        $"Folios de {_lastDetail.Resumen.Nombre}",
+                        ["Folio", "Planta", "Fecha", "Patente", "Código", "Producto", "Origen", "Bruto", "Tara", "Neto Kg", "Observación"],
+                        [.. ent.Select(p => new object?[] { p.Folio, p.Planta.ToShortTitle(), p.FechaIngreso, p.Patente, p.CodProducto, p.NomProducto, p.Origen, p.PesoBruto, p.PesoTara, p.PesoNeto, p.Observacion })]));
+                }
+            }
+
+            string saved = _app.ExcelExporter.ExportReportePersonalizado(
+                path,
+                new ReportePersonalizadoPayload(dlg.TituloPersonalizado, _lastResult.PeriodoLabel, kpis, exportSections));
+
+            NotifyStatus($"Exportación personalizada generada: {saved}");
+            MessageBox.Show(this, $"Excel de proveedores generado correctamente:\n{saved}", "Exportación Exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
         }
         catch (Exception ex)
         {

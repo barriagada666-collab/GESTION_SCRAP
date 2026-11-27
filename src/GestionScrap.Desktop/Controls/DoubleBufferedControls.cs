@@ -37,6 +37,8 @@ public sealed class DashboardChartControl : Control
     private IReadOnlyList<BarChartItemDto> _barData = [];
     private IReadOnlyList<GrupoKilosItem> _donutData = [];
     private string _title = string.Empty;
+    private string _seriesActualLabel = "Período actual";
+    private string _seriesPrevLabel = "Anterior";
 
     private static readonly Color[] Palette =
     [
@@ -55,11 +57,17 @@ public sealed class DashboardChartControl : Control
         BackColor = Color.White;
     }
 
-    public void SetComparisonData(string title, IReadOnlyList<WeekComparisonDto> data)
+    public void SetComparisonData(
+        string title,
+        IReadOnlyList<WeekComparisonDto> data,
+        string seriesActualLabel = "Actual",
+        string seriesPrevLabel = "Anterior / YoY")
     {
         _mode = ChartRenderMode.AreaComparison;
         _title = title;
         _weekData = data;
+        _seriesActualLabel = seriesActualLabel;
+        _seriesPrevLabel = seriesPrevLabel;
         Invalidate();
     }
 
@@ -169,10 +177,15 @@ public sealed class DashboardChartControl : Control
             g.FillEllipse(dotAct, ptsActual[i].X - 4f, ptsActual[i].Y - 4f, 8, 8);
         }
 
-        g.FillRectangle(dotAct, Width - 210, 14, 10, 10);
-        g.DrawString("Período actual", axisFont, labelBrush, Width - 196, 12);
-        g.FillRectangle(dotPrev, Width - 108, 14, 10, 10);
-        g.DrawString("Anterior", axisFont, labelBrush, Width - 94, 12);
+        int legRight = Math.Max(220, Width - 14);
+        int bWidth = Math.Max(60, TextRenderer.MeasureText(_seriesPrevLabel, axisFont).Width + 18);
+        int aWidth = Math.Max(60, TextRenderer.MeasureText(_seriesActualLabel, axisFont).Width + 20);
+        int ax = legRight - bWidth - aWidth;
+        int bx = legRight - bWidth;
+        g.FillRectangle(dotAct, ax, 14, 10, 10);
+        g.DrawString(_seriesActualLabel, axisFont, labelBrush, ax + 14, 12);
+        g.FillRectangle(dotPrev, bx, 14, 10, 10);
+        g.DrawString(_seriesPrevLabel, axisFont, labelBrush, bx + 14, 12);
     }
 
     private void DrawHorizontalBars(Graphics g)

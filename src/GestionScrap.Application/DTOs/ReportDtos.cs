@@ -13,6 +13,84 @@ public sealed record PlantaResumenItem(Planta Planta, string NombrePlanta, int V
 
 public sealed record TipoPesajeResumenItem(TipoPesaje Tipo, string NombreTipo, int Viajes, long Kilos, double Porcentaje);
 
+/// <summary>
+/// Criterios avanzados de filtrado y segmentación del Módulo Informes.
+/// </summary>
+public sealed record InformeResumenFilterDto(
+    Planta? Planta = null,
+    TipoPesaje? TipoPesaje = null,
+    DateOnly? Desde = null,
+    DateOnly? Hasta = null,
+    long? GrupoNodeId = null,
+    string? ProveedorFiltro = null,
+    string? ProductoFiltro = null,
+    string? OrigenFiltro = null,
+    SegmentacionDimension Segmentacion = SegmentacionDimension.GrupoMaterial,
+    bool ExcluirTotalesCero = false,
+    bool ExcluirTrasladosInternos = false);
+
+/// <summary>
+/// Ficha estadística cuantitativa del período analizado.
+/// </summary>
+public sealed record EstadisticaAvanzadaDto(
+    double TotalToneladas,
+    long PesoMinimoKg,
+    long PesoMaximoKg,
+    double MedianaKgViaje,
+    double DesviacionEstandarKg,
+    int DiasOperativos,
+    double PromedioDiarioKg,
+    int PatentesUnicas,
+    long KilosMismoPeriodoAnioAnterior,
+    double VariacionAnualYoYPct,
+    string MejorMesLabel,
+    long MejorMesKilos,
+    string MejorAnioLabel,
+    long MejorAnioKilos);
+
+/// <summary>
+/// Fila de análisis comparativo mes a mes (MoM) y contra el mismo mes del año anterior (YoY).
+/// </summary>
+public sealed record ComparativoMensualDto(
+    int Anio,
+    int Mes,
+    string MesLabel,
+    int Viajes,
+    long KilosActual,
+    long KilosMesAnterior,
+    double VariacionMoMPct,
+    long KilosAnioAnterior,
+    double VariacionYoYPct,
+    double PromedioKgViaje);
+
+/// <summary>
+/// Fila de análisis comparativo año a año (YoY).
+/// </summary>
+public sealed record ComparativoAnualDto(
+    int Anio,
+    int Viajes,
+    long Kilos,
+    double Toneladas,
+    long KilosAnioAnterior,
+    double VariacionAnualPct,
+    double ParticipacionHistoricaPct,
+    double PromedioKgViaje,
+    int ProveedoresActivos);
+
+/// <summary>
+/// Fila de segmentación dinámica por planta, grupo, tipo, proveedor, producto, origen, mes o año.
+/// </summary>
+public sealed record SegmentacionItemDto(
+    string Clave,
+    string Segmento,
+    int Viajes,
+    long KilosActual,
+    double ParticipacionPct,
+    double PromedioKgViaje,
+    long KilosPeriodoAnterior,
+    double VariacionPct,
+    int ProveedoresUnicos);
+
 public sealed record InformeResumenDto(
     string PeriodoActualLabel,
     string PeriodoAnteriorLabel,
@@ -31,7 +109,12 @@ public sealed record InformeResumenDto(
     IReadOnlyList<GrupoKilosItem> PorGrupo,
     IReadOnlyList<WeekComparisonDto> Tendencia,
     IReadOnlyList<BarChartItemDto> TopProveedores,
-    IReadOnlyList<Pesaje> UltimosFolios);
+    IReadOnlyList<Pesaje> UltimosFolios,
+    EstadisticaAvanzadaDto Estadisticas,
+    IReadOnlyList<ComparativoMensualDto> PorMes,
+    IReadOnlyList<ComparativoAnualDto> PorAnio,
+    IReadOnlyList<SegmentacionItemDto> Segmentacion,
+    IReadOnlyList<Pesaje> MovimientosFiltrados);
 
 public sealed record MaterialTreeFlatRowDto(
     long NodeId,
@@ -99,3 +182,15 @@ public sealed record ProveedorDetalleResultDto(
     IReadOnlyList<BarChartItemDto> PatentesFrecuentes,
     IReadOnlyList<BarChartItemDto> OrigenesFrecuentes,
     IReadOnlyList<Pesaje> Entregas);
+
+public sealed record DatabaseResumenStatsDto(
+    long TotalPesajes,
+    long TotalKilos,
+    int TotalClientes,
+    int TotalProductos,
+    int TotalImportaciones,
+    DateOnly? FechaMinima,
+    DateOnly? FechaMaxima,
+    DateTime? UltimaImportacionUtc,
+    string UltimoOrigen,
+    string DestinoSqlitePath);

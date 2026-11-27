@@ -82,15 +82,46 @@ public sealed class MdbMigrationService(IScrapRepository repository) : IMdbMigra
             prodGroups.TryAdd(pr.Codigo, pr.Grupo);
         }
 
+        int totalLeidos = 0;
         int totalPesajes = 0;
-        totalPesajes += await ImportPlantPesajesAsync(extracted, "PESAJE_PLACILLA_2", Planta.Placilla, prodGroups, usuario, ct).ConfigureAwait(false);
-        totalPesajes += await ImportPlantPesajesAsync(extracted, "PESAJE_SANTIAGO", Planta.Santiago, prodGroups, usuario, ct).ConfigureAwait(false);
-        totalPesajes += await ImportPlantPesajesAsync(extracted, "PESAJE_TALCAHUANO", Planta.Talcahuano, prodGroups, usuario, ct).ConfigureAwait(false);
+        int totalDuplicados = 0;
+        long totalKilos = 0;
 
-        if (totalPesajes == 0 && extracted.ContainsKey("PESAJE_PLACILLA"))
+        async Task MergePlantAsync(string table, Planta pl)
         {
-            totalPesajes += await ImportPlantPesajesAsync(extracted, "PESAJE_PLACILLA", Planta.Placilla, prodGroups, usuario, ct).ConfigureAwait(false);
+            (int read, int imp, int dup, long kg) = await ImportPlantPesajesAsync(extracted, table, pl, prodGroups, usuario, ct).ConfigureAwait(false);
+            totalLeidos += read;
+            totalPesajes += imp;
+            totalDuplicados += dup;
+            totalKilos += kg;
         }
+
+        await MergePlantAsync("PESAJE_PLACILLA_2", Planta.Placilla).ConfigureAwait(false);
+        await MergePlantAsync("PESAJE_SANTIAGO", Planta.Santiago).ConfigureAwait(false);
+        await MergePlantAsync("PESAJE_TALCAHUANO", Planta.Talcahuano).ConfigureAwait(false);
+
+        if (totalLeidos == 0 && extracted.ContainsKey("PESAJE_PLACILLA"))
+        {
+            await MergePlantAsync("PESAJE_PLACILLA", Planta.Placilla).ConfigureAwait(false);
+        }
+
+        await _repository.AddImportHistoryAsync(new ImportacionHistorial
+        {
+            Usuario = usuario,
+            TipoOrigen = "Access MDB",
+            OrigenDetalle = mdbPath,
+            PlantaDestino = "Multi-Planta Access",
+            DestinoDetalle = _repository.DatabasePath,
+            RangoFiltro = "Todo el historial",
+            LeidosOrigen = totalLeidos,
+            ImportadosNuevos = totalPesajes,
+            DuplicadosOmitidos = totalDuplicados,
+            ClientesSincronizados = clientes.Count,
+            ProductosSincronizados = productos.Count,
+            KilosImportados = totalKilos,
+            Estado = totalPesajes > 0 ? "COMPLETADA" : "SIN NOVEDADES",
+            Observacion = warnings.Count > 0 ? string.Join(" | ", warnings.Take(2)) : "Migración Access completada"
+        }, ct).ConfigureAwait(false);
 
         await _repository.AddAuditLogAsync(new AuditLogEntry
         {
@@ -103,7 +134,7 @@ public sealed class MdbMigrationService(IScrapRepository repository) : IMdbMigra
         return (totalPesajes, clientes.Count, productos.Count, warnings);
     }
 
-    private async Task<int> ImportPlantPesajesAsync(
+    private async Task<(int ReadCount, int ImportedCount, int DuplicatesCount, long Kilos)> ImportPlantPesajesAsync(
         Dictionary<string, List<Dictionary<string, object?>>> data,
         string tableName,
         Planta planta,
@@ -113,7 +144,7 @@ public sealed class MdbMigrationService(IScrapRepository repository) : IMdbMigra
     {
         if (!data.TryGetValue(tableName, out List<Dictionary<string, object?>>? rows) || rows.Count == 0)
         {
-            return 0;
+            return (0, 0, 0, 0);
         }
 
         List<Pesaje> list = new(rows.Count);
@@ -171,8 +202,8 @@ public sealed class MdbMigrationService(IScrapRepository repository) : IMdbMigra
             });
         }
 
-        (int imported, _) = await _repository.ImportPesajesAsync(list, planta, usuario, ct).ConfigureAwait(false);
-        return imported;
+        (int imported, int duplicates) = await _repository.ImportPesajesAsync(list, planta, usuario, ct).ConfigureAwait(false);
+        return (list.Count, imported, duplicates, list.Sum(p => (long)p.PesoNeto));
     }
 
     private static void CollectProductos(

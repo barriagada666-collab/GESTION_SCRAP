@@ -2,12 +2,9 @@
 
 ## 1. Inicio de Sesión y Navegación
 
-Al iniciar **Gestión de Scrap**, el sistema muestra la pantalla de arranque (`SplashForm`) y luego el acceso (`LoginForm`):
-- Ingrese su **Usuario** y **Contraseña** (cuenta inicial de fábrica: `barriagada` / `Cambias0`).
-- Tras **5 intentos fallidos consecutivos**, la cuenta se bloquea automáticamente por **5 minutos**.
-- La barra lateral izquierda muestra únicamente los módulos habilitados para el perfil (`PerfilUsuario`) asignado a su cuenta.
+Al abrir **Gestión de Scrap**, el sistema presenta `SplashForm` y luego `LoginForm` (cuenta inicial de fábrica: `barriagada` / `Cambias0`). Tras **5 intentos fallidos consecutivos**, la cuenta se bloquea por **5 minutos**.
 
-### Atajos de Teclado Globales
+### Atajos de Teclado
 - `Ctrl+1`: **Informe Resumen**
 - `Ctrl+2`: **Grupos de Material**
 - `Ctrl+3`: **Análisis de Proveedores**
@@ -17,41 +14,26 @@ Al iniciar **Gestión de Scrap**, el sistema muestra la pantalla de arranque (`S
 
 ## 2. Módulos Operativos
 
-### 2.1 Informe Resumen (`Ctrl+1`)
-- Filtra por rango de fechas, **Planta** y **Tipo de Pesaje**.
-- Presenta tarjetas KPI (`Total Kilos`, `Viajes`, `Promedio Kg/Viaje`, `Variación % vs Período Anterior`, `Última Jornada`, `Proveedores Activos` y `Productos Activos`).
-- Dibuja gráficos GDI+ con doble búfer (tendencia comparativa semanal, top proveedores y distribución por grupo de material) más desglose por planta, tipo de pesaje y últimos folios ingresados.
-- Permite exportar el resumen completo a **Excel (`.xlsx`)** y navegar directamente hacia el módulo de grupos, proveedores o importación.
+### 2.1 Informe Resumen, Datos, Segmentación y Comparativos (`Ctrl+1`)
+- **Filtros y Checkboxes:** Filtre por `Planta`, `Movimiento`, `Grupo Material`, `Proveedor/RUT/Patente`, `Producto/Código` y rango `Desde/Hasta`. Active **`Excluir totales en 0`** para ocultar registros y grupos sin kilos, o **`Sin traslados`** para aislar compras/recepciones reales.
+- **KPIs y Ficha Estadística:** Visualice volumen en Kg y Toneladas, viajes, promedio, mediana, mínimo, máximo, desviación estándar, días operativos, ritmo diario, mejor mes/año y variación interanual (**YoY**).
+- **Subpestaña `Comparativo Año a Año (YoY) y Mes a Mes (MoM)`:** Muestra el gráfico mensual vs año anterior, el consolidado anual con variación YoY y la evolución mes a mes con variación **MoM** y **YoY**.
+- **Subpestaña `Segmentación y Análisis de Datos`:** Elija `Segmentar por` (`Grupo Material`, `Planta`, `Tipo Movimiento`, `Proveedor`, `Producto`, `Origen`, `Mes`, `Año`). Seleccione una o varias filas de segmento (`Ctrl`/`Shift` + clic) para filtrar los movimientos detallados inferiores.
+- **Exportación:** Use **`Exportar Resumen`** para el libro estándar, o **`Exportar Selección...`** (`ExportacionPersonalizadaDialog`) para exportar **únicamente las filas seleccionadas** y elegir qué secciones estadísticas incluir.
 
 ### 2.2 Grupos de Material con Árbol CRUD Jerárquico (`Ctrl+2`)
-- **Árbol Editable (`MaterialGroupNode`):** Organiza los productos reales en **Nodos Padre**, **Subgrupos** y **Productos Hijo**.
-- **Operaciones CRUD disponibles:**
-  - **Nuevo Padre:** Crea un grupo raíz con nombre y color corporativo (`MaterialNodeEditorDialog`).
-  - **Nuevo Subgrupo:** Agrega un subgrupo debajo del nodo padre o subgrupo seleccionado.
-  - **Asignar Producto Hijo:** Inserta productos reales aún no clasificados (`GetUnassignedProductsAsync`) dentro de una carpeta del árbol.
-  - **Editar / Renombrar:** Modifica el nombre o color de cualquier nodo.
-  - **Mover (`MoverNodoDialog` o Drag & Drop):** Traslada subgrupos o productos hacia otro nodo padre o subgrupo.
-  - **Subir / Bajar:** Reordena hermanos dentro de su mismo nivel.
-  - **Quitar / Eliminar:** Elimina el nodo o desvincula un producto, permitiendo elegir conservar o eliminar subnodos hijos.
-- **Informe Jerárquico:** Consolida kilos netos, viajes, participación porcentual y promedio por viaje para todo el árbol dentro del rango filtrado y exporta a `.xlsx`.
+- Cree y organice **Grupos Padre**, **Subgrupos** y **Productos Hijo** (editar, mover mediante diálogo o arrastrar/soltar, reordenar y quitar).
+- Active **`Excluir totales en 0`** para limpiar nodos sin movimiento en el rango analizado.
+- Use **`Exportar Selección...`** para exportar **únicamente la subrama del árbol** o las filas seleccionadas en la grilla.
 
 ### 2.3 Análisis de Proveedores (`Ctrl+3`)
-- Construye el ranking **Pareto ABC** de proveedores (`Clase A` hasta ~80 % acumulado, `Clase B` hasta ~95 %, `Clase C` restante), comparando kilos del período actual contra el período anterior e informando días desde el último envío.
-- Al seleccionar un proveedor en la tabla principal, carga su ficha completa (`ProveedorDetalleResultDto`):
-  - **Mix de Materiales** y **Productos Principales**.
-  - **Evolución Mensual** en gráfico GDI+.
-  - **Flota / Patentes Frecuentes** y **Orígenes Frecuentes**.
-  - **Entregas / Folios Completos** en el período seleccionado.
-- Exporta un libro Excel multi-hoja (`.xlsx`) con el ranking Pareto ABC y el detalle completo del proveedor seleccionado.
+- Ranking **Pareto ABC**, variación porcentual entre períodos, días inactivos, ficha detalle con mix de materiales, evolución mensual, patentes y orígenes.
+- Incluye **`Excluir totales en 0`**, multi-selección de proveedores/entregas y **`Exportar Selección...`**.
 
-### 2.4 Importador Multi-Origen (`Ctrl+4`)
-- **Firebird TCP/IP (`WMDBSPC.GDB` / `PWAREHOUSE.FDB`):**
-  - Presets incorporados para `Placilla 2 (\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB)`, `Placilla Histórico (WMDBSPC.GDB)` y `Talcahuano (PWAREHOUSE.FDB)`.
-  - **Probar Conexión:** Verifica latencia TCP, cantidad de tablas, total de pesajes remotos y fechas mínima/máxima.
-  - **Consultar e Importar:** Lista registros del rango elegido, detecta duplicados automáticamente y actualiza en SQLite pesajes, catálogo de clientes (`DBCLIENTES`) y catálogo de productos (`DBPRODUCTOS`).
-- **Migración Access (`.mdb` / `.accdb`):** Importación opcional directa de históricos legacy desde archivo Access.
+### 2.4 Importador Simple y Control Origen -> Destino (`Ctrl+4`)
+- **Pestaña `Importar Firebird (WMDBSPC.GDB)`:** Muestra el flujo directo `DESDE (IP:Puerto · Ruta .GDB/.FDB) ➔ HACIA (SQLite local)`. Permite `Importar Directo` en 1 clic, `Vista Previa`, `Omitir 0 Kg` y exportar la vista previa/selección.
+- **Pestaña `Importar Access (.mdb / .accdb)`:** Migra bases Access hacia SQLite local registrando la trazabilidad.
+- **Pestaña `Control e Historial (Desde -> Hacia)`:** Consulta la tabla persistente `import_history` con origen exacto, destino exacto, rango, leídos, nuevos, duplicados, kilos y exportación Excel.
 
-### 2.5 Seguridad, Perfiles y Auditoría (`Ctrl+5`)
-- **Perfiles RBAC (`PerfilUsuario`):** Crear, editar y eliminar perfiles personalizados seleccionando cualquiera de los `9` permisos (`PermisoSistema`), más los `5` perfiles base (`Administrador`, `Supervisor`, `Analista`, `Operador`, `Auditor`).
-- **Usuarios:** Alta, edición, activación/desactivación, asignación de perfil, restablecimiento de clave y desbloqueo de cuentas.
-- **Auditoría y Mantenimiento:** Visor filtrable de `audit_log` con exportación a `.xlsx`, respaldo SQLite en caliente (`BackupDatabaseAsync`) y limpieza total de tablas confirmada con la palabra `"ELIMINAR"`.
+### 2.5 Seguridad y Perfiles (`Ctrl+5`)
+- Administración CRUD de **Perfiles RBAC (`PerfilUsuario`)** y **Usuarios**, visor filtrable `audit_log`, respaldo SQLite en caliente (`BackupDatabaseAsync`) y purga confirmada (`"ELIMINAR"`).

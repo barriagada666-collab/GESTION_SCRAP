@@ -8,10 +8,12 @@ namespace GestionScrap.Application.Services;
 
 /// <summary>
 /// Motor de reglas de negocio puras: clasificación jerárquica de materiales, mapeo Firebird WMDBSPC,
-/// detección de duplicados y analítica Pareto ABC de proveedores.
+/// detección de duplicados, comparativos YoY/MoM, segmentación dinámica y analítica Pareto ABC.
 /// </summary>
 public static class BusinessRules
 {
+    private static readonly CultureInfo EsCl = CultureInfo.GetCultureInfo("es-CL");
+
     public static readonly (string Nombre, string ColorHex)[] DefaultParentGroups =
     [
         ("SCRAP SUPERMERCADO & MIX", "#0891B2"),
@@ -23,6 +25,16 @@ public static class BusinessRules
         ("MAQUILADOS Y DESECHOS", "#D97706"),
         ("PELLETS Y OTROS", "#475569")
     ];
+
+    public static double CalculatePercentDelta(long current, long previous)
+    {
+        if (previous == 0)
+        {
+            return current > 0 ? 100.0 : 0.0;
+        }
+
+        return Math.Round((current - previous) * 100.0 / previous, 1);
+    }
 
     public static bool IsDuplicatePesaje(
         IEnumerable<Pesaje> existingPesajes,
@@ -159,22 +171,251 @@ public static class BusinessRules
         };
     }
 
+    public static EstadisticaAvanzadaDto ComputeEstadisticas(
+        IReadOnlyList<Pesaje> actuales,
+        IReadOnlyList<Pesaje> scopeAllDates,
+        DateOnly startDate,
+        DateOnly endDate)
+    {
+        long totalKilos = actuales.Sum(p => (long)p.PesoNeto);
+        double totalTon = Math.Round(totalKilos / 1000.0, 2);
+
+        long minKg = 0;
+        long maxKg = 0;
+        double medianKg = 0;
+        double stdDev = 0;
+        int diasOp = 0;
+        double promDiario = 0;
+        int patentes = 0;
+
+        if (actuales.Count > 0)
+        {
+            int[] sorted = [.. actuales.Select(p => p.PesoNeto).OrderBy(x => x)];
+            minKg = sorted[0];
+            maxKg = sorted[^1];
+            int mid = sorted.Length / 2;
+            medianKg = sorted.Length % 2 == 1 ? sorted[mid] : Math.Round((sorted[mid - 1] + sorted[mid]) / 2.0, 1);
+
+            double mean = totalKilos / (double)sorted.Length;
+            double variance = sorted.Sum(x => (x - mean) * (x - mean)) / sorted.Length;
+            stdDev = Math.Round(Math.Sqrt(variance), 1);
+
+            diasOp = actuales.Select(p => p.FechaIngreso).Distinct().Count();
+            promDiario = diasOp > 0 ? Math.Round(totalKilos / (double)diasOp, 1) : 0.0;
+            patentes = actuales
+                .Select(p => p.Patente.Trim())
+                .Where(pat => !string.IsNullOrEmpty(pat) && pat != "S/P")
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Count();
+        }
+
+        DateOnly yoyStart = startDate.AddYears(-1);
+        DateOnly yoyEnd = endDate.AddYears(-1);
+        long yoyKilos = scopeAllDates
+            .Where(p => p.FechaIngreso >= yoyStart && p.FechaIngreso <= yoyEnd)
+            .Sum(p => (long)p.PesoNeto);
+        double yoyPct = CalculatePercentDelta(totalKilos, yoyKilos);
+
+        var bestMonth = scopeAllDates
+            .GroupBy(p => new DateOnly(p.FechaIngreso.Year, p.FechaIngreso.Month, 1))
+            .Select(g => new { Label = g.Key.ToString("MMM yyyy", EsCl), Kilos = g.Sum(x => (long)x.PesoNeto) })
+            .OrderByDescending(x => x.Kilos)
+            .FirstOrDefault();
+
+        var bestYear = scopeAllDates
+            .GroupBy(p => p.FechaIngreso.Year)
+            .Select(g => new { Label = g.Key.ToString(CultureInfo.InvariantCulture), Kilos = g.Sum(x => (long)x.PesoNeto) })
+            .OrderByDescending(x => x.Kilos)
+            .FirstOrDefault();
+
+        return new EstadisticaAvanzadaDto(
+            totalTon,
+            minKg,
+            maxKg,
+            medianKg,
+            stdDev,
+            diasOp,
+            promDiario,
+            patentes,
+            yoyKilos,
+            yoyPct,
+            bestMonth?.Label ?? "-",
+            bestMonth?.Kilos ?? 0,
+            bestYear?.Label ?? "-",
+            bestYear?.Kilos ?? 0);
+    }
+
+    public static IReadOnlyList<ComparativoMensualDto> BuildComparativoMensual(
+        IReadOnlyList<Pesaje> scopeAllDates,
+        bool excluirTotalesCero = false)
+    {
+        var monthlyDict = scopeAllDates
+            .GroupBy(p => (p.FechaIngreso.Year, p.FechaIngreso.Month))
+            .ToDictionary(
+                g => g.Key,
+                g => (Viajes: g.Count(), Kilos: g.Sum(x => (long)x.PesoNeto)));
+
+        List<(int Year, int Month)> orderedKeys = [.. monthlyDict.Keys.OrderBy(k => k.Year).ThenBy(k => k.Month)];
+        List<ComparativoMensualDto> rows = new(orderedKeys.Count);
+
+        foreach ((int year, int month) in orderedKeys)
+        {
+            (int viajes, long kilos) = monthlyDict[(year, month)];
+            if (excluirTotalesCero && kilos <= 0)
+            {
+                continue;
+            }
+
+            (int prevY, int prevM) = month == 1 ? (year - 1, 12) : (year, month - 1);
+            long prevMonthKilos = monthlyDict.TryGetValue((prevY, prevM), out var pm) ? pm.Kilos : 0L;
+            long prevYearKilos = monthlyDict.TryGetValue((year - 1, month), out var py) ? py.Kilos : 0L;
+
+            DateOnly dt = new(year, month, 1);
+            rows.Add(new ComparativoMensualDto(
+                year,
+                month,
+                dt.ToString("MMM yyyy", EsCl),
+                viajes,
+                kilos,
+                prevMonthKilos,
+                CalculatePercentDelta(kilos, prevMonthKilos),
+                prevYearKilos,
+                CalculatePercentDelta(kilos, prevYearKilos),
+                viajes > 0 ? Math.Round(kilos / (double)viajes, 1) : 0.0));
+        }
+
+        return [.. rows.OrderByDescending(r => r.Anio).ThenByDescending(r => r.Mes)];
+    }
+
+    public static IReadOnlyList<ComparativoAnualDto> BuildComparativoAnual(
+        IReadOnlyList<Pesaje> scopeAllDates,
+        bool excluirTotalesCero = false)
+    {
+        Dictionary<int, (int Viajes, long Kilos, int Prov)> byYear = scopeAllDates
+            .GroupBy(p => p.FechaIngreso.Year)
+            .ToDictionary(
+                g => g.Key,
+                g => (
+                    g.Count(),
+                    g.Sum(x => (long)x.PesoNeto),
+                    g.Select(x => RutChileno.NormalizeBody(x.RutCliente)).Where(r => !string.IsNullOrEmpty(r)).Distinct(StringComparer.OrdinalIgnoreCase).Count()));
+
+        long grandTotal = Math.Max(1, byYear.Values.Sum(v => v.Kilos));
+        List<ComparativoAnualDto> rows = [];
+
+        foreach (int year in byYear.Keys.OrderByDescending(y => y))
+        {
+            (int viajes, long kilos, int provs) = byYear[year];
+            if (excluirTotalesCero && kilos <= 0)
+            {
+                continue;
+            }
+
+            long prevYearKilos = byYear.TryGetValue(year - 1, out var py) ? py.Kilos : 0L;
+            rows.Add(new ComparativoAnualDto(
+                year,
+                viajes,
+                kilos,
+                Math.Round(kilos / 1000.0, 2),
+                prevYearKilos,
+                CalculatePercentDelta(kilos, prevYearKilos),
+                Math.Round(kilos * 100.0 / grandTotal, 1),
+                viajes > 0 ? Math.Round(kilos / (double)viajes, 1) : 0.0,
+                provs));
+        }
+
+        return rows;
+    }
+
+    public static IReadOnlyList<SegmentacionItemDto> BuildSegmentacion(
+        SegmentacionDimension dimension,
+        IReadOnlyList<Pesaje> actuales,
+        IReadOnlyList<Pesaje> anteriores,
+        IReadOnlyDictionary<string, string> prodToRootGroup,
+        bool excluirTotalesCero = false)
+    {
+        (string Key, string Label) ResolveKey(Pesaje p) => dimension switch
+        {
+            SegmentacionDimension.Planta => (p.Planta.ToString(), p.Planta.ToShortTitle()),
+            SegmentacionDimension.TipoPesaje => (p.TipoPesaje.ToString(), p.TipoPesaje.ToDisplayName()),
+            SegmentacionDimension.Proveedor =>
+                (string.IsNullOrWhiteSpace(RutChileno.NormalizeBody(p.RutCliente)) ? p.NomCliente.Trim().ToUpperInvariant() : RutChileno.NormalizeBody(p.RutCliente),
+                 string.IsNullOrWhiteSpace(p.NomCliente) ? p.RutCliente : $"{p.NomCliente.Trim()} ({p.RutCliente.Trim()})"),
+            SegmentacionDimension.Producto =>
+                (p.CodProducto.Trim().ToUpperInvariant(), $"{p.CodProducto.Trim()} · {p.NomProducto.Trim()}"),
+            SegmentacionDimension.Origen =>
+                (string.IsNullOrWhiteSpace(p.Origen) ? "SIN ORIGEN" : p.Origen.Trim().ToUpperInvariant(),
+                 string.IsNullOrWhiteSpace(p.Origen) ? "Sin origen registrado" : p.Origen.Trim()),
+            SegmentacionDimension.Mes =>
+                ($"{p.FechaIngreso.Year:D4}-{p.FechaIngreso.Month:D2}",
+                 new DateOnly(p.FechaIngreso.Year, p.FechaIngreso.Month, 1).ToString("MMM yyyy", EsCl)),
+            SegmentacionDimension.Anio =>
+                (p.FechaIngreso.Year.ToString(CultureInfo.InvariantCulture),
+                 p.FechaIngreso.Year.ToString(CultureInfo.InvariantCulture)),
+            _ => ResolveMaterialGroupKey(p, prodToRootGroup)
+        };
+
+        static (string Key, string Label) ResolveMaterialGroupKey(Pesaje p, IReadOnlyDictionary<string, string> prodMap)
+        {
+            string code = p.CodProducto.Trim().ToUpperInvariant();
+            string grp = prodMap.TryGetValue(code, out string? g) && !string.IsNullOrWhiteSpace(g) ? g : p.GrupoMaterial;
+            return (grp.Trim().ToUpperInvariant(), grp.Trim());
+        }
+
+        Dictionary<string, long> prevMap = anteriores
+            .GroupBy(p => ResolveKey(p).Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Sum(x => (long)x.PesoNeto), StringComparer.OrdinalIgnoreCase);
+
+        long totalActual = Math.Max(1, actuales.Sum(p => (long)p.PesoNeto));
+
+        var grouped = actuales
+            .GroupBy(p => ResolveKey(p).Key, StringComparer.OrdinalIgnoreCase)
+            .Select(g =>
+            {
+                string label = ResolveKey(g.First()).Label;
+                long kilos = g.Sum(x => (long)x.PesoNeto);
+                int viajes = g.Count();
+                long prevKilos = prevMap.TryGetValue(g.Key, out long pk) ? pk : 0L;
+                int provs = g.Select(x => RutChileno.NormalizeBody(x.RutCliente)).Where(r => !string.IsNullOrEmpty(r)).Distinct(StringComparer.OrdinalIgnoreCase).Count();
+
+                return new SegmentacionItemDto(
+                    g.Key,
+                    label,
+                    viajes,
+                    kilos,
+                    Math.Round(kilos * 100.0 / totalActual, 1),
+                    viajes > 0 ? Math.Round(kilos / (double)viajes, 1) : 0.0,
+                    prevKilos,
+                    CalculatePercentDelta(kilos, prevKilos),
+                    provs);
+            })
+            .Where(s => !excluirTotalesCero || s.KilosActual > 0)
+            .OrderByDescending(s => s.KilosActual)
+            .ToList();
+
+        return grouped;
+    }
+
     public static GrupoMaterialReportResultDto BuildMaterialTreeReport(
         string periodoLabel,
         IReadOnlyList<MaterialGroupNode> nodes,
         IReadOnlyList<Pesaje> pesajes,
         IReadOnlyList<Producto> catalogProductos,
-        long? filterSelectedNodeId = null)
+        long? filterSelectedNodeId = null,
+        bool excluirTotalesCero = false)
     {
-        Dictionary<string, (int Viajes, long Kilos)> statsByCode = pesajes
+        IEnumerable<Pesaje> effectivePesajes = excluirTotalesCero ? pesajes.Where(p => p.PesoNeto > 0) : pesajes;
+        List<Pesaje> filteredPesajes = [.. effectivePesajes];
+
+        Dictionary<string, (int Viajes, long Kilos)> statsByCode = filteredPesajes
             .GroupBy(p => p.CodProducto.Trim().ToUpperInvariant())
             .ToDictionary(
                 g => g.Key,
                 g => (g.Count(), g.Sum(x => (long)x.PesoNeto)),
                 StringComparer.OrdinalIgnoreCase);
 
-        long totalPeriodKilos = pesajes.Sum(p => (long)p.PesoNeto);
-        int totalPeriodViajes = pesajes.Count;
+        long totalPeriodKilos = filteredPesajes.Sum(p => (long)p.PesoNeto);
+        int totalPeriodViajes = filteredPesajes.Count;
 
         Dictionary<long, List<MaterialGroupNode>> childrenByParent = nodes
             .GroupBy(n => n.ParentId ?? 0L)
@@ -231,6 +472,11 @@ public static class BusinessRules
             foreach (MaterialGroupNode node in list)
             {
                 (int viajes, long kilos) = ComputeSubtreeStats(node.Id, []);
+                if (excluirTotalesCero && kilos <= 0)
+                {
+                    continue;
+                }
+
                 double pct = totalPeriodKilos > 0 ? Math.Round(kilos * 100.0 / totalPeriodKilos, 2) : 0.0;
                 double prom = viajes > 0 ? Math.Round((double)kilos / viajes, 1) : 0.0;
                 string prefix = level == 0 ? string.Empty : new string(' ', level * 4) + "└─ ";
@@ -260,7 +506,7 @@ public static class BusinessRules
             .Select(n => n.CodigoProducto.Trim().ToUpperInvariant())];
 
         List<KeyValuePair<string, (int Viajes, long Kilos)>> unassignedWithActivity = [.. statsByCode
-            .Where(kv => !assignedCodes.Contains(kv.Key))
+            .Where(kv => !assignedCodes.Contains(kv.Key) && (!excluirTotalesCero || kv.Value.Kilos > 0))
             .OrderByDescending(kv => kv.Value.Kilos)];
 
         int unassignedCatalogCount = catalogProductos.Count(p => !assignedCodes.Contains(p.Codigo.Trim().ToUpperInvariant()));
@@ -308,7 +554,7 @@ public static class BusinessRules
         }
 
         List<GrupoKilosItem> rootSummary = [.. flatRows
-            .Where(r => r.Nivel == 0 && r.TotalKilos > 0)
+            .Where(r => r.Nivel == 0 && (!excluirTotalesCero || r.TotalKilos > 0))
             .OrderByDescending(r => r.TotalKilos)
             .Select(r => new GrupoKilosItem(r.Nombre, r.TotalKilos, r.Viajes, r.Porcentaje))];
 
@@ -390,8 +636,11 @@ public static class BusinessRules
         IReadOnlyList<Pesaje> actuales,
         IReadOnlyList<Pesaje> anteriores,
         IReadOnlyList<Cliente> clientes,
-        IReadOnlyDictionary<string, string>? productToRootGroup = null)
+        IReadOnlyDictionary<string, string>? productToRootGroup = null,
+        bool excluirTotalesCero = false)
     {
+        IEnumerable<Pesaje> effectiveActuales = excluirTotalesCero ? actuales.Where(p => p.PesoNeto > 0) : actuales;
+
         Dictionary<string, Cliente> clientLookup = [];
         foreach (Cliente c in clientes)
         {
@@ -407,7 +656,7 @@ public static class BusinessRules
             .Where(g => !string.IsNullOrEmpty(g.Key))
             .ToDictionary(g => g.Key, g => g.Sum(x => (long)x.PesoNeto), StringComparer.OrdinalIgnoreCase);
 
-        var grouped = actuales
+        var grouped = effectiveActuales
             .GroupBy(p =>
             {
                 string body = RutChileno.NormalizeBody(p.RutCliente);
@@ -439,9 +688,7 @@ public static class BusinessRules
                     .First().Key;
 
                 prevKilosByRut.TryGetValue(g.Key, out long prevKilos);
-                double varPct = prevKilos == 0
-                    ? (kilos > 0 ? 100.0 : 0.0)
-                    : Math.Round((kilos - prevKilos) * 100.0 / prevKilos, 1);
+                double varPct = CalculatePercentDelta(kilos, prevKilos);
 
                 return new
                 {
@@ -462,6 +709,7 @@ public static class BusinessRules
                     ProdTop = prodTop
                 };
             })
+            .Where(x => !excluirTotalesCero || x.Kilos > 0)
             .OrderByDescending(x => x.Kilos)
             .ToList();
 
@@ -531,12 +779,16 @@ public static class BusinessRules
     public static ProveedorDetalleResultDto BuildProveedorDetalle(
         ProveedorRankingRowDto resumen,
         IReadOnlyList<Pesaje> entregasProveedor,
-        IReadOnlyDictionary<string, string>? productToRootGroup = null)
+        IReadOnlyDictionary<string, string>? productToRootGroup = null,
+        bool excluirTotalesCero = false)
     {
-        long totalKilos = entregasProveedor.Sum(p => (long)p.PesoNeto);
-        CultureInfo esCl = CultureInfo.GetCultureInfo("es-CL");
+        List<Pesaje> filtered = excluirTotalesCero
+            ? [.. entregasProveedor.Where(p => p.PesoNeto > 0)]
+            : [.. entregasProveedor];
 
-        List<GrupoKilosItem> mixMateriales = [.. entregasProveedor
+        long totalKilos = filtered.Sum(p => (long)p.PesoNeto);
+
+        List<GrupoKilosItem> mixMateriales = [.. filtered
             .GroupBy(p =>
             {
                 string code = p.CodProducto.Trim().ToUpperInvariant();
@@ -548,28 +800,33 @@ public static class BusinessRules
                 double pct = totalKilos > 0 ? Math.Round(k * 100.0 / totalKilos, 1) : 0.0;
                 return new GrupoKilosItem(g.Key, k, g.Count(), pct);
             })
+            .Where(x => !excluirTotalesCero || x.Kilos > 0)
             .OrderByDescending(x => x.Kilos)];
 
-        List<BarChartItemDto> productos = [.. entregasProveedor
+        List<BarChartItemDto> productos = [.. filtered
             .GroupBy(p => $"{p.CodProducto} · {p.NomProducto}")
             .Select(g => new BarChartItemDto(g.Key, g.Sum(x => (long)x.PesoNeto)))
+            .Where(x => !excluirTotalesCero || x.Value > 0)
             .OrderByDescending(x => x.Value)
             .Take(8)];
 
-        List<BarChartItemDto> evolucion = [.. entregasProveedor
+        List<BarChartItemDto> evolucion = [.. filtered
             .GroupBy(p => new DateOnly(p.FechaIngreso.Year, p.FechaIngreso.Month, 1))
             .OrderBy(g => g.Key)
-            .Select(g => new BarChartItemDto(g.Key.ToString("MMM yyyy", esCl), g.Sum(x => (long)x.PesoNeto)))];
+            .Select(g => new BarChartItemDto(g.Key.ToString("MMM yyyy", EsCl), g.Sum(x => (long)x.PesoNeto)))
+            .Where(x => !excluirTotalesCero || x.Value > 0)];
 
-        List<BarChartItemDto> patentes = [.. entregasProveedor
+        List<BarChartItemDto> patentes = [.. filtered
             .GroupBy(p => string.IsNullOrWhiteSpace(p.Patente) ? "S/P" : p.Patente)
             .Select(g => new BarChartItemDto($"{g.Key} ({g.Count()} v.)", g.Sum(x => (long)x.PesoNeto)))
+            .Where(x => !excluirTotalesCero || x.Value > 0)
             .OrderByDescending(x => x.Value)
             .Take(8)];
 
-        List<BarChartItemDto> origenes = [.. entregasProveedor
+        List<BarChartItemDto> origenes = [.. filtered
             .GroupBy(p => string.IsNullOrWhiteSpace(p.Origen) ? "NO ESPECIFICADO" : p.Origen)
             .Select(g => new BarChartItemDto(g.Key, g.Sum(x => (long)x.PesoNeto)))
+            .Where(x => !excluirTotalesCero || x.Value > 0)
             .OrderByDescending(x => x.Value)
             .Take(6)];
 
@@ -580,6 +837,6 @@ public static class BusinessRules
             evolucion,
             patentes,
             origenes,
-            [.. entregasProveedor.OrderByDescending(p => p.FechaIngreso).ThenByDescending(p => p.Folio)]);
+            [.. filtered.OrderByDescending(p => p.FechaIngreso).ThenByDescending(p => p.Folio)]);
     }
 }

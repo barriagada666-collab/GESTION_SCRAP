@@ -7,8 +7,8 @@ using GestionScrap.Domain.ValueObjects;
 namespace GestionScrap.Application.Services;
 
 /// <summary>
-/// Servicio principal de aplicación enfocado en Informe Resumen, Grupos de Material Jerárquicos,
-/// Análisis Robusto de Proveedores, Importador Multi-Origen y Gestión de Usuarios/Perfiles.
+/// Servicio principal de aplicación enfocado en Informe Resumen con analítica YoY/MoM y segmentación,
+/// Grupos de Material Jerárquicos, Análisis de Proveedores, Importador trazable y Perfiles RBAC.
 /// </summary>
 public sealed class ScrapApplicationService(
     IScrapRepository repository,
@@ -25,42 +25,94 @@ public sealed class ScrapApplicationService(
 
     private string Actor => _auth.CurrentUser?.NombreUsuario ?? "SISTEMA";
 
-    public async Task<InformeResumenDto> GetInformeResumenAsync(
+    public Task<InformeResumenDto> GetInformeResumenAsync(
         Planta? planta = null,
         TipoPesaje? tipoPesaje = null,
         DateOnly? desde = null,
         DateOnly? hasta = null,
+        CancellationToken ct = default) =>
+        GetInformeResumenAsync(new InformeResumenFilterDto(planta, tipoPesaje, desde, hasta), ct);
+
+    public async Task<InformeResumenDto> GetInformeResumenAsync(
+        InformeResumenFilterDto filter,
         CancellationToken ct = default)
     {
         _auth.EnsurePermission(PermisoSistema.VerInformeResumen);
 
-        IReadOnlyList<Pesaje> allPesajes = await _repository.GetPesajesAsync(planta, ct: ct).ConfigureAwait(false);
+        IReadOnlyList<Pesaje> rawPesajes = await _repository.GetPesajesAsync(filter.Planta, ct: ct).ConfigureAwait(false);
         IReadOnlyList<MaterialGroupNode> nodes = await _repository.GetMaterialNodesAsync(ct).ConfigureAwait(false);
         Dictionary<string, string> groupMap = BusinessRules.BuildProductToRootGroupMap(nodes);
 
-        if (tipoPesaje.HasValue)
+        HashSet<string>? allowedCodes = null;
+        if (filter.GrupoNodeId.HasValue && filter.GrupoNodeId.Value > 0)
         {
-            allPesajes = [.. allPesajes.Where(p => p.TipoPesaje == tipoPesaje.Value)];
+            allowedCodes = CollectDescendantCodes(nodes, filter.GrupoNodeId.Value);
         }
 
-        DateOnly endDate = hasta ?? (allPesajes.Count > 0 ? allPesajes.Max(p => p.FechaIngreso) : DateOnly.FromDateTime(DateTime.Today));
-        DateOnly startDate = desde ?? (allPesajes.Count > 0 ? new DateOnly(endDate.Year, endDate.Month, 1) : endDate.AddMonths(-1));
+        IEnumerable<Pesaje> scoped = rawPesajes;
+        if (filter.TipoPesaje.HasValue)
+        {
+            scoped = scoped.Where(p => p.TipoPesaje == filter.TipoPesaje.Value);
+        }
+
+        if (filter.ExcluirTrasladosInternos)
+        {
+            scoped = scoped.Where(p => !p.EsTraslado);
+        }
+
+        if (filter.ExcluirTotalesCero)
+        {
+            scoped = scoped.Where(p => p.PesoNeto > 0);
+        }
+
+        if (allowedCodes is not null)
+        {
+            scoped = scoped.Where(p => allowedCodes.Contains(p.CodProducto.Trim().ToUpperInvariant()));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.ProveedorFiltro))
+        {
+            string term = filter.ProveedorFiltro.Trim();
+            scoped = scoped.Where(p =>
+                p.NomCliente.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                p.RutCliente.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                p.Patente.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.ProductoFiltro))
+        {
+            string term = filter.ProductoFiltro.Trim();
+            scoped = scoped.Where(p =>
+                p.CodProducto.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                p.NomProducto.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.OrigenFiltro))
+        {
+            string term = filter.OrigenFiltro.Trim();
+            scoped = scoped.Where(p =>
+                p.Origen.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                p.Destino.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        List<Pesaje> allInScope = [.. scoped];
+
+        DateOnly endDate = filter.Hasta ?? (allInScope.Count > 0 ? allInScope.Max(p => p.FechaIngreso) : DateOnly.FromDateTime(DateTime.Today));
+        DateOnly startDate = filter.Desde ?? (allInScope.Count > 0 ? new DateOnly(endDate.Year, endDate.Month, 1) : endDate.AddMonths(-1));
         ValidateDateRange(startDate, endDate);
 
         int rangeDays = Math.Max(1, endDate.DayNumber - startDate.DayNumber + 1);
         DateOnly prevEnd = startDate.AddDays(-1);
         DateOnly prevStart = prevEnd.AddDays(-(rangeDays - 1));
 
-        List<Pesaje> actuales = [.. allPesajes.Where(p => p.FechaIngreso >= startDate && p.FechaIngreso <= endDate)];
-        List<Pesaje> anteriores = [.. allPesajes.Where(p => p.FechaIngreso >= prevStart && p.FechaIngreso <= prevEnd)];
+        List<Pesaje> actuales = [.. allInScope.Where(p => p.FechaIngreso >= startDate && p.FechaIngreso <= endDate)];
+        List<Pesaje> anteriores = [.. allInScope.Where(p => p.FechaIngreso >= prevStart && p.FechaIngreso <= prevEnd)];
 
         long totalKilos = actuales.Sum(p => (long)p.PesoNeto);
         int totalViajes = actuales.Count;
         double promViaje = totalViajes > 0 ? Math.Round((double)totalKilos / totalViajes, 1) : 0.0;
         long totalAnterior = anteriores.Sum(p => (long)p.PesoNeto);
-        double variacion = totalAnterior == 0
-            ? (totalKilos > 0 ? 100.0 : 0.0)
-            : Math.Round((totalKilos - totalAnterior) * 100.0 / totalAnterior, 1);
+        double variacion = BusinessRules.CalculatePercentDelta(totalKilos, totalAnterior);
 
         int provActivos = actuales
             .Select(p => RutChileno.NormalizeBody(p.RutCliente))
@@ -76,8 +128,8 @@ public sealed class ScrapApplicationService(
 
         DateOnly ultimaFecha = actuales.Count > 0
             ? actuales.Max(p => p.FechaIngreso)
-            : (allPesajes.Count > 0 ? allPesajes.Max(p => p.FechaIngreso) : endDate);
-        List<Pesaje> ultimaJornada = [.. allPesajes.Where(p => p.FechaIngreso == ultimaFecha)];
+            : (allInScope.Count > 0 ? allInScope.Max(p => p.FechaIngreso) : endDate);
+        List<Pesaje> ultimaJornada = [.. allInScope.Where(p => p.FechaIngreso == ultimaFecha)];
 
         List<PlantaResumenItem> porPlanta = [.. Enum.GetValues<Planta>()
             .Select(pl =>
@@ -87,7 +139,7 @@ public sealed class ScrapApplicationService(
                 double pct = totalKilos > 0 ? Math.Round(k * 100.0 / totalKilos, 1) : 0.0;
                 return new PlantaResumenItem(pl, pl.ToShortTitle(), rows.Count, k, pct);
             })
-            .Where(x => x.Viajes > 0 || !planta.HasValue)];
+            .Where(x => (!filter.ExcluirTotalesCero && !filter.Planta.HasValue) || x.Kilos > 0 || (x.Viajes > 0 && !filter.ExcluirTotalesCero))];
 
         List<TipoPesajeResumenItem> porTipo = [.. Enum.GetValues<TipoPesaje>()
             .Select(tp =>
@@ -97,6 +149,7 @@ public sealed class ScrapApplicationService(
                 double pct = totalKilos > 0 ? Math.Round(k * 100.0 / totalKilos, 1) : 0.0;
                 return new TipoPesajeResumenItem(tp, tp.ToDisplayName(), rows.Count, k, pct);
             })
+            .Where(x => !filter.ExcluirTotalesCero || x.Kilos > 0)
             .OrderByDescending(x => x.Kilos)];
 
         List<GrupoKilosItem> porGrupo = [.. actuales
@@ -111,32 +164,29 @@ public sealed class ScrapApplicationService(
                 double pct = totalKilos > 0 ? Math.Round(k * 100.0 / totalKilos, 1) : 0.0;
                 return new GrupoKilosItem(g.Key, k, g.Count(), pct);
             })
+            .Where(x => !filter.ExcluirTotalesCero || x.Kilos > 0)
             .OrderByDescending(x => x.Kilos)];
 
         List<BarChartItemDto> topProveedores = [.. actuales
             .GroupBy(p => p.NomCliente)
             .Select(g => new BarChartItemDto(g.Key, g.Sum(x => (long)x.PesoNeto)))
+            .Where(x => !filter.ExcluirTotalesCero || x.Value > 0)
             .OrderByDescending(x => x.Value)
             .Take(8)];
 
-        // Tendencia semanal en 4 bloques del período
-        int sliceDays = Math.Max(1, rangeDays / 4);
-        List<WeekComparisonDto> tendencia = [];
-        for (int i = 0; i < 4; i++)
-        {
-            DateOnly sA = startDate.AddDays(i * sliceDays);
-            DateOnly eA = i == 3 ? endDate : sA.AddDays(sliceDays - 1);
-            DateOnly sP = prevStart.AddDays(i * sliceDays);
-            DateOnly eP = i == 3 ? prevEnd : sP.AddDays(sliceDays - 1);
-            long kA = actuales.Where(p => p.FechaIngreso >= sA && p.FechaIngreso <= eA).Sum(p => (long)p.PesoNeto);
-            long kP = anteriores.Where(p => p.FechaIngreso >= sP && p.FechaIngreso <= eP).Sum(p => (long)p.PesoNeto);
-            tendencia.Add(new WeekComparisonDto($"{sA:dd/MM}-{eA:dd/MM}", kA, kP));
-        }
+        List<WeekComparisonDto> tendencia = BuildTendenciaComparativa(actuales, anteriores, allInScope, startDate, endDate, prevStart, prevEnd, rangeDays);
 
-        List<Pesaje> ultimos = [.. allPesajes
+        List<Pesaje> ordenadosDesc = [.. actuales
             .OrderByDescending(p => p.FechaIngreso)
-            .ThenByDescending(p => p.Folio)
-            .Take(40)];
+            .ThenByDescending(p => p.Folio)];
+
+        List<Pesaje> ultimos = [.. ordenadosDesc.Take(40)];
+
+        EstadisticaAvanzadaDto estadisticas = BusinessRules.ComputeEstadisticas(actuales, allInScope, startDate, endDate);
+        IReadOnlyList<ComparativoMensualDto> porMes = BusinessRules.BuildComparativoMensual(actuales, filter.ExcluirTotalesCero);
+        IReadOnlyList<ComparativoAnualDto> porAnio = BusinessRules.BuildComparativoAnual(allInScope, filter.ExcluirTotalesCero);
+        IReadOnlyList<SegmentacionItemDto> segmentacion = BusinessRules.BuildSegmentacion(
+            filter.Segmentacion, actuales, anteriores, groupMap, filter.ExcluirTotalesCero);
 
         return new InformeResumenDto(
             $"{startDate:dd/MM/yyyy} al {endDate:dd/MM/yyyy}",
@@ -156,7 +206,61 @@ public sealed class ScrapApplicationService(
             porGrupo,
             tendencia,
             topProveedores,
-            ultimos);
+            ultimos,
+            estadisticas,
+            porMes,
+            porAnio,
+            segmentacion,
+            ordenadosDesc);
+    }
+
+    private static List<WeekComparisonDto> BuildTendenciaComparativa(
+        IReadOnlyList<Pesaje> actuales,
+        IReadOnlyList<Pesaje> anteriores,
+        IReadOnlyList<Pesaje> allInScope,
+        DateOnly startDate,
+        DateOnly endDate,
+        DateOnly prevStart,
+        DateOnly prevEnd,
+        int rangeDays)
+    {
+        List<WeekComparisonDto> tendencia = [];
+        if (rangeDays <= 62)
+        {
+            int sliceDays = Math.Max(1, rangeDays / 4);
+            for (int i = 0; i < 4; i++)
+            {
+                DateOnly sA = startDate.AddDays(i * sliceDays);
+                DateOnly eA = i == 3 ? endDate : sA.AddDays(sliceDays - 1);
+                DateOnly sP = prevStart.AddDays(i * sliceDays);
+                DateOnly eP = i == 3 ? prevEnd : sP.AddDays(sliceDays - 1);
+                long kA = actuales.Where(p => p.FechaIngreso >= sA && p.FechaIngreso <= eA).Sum(p => (long)p.PesoNeto);
+                long kP = anteriores.Where(p => p.FechaIngreso >= sP && p.FechaIngreso <= eP).Sum(p => (long)p.PesoNeto);
+                tendencia.Add(new WeekComparisonDto($"{sA:dd/MM}-{eA:dd/MM}", kA, kP));
+            }
+            return tendencia;
+        }
+
+        // En rangos amplios (> 2 meses), muestra últimos 8 meses del rango comparando mismo mes año anterior (YoY)
+        Dictionary<(int Year, int Month), long> byMonth = allInScope
+            .GroupBy(p => (p.FechaIngreso.Year, p.FechaIngreso.Month))
+            .ToDictionary(g => g.Key, g => g.Sum(x => (long)x.PesoNeto));
+
+        List<(int Year, int Month)> monthsInRange = [.. actuales
+            .GroupBy(p => (p.FechaIngreso.Year, p.FechaIngreso.Month))
+            .Select(g => g.Key)
+            .OrderBy(k => k.Year)
+            .ThenBy(k => k.Month)
+            .TakeLast(8)];
+
+        foreach ((int y, int m) in monthsInRange)
+        {
+            long kA = byMonth.TryGetValue((y, m), out long cur) ? cur : 0L;
+            long kPrevYear = byMonth.TryGetValue((y - 1, m), out long py) ? py : 0L;
+            tendencia.Add(new WeekComparisonDto($"{m:D2}/{y % 100:D2}", kA, kPrevYear));
+        }
+
+        return tendencia;
     }
 
     public async Task<IReadOnlyList<MaterialGroupNode>> GetMaterialGroupTreeAsync(CancellationToken ct = default)
@@ -240,6 +344,7 @@ public sealed class ScrapApplicationService(
         DateOnly hasta,
         bool soloRecepciones = false,
         long? selectedNodeId = null,
+        bool excluirTotalesCero = false,
         CancellationToken ct = default)
     {
         _auth.EnsurePermission(PermisoSistema.VerGrupoMaterial);
@@ -255,7 +360,7 @@ public sealed class ScrapApplicationService(
         IReadOnlyList<Producto> prods = await _repository.GetProductosAsync(ct).ConfigureAwait(false);
 
         string label = $"{(planta?.ToShortTitle() ?? "Todas las Plantas")} · {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy}";
-        return BusinessRules.BuildMaterialTreeReport(label, nodes, pesajes, prods, selectedNodeId);
+        return BusinessRules.BuildMaterialTreeReport(label, nodes, pesajes, prods, selectedNodeId, excluirTotalesCero);
     }
 
     public async Task<AnalisisProveedoresResultDto> GetAnalisisProveedoresAsync(
@@ -265,6 +370,7 @@ public sealed class ScrapApplicationService(
         TipoPesaje? tipoPesaje = TipoPesaje.RecepcionCarga,
         long? filterGroupNodeId = null,
         string? searchTerm = null,
+        bool excluirTotalesCero = false,
         CancellationToken ct = default)
     {
         _auth.EnsurePermission(PermisoSistema.VerAnalisisProveedores);
@@ -311,7 +417,7 @@ public sealed class ScrapApplicationService(
         }
 
         string label = $"{(planta?.ToShortTitle() ?? "Todas las Plantas")} · {desde:dd/MM/yyyy} al {hasta:dd/MM/yyyy}";
-        return BusinessRules.BuildAnalisisProveedores(label, hasta, actuales, anteriores, clientes, prodToRoot);
+        return BusinessRules.BuildAnalisisProveedores(label, hasta, actuales, anteriores, clientes, prodToRoot, excluirTotalesCero);
     }
 
     public async Task<ProveedorDetalleResultDto> GetProveedorDetalleAsync(
@@ -320,6 +426,7 @@ public sealed class ScrapApplicationService(
         DateOnly desde,
         DateOnly hasta,
         TipoPesaje? tipoPesaje = TipoPesaje.RecepcionCarga,
+        bool excluirTotalesCero = false,
         CancellationToken ct = default)
     {
         _auth.EnsurePermission(PermisoSistema.VerAnalisisProveedores);
@@ -334,7 +441,7 @@ public sealed class ScrapApplicationService(
             (RutChileno.Matches(p.RutCliente, proveedor.Rut) ||
              string.Equals(p.NomCliente.Trim(), proveedor.Nombre.Trim(), StringComparison.OrdinalIgnoreCase)))];
 
-        return BusinessRules.BuildProveedorDetalle(proveedor, entregas, prodToRoot);
+        return BusinessRules.BuildProveedorDetalle(proveedor, entregas, prodToRoot, excluirTotalesCero);
     }
 
     private static HashSet<string> CollectDescendantCodes(IReadOnlyList<MaterialGroupNode> nodes, long rootId)
@@ -394,9 +501,18 @@ public sealed class ScrapApplicationService(
         return await _firebird.QueryRemotePackageAsync(endpoint, desde, hasta, allowFallbackDemo, ct).ConfigureAwait(false);
     }
 
+    public Task<(int ImportedPesajes, int Duplicates, int ClientesUpserted, int ProductosUpserted)> ImportFirebirdPackageAsync(
+        Planta planta,
+        FirebirdExtractPackage package,
+        CancellationToken ct = default) =>
+        ImportFirebirdPackageAsync(planta, package, null, "Todo el historial", false, ct);
+
     public async Task<(int ImportedPesajes, int Duplicates, int ClientesUpserted, int ProductosUpserted)> ImportFirebirdPackageAsync(
         Planta planta,
         FirebirdExtractPackage package,
+        FirebirdPlantaEndpoint? sourceEndpoint,
+        string rangoFiltro,
+        bool excluirCeroKg,
         CancellationToken ct = default)
     {
         _auth.EnsurePermission(PermisoSistema.ImportarDatos);
@@ -414,10 +530,58 @@ public sealed class ScrapApplicationService(
         IReadOnlyList<MaterialGroupNode> nodes = await _repository.GetMaterialNodesAsync(ct).ConfigureAwait(false);
         Dictionary<string, string> groups = BusinessRules.BuildProductToRootGroupMap(nodes);
 
-        List<Pesaje> mapped = [.. package.Pesajes.Select(r => BusinessRules.MapRemoteToPesaje(r, planta, groups))];
+        IEnumerable<FirebirdRemotePesaje> rawList = excluirCeroKg
+            ? package.Pesajes.Where(r => (r.PesoNeto > 0 ? r.PesoNeto : Math.Max(0, r.PesoBruto - r.PesoTara)) > 0)
+            : package.Pesajes;
+
+        List<Pesaje> mapped = [.. rawList.Select(r => BusinessRules.MapRemoteToPesaje(r, planta, groups))];
         (int imported, int duplicates) = await _repository.ImportPesajesAsync(mapped, planta, Actor, ct).ConfigureAwait(false);
 
+        long kilosTotal = mapped.Sum(p => (long)p.PesoNeto);
+        string origenStr = sourceEndpoint is not null
+            ? $"{sourceEndpoint.ServidorIp}:{sourceEndpoint.Puerto} · {sourceEndpoint.RutaArchivo}"
+            : $"Firebird ({planta.ToShortTitle()})";
+
+        await _repository.AddImportHistoryAsync(new ImportacionHistorial
+        {
+            Usuario = Actor,
+            TipoOrigen = package.UsedSimulatedFallback ? "Firebird (Demo Local)" : "Firebird TCP",
+            OrigenDetalle = origenStr,
+            PlantaDestino = planta.ToShortTitle(),
+            DestinoDetalle = _repository.DatabasePath,
+            RangoFiltro = rangoFiltro,
+            LeidosOrigen = package.Pesajes.Count,
+            ImportadosNuevos = imported,
+            DuplicadosOmitidos = duplicates,
+            ClientesSincronizados = package.Clientes.Count,
+            ProductosSincronizados = package.Productos.Count,
+            KilosImportados = kilosTotal,
+            Estado = imported > 0 ? "COMPLETADA" : "SIN NOVEDADES",
+            Observacion = package.StatusMessage
+        }, ct).ConfigureAwait(false);
+
         return (imported, duplicates, package.Clientes.Count, package.Productos.Count);
+    }
+
+    public async Task<(FirebirdExtractPackage Package, int ImportedPesajes, int Duplicates, int ClientesUpserted, int ProductosUpserted)>
+        ImportDirectFromFirebirdAsync(
+            FirebirdPlantaEndpoint endpoint,
+            DateOnly? desde,
+            DateOnly? hasta,
+            bool allowFallbackDemo,
+            bool excluirCeroKg,
+            CancellationToken ct = default)
+    {
+        _auth.EnsurePermission(PermisoSistema.ImportarDatos);
+        if (desde.HasValue && hasta.HasValue)
+        {
+            ValidateDateRange(desde.Value, hasta.Value);
+        }
+
+        FirebirdExtractPackage package = await _firebird.QueryRemotePackageAsync(endpoint, desde, hasta, allowFallbackDemo, ct).ConfigureAwait(false);
+        string rango = desde.HasValue && hasta.HasValue ? $"{desde.Value:dd/MM/yyyy} - {hasta.Value:dd/MM/yyyy}" : "Todo el historial";
+        var res = await ImportFirebirdPackageAsync(endpoint.Planta, package, endpoint, rango, excluirCeroKg, ct).ConfigureAwait(false);
+        return (package, res.ImportedPesajes, res.Duplicates, res.ClientesUpserted, res.ProductosUpserted);
     }
 
     public async Task<(int PesajesImported, int ClientesImported, int ProductosImported, IReadOnlyList<string> Warnings)>
@@ -425,6 +589,34 @@ public sealed class ScrapApplicationService(
     {
         _auth.EnsurePermission(PermisoSistema.ImportarDatos);
         return await _mdbMigration.ImportFromMdbAsync(mdbPath, Actor, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<ImportacionHistorial>> GetImportHistoryAsync(int limit = 200, CancellationToken ct = default)
+    {
+        _auth.EnsurePermission(PermisoSistema.ImportarDatos);
+        return await _repository.GetImportHistoryAsync(limit, ct).ConfigureAwait(false);
+    }
+
+    public async Task<DatabaseResumenStatsDto> GetDatabaseResumenStatsAsync(CancellationToken ct = default)
+    {
+        _auth.EnsurePermission(PermisoSistema.ImportarDatos);
+        IReadOnlyList<Pesaje> pesajes = await _repository.GetPesajesAsync(ct: ct).ConfigureAwait(false);
+        IReadOnlyList<Cliente> clientes = await _repository.GetClientesAsync(ct: ct).ConfigureAwait(false);
+        IReadOnlyList<Producto> prods = await _repository.GetProductosAsync(ct).ConfigureAwait(false);
+        IReadOnlyList<ImportacionHistorial> history = await _repository.GetImportHistoryAsync(50, ct).ConfigureAwait(false);
+
+        ImportacionHistorial? last = history.Count > 0 ? history[0] : null;
+        return new DatabaseResumenStatsDto(
+            pesajes.Count,
+            pesajes.Sum(p => (long)p.PesoNeto),
+            clientes.Count,
+            prods.Count,
+            history.Count,
+            pesajes.Count > 0 ? pesajes.Min(p => p.FechaIngreso) : null,
+            pesajes.Count > 0 ? pesajes.Max(p => p.FechaIngreso) : null,
+            last?.TimestampUtc,
+            last is not null ? $"{last.TipoOrigen}: {last.OrigenDetalle}" : "Sin importaciones registradas aún",
+            _repository.DatabasePath);
     }
 
     public async Task<IReadOnlyList<AuditLogEntry>> GetAuditLogsAsync(int limit = 500, string? accion = null, string? usuario = null, CancellationToken ct = default)

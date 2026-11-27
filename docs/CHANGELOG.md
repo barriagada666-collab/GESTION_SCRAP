@@ -1,17 +1,14 @@
 # Historial de Cambios (Changelog) · Gestión de Scrap
 
-## [4.0.0] - Arquitectura .NET 10, Branding Cambiaso e Importación Directa Firebird
+## [4.0.0] - Arquitectura .NET 10, Branding Cambiaso, Analítica YoY/MoM y Trazabilidad de Importaciones
 
-### Refactorización de Alcance (5 Módulos Activos)
-- Eliminados los módulos y diálogos fuera de alcance (`Precios`, `Mantenedor de Precios`, `JCRAMM`, `Grupos Especiales`, `Compras y Traslados`, `Informe por Cliente` y ejecución directa PA Firebird) para enfocar el sistema exclusivamente en los `5` flujos centrales:
-  1. `Informe Resumen` (`Ctrl+1`).
-  2. `Grupos de Material` (`Ctrl+2`) con árbol CRUD jerárquico completo (Nodos Padre / Subgrupos / Productos Hijo, mover con diálogo o Drag & Drop, reordenar y eliminar).
-  3. `Análisis de Proveedores` (`Ctrl+3`) con ranking Pareto ABC, variación entre períodos, mix de materiales, evolución mensual, flota/patentes y orígenes.
-  4. `Importador BD` (`Ctrl+4`) conectado a Firebird `WMDBSPC.GDB` y migración Access `.mdb`/`.accdb`.
-  5. `Seguridad y Perfiles` (`Ctrl+5`) con CRUD dinámico de `PerfilUsuario`, CRUD de usuarios, bitácora y respaldo/purga SQLite.
+### Analítica Avanzada, Exclusión de Ceros y Exportación Personalizada
+- **Exclusión de Totales en Cero (`Excluir totales en 0`):** Agregado filtro interactivo y de negocio transversal en `InformeResumenControl`, `GrupoMaterialControl` y `AnalisisProveedoresControl`.
+- **Comparativos Año a Año (YoY) y Mes a Mes (MoM) + Fichas Estadísticas:** Agregados cálculos de toneladas, mediana, mínimo, máximo, desviación estándar, ritmo diario, variación interanual exacta (`YoY`) y evolución mensual (`MoM` y `YoY`) en [BusinessRules.cs](../src/GestionScrap.Application/Services/BusinessRules.cs).
+- **Segmentación Dinámica y Multi-Selección:** Segmentación por Planta, Grupo, Tipo, Proveedor, Producto, Origen, Mes o Año con filtrado interactivo y selección múltiple en grillas.
+- **Exportación por Selección y Personalizada ([ExportacionPersonalizadaDialog.cs](../src/GestionScrap.Desktop/Forms/Dialogs/ExportacionPersonalizadaDialog.cs)):** Permite exportar solo las filas seleccionadas, solo la subrama del árbol elegida o libros multi-hoja configurables por sección vía `ExportReportePersonalizado`.
+- **Importador Simplificado + Control Origen -> Destino:** Botón de sincronización directa en 1 clic (`ImportDirectFromFirebirdAsync`) y tabla persistente `import_history` mostrando exactamente **Desde Dónde -> Hacia Dónde**, fechas, leídos, nuevos, duplicados y kilos importados con exportación a Excel.
 
-### Identidad Visual, Base de Datos y Seguridad
-- **Branding Corporativo Cambiaso con Cero Dependencias:** Paleta azul petróleo (`#0B3C5D`, `#0B253A`), cian (`#0891B2`) y dorado (`#C9A46E`), más emblema/monograma e icono embebidos en `GestionScrap.Desktop.dll` (`EmbeddedResource`) y pantalla de arranque (`SplashForm`).
-- **Auditoría e Interoperabilidad Firebird (`WMDBSPC.GDB`):** Corregido el ajuste `Charset=NONE` en `FirebirdSyncService` tras auditar `\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB` (`DEFAULT CHARACTER SET NONE`, `2.730` pesajes activos, `48` productos, `263` clientes) y `\\192.168.2.56\bdwm\placilla\WMDBSPC.GDB` (`18.031` pesajes activos).
-- **Seguridad y Cuenta Inicial:** Sembrado de `5` perfiles iniciales (`Administrador`, `Supervisor`, `Analista`, `Operador`, `Auditor`) y cuenta administrativa `barriagada` / `Cambias0` con PBKDF2-SHA256, bloqueo tras `5` intentos y DPAPI.
-- **Pruebas y Empaquetado:** Suite automatizada `xUnit` de `19` pruebas (`Unit`, `Integration`, `RealDatabases`, `UI STA Audit`, `10k Stress`) y compilación dual Inno Setup 7 (`SelfContained` y `FrameworkDependent`).
+### Módulos Base, Branding Cambiaso y Firebird (`WMDBSPC.GDB`)
+- Consolidado el sistema exclusivamente en los `5` módulos operativos (`Informe Resumen`, `Grupos de Material CRUD Jerárquico`, `Análisis de Proveedores Pareto ABC`, `Importador BD` y `Seguridad y Perfiles RBAC`).
+- Identidad visual Cambiaso (`#0B3C5D`, `#0B253A`, `#0891B2`, `#C9A46E`) embebida sin dependencias externas (`EmbeddedResource`), cuenta inicial `barriagada` / `Cambias0`, ajuste `Charset=NONE` validado contra `\\192.168.2.56\bdwm\placilla2\WMDBSPC.GDB`, suite de `20` pruebas `xUnit` e instaladores `Inno Setup 7.1.1`.

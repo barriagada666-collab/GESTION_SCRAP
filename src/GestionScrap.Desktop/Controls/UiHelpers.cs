@@ -5,11 +5,21 @@ using GestionScrap.Domain.Enums;
 namespace GestionScrap.Desktop.Controls;
 
 /// <summary>
-/// Utilidades visuales y de ejecución asíncrona compartidas por todos los controles de usuario.
+/// Utilidades visuales, filtros compartidos y ejecución asíncrona homogénea entre los módulos.
 /// </summary>
 public static class UiHelpers
 {
     public static readonly CultureInfo EsCl = CultureInfo.GetCultureInfo("es-CL");
+
+    private sealed record NullablePlantaOpt(Planta? Planta, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private sealed record NullableTipoOpt(TipoPesaje? Tipo, string Label)
+    {
+        public override string ToString() => Label;
+    }
 
     public static Panel BuildFilterCard(int height = 64) => new()
     {
@@ -50,14 +60,75 @@ public static class UiHelpers
         }
     }
 
+    public static void PopulatePlantaFilterCombo(ComboBox cmb)
+    {
+        cmb.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmb.Font = AppTheme.FontBody;
+        cmb.Items.Clear();
+        cmb.Items.Add(new NullablePlantaOpt(null, "Todas las Plantas"));
+        cmb.Items.Add(new NullablePlantaOpt(Planta.Santiago, "Santiago (Placilla 2)"));
+        cmb.Items.Add(new NullablePlantaOpt(Planta.Placilla, "Placilla"));
+        cmb.Items.Add(new NullablePlantaOpt(Planta.Talcahuano, "Talcahuano"));
+        cmb.SelectedIndex = 0;
+    }
+
+    public static Planta? GetSelectedNullablePlanta(ComboBox cmb) =>
+        (cmb.SelectedItem as NullablePlantaOpt)?.Planta;
+
+    public static void PopulateTipoFilterCombo(ComboBox cmb, bool defaultRecepcion = false)
+    {
+        cmb.DropDownStyle = ComboBoxStyle.DropDownList;
+        cmb.Font = AppTheme.FontBody;
+        cmb.Items.Clear();
+        if (defaultRecepcion)
+        {
+            cmb.Items.Add(new NullableTipoOpt(TipoPesaje.RecepcionCarga, "Solo Recepción / Compras"));
+            cmb.Items.Add(new NullableTipoOpt(null, "Todos los Movimientos"));
+        }
+        else
+        {
+            cmb.Items.Add(new NullableTipoOpt(null, "Todos los Tipos"));
+            cmb.Items.Add(new NullableTipoOpt(TipoPesaje.RecepcionCarga, "Recepción / Compras"));
+        }
+
+        cmb.Items.Add(new NullableTipoOpt(TipoPesaje.DespachoCarga, "Despacho de Carga"));
+        cmb.Items.Add(new NullableTipoOpt(TipoPesaje.MovimientoInterno, "Movimiento Interno"));
+        cmb.SelectedIndex = 0;
+    }
+
+    public static TipoPesaje? GetSelectedNullableTipo(ComboBox cmb) =>
+        (cmb.SelectedItem as NullableTipoOpt)?.Tipo;
+
+    public static void FormatVarianceCell(DataGridViewCellFormattingEventArgs e)
+    {
+        if (e.Value is not double d || e.CellStyle is null)
+        {
+            return;
+        }
+
+        e.CellStyle.Font = AppTheme.FontBodyBold;
+        if (d > 0.05)
+        {
+            e.CellStyle.ForeColor = AppTheme.AccentEmerald;
+        }
+        else if (d < -0.05)
+        {
+            e.CellStyle.ForeColor = AppTheme.AccentAmber;
+        }
+        else
+        {
+            e.CellStyle.ForeColor = AppTheme.TextSecondary;
+        }
+    }
+
     public static Panel CreateKpiCard(string title, Color accentColor, out Label valueLabel, out Label subtitleLabel)
     {
         Panel card = new()
         {
             Dock = DockStyle.Fill,
             BackColor = AppTheme.CardSurface,
-            Margin = new Padding(6, 4, 6, 4),
-            Padding = new Padding(14, 10, 14, 10),
+            Margin = new Padding(4, 3, 4, 3),
+            Padding = new Padding(12, 8, 12, 8),
             BorderStyle = BorderStyle.FixedSingle
         };
 
@@ -71,10 +142,10 @@ public static class UiHelpers
         Label lblTitle = new()
         {
             Text = title,
-            Font = new Font("Segoe UI", 8.5F, FontStyle.Bold),
+            Font = new Font("Segoe UI", 8.2F, FontStyle.Bold),
             ForeColor = AppTheme.TextSecondary,
             Dock = DockStyle.Top,
-            Height = 20
+            Height = 19
         };
 
         valueLabel = new Label
@@ -83,7 +154,7 @@ public static class UiHelpers
             Font = AppTheme.FontKpiValue,
             ForeColor = AppTheme.TextPrimary,
             Dock = DockStyle.Top,
-            Height = 32
+            Height = 31
         };
 
         subtitleLabel = new Label

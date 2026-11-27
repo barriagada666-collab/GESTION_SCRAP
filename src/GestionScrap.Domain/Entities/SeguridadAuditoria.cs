@@ -41,6 +41,31 @@ public sealed class AuditLogEntry
     public string Detalle { get; init; } = string.Empty;
 }
 
+/// <summary>
+/// Registro persistente de trazabilidad detallada de cada importación (desde qué origen hacia qué destino).
+/// </summary>
+public sealed class ImportacionHistorial
+{
+    public long Id { get; init; }
+    public DateTime TimestampUtc { get; init; } = DateTime.UtcNow;
+    public string Usuario { get; init; } = string.Empty;
+    public string TipoOrigen { get; init; } = string.Empty;
+    public string OrigenDetalle { get; init; } = string.Empty;
+    public string PlantaDestino { get; init; } = string.Empty;
+    public string DestinoDetalle { get; init; } = string.Empty;
+    public string RangoFiltro { get; init; } = "Todo el historial";
+    public int LeidosOrigen { get; init; }
+    public int ImportadosNuevos { get; init; }
+    public int DuplicadosOmitidos { get; init; }
+    public int ClientesSincronizados { get; init; }
+    public int ProductosSincronizados { get; init; }
+    public long KilosImportados { get; init; }
+    public string Estado { get; init; } = "COMPLETADA";
+    public string Observacion { get; init; } = string.Empty;
+
+    public string FechaHoraLocal => TimestampUtc.ToLocalTime().ToString("dd-MM-yyyy HH:mm:ss", System.Globalization.CultureInfo.InvariantCulture);
+}
+
 public sealed class FirebirdPlantaEndpoint
 {
     public Planta Planta { get; set; }
@@ -84,6 +109,21 @@ public sealed record FirebirdExtractPackage(
     IReadOnlyList<Producto> Productos,
     bool UsedSimulatedFallback,
     string StatusMessage);
+
+/// <summary>
+/// Carga útil flexible para exportar análisis personalizados, resúmenes o selecciones específicas de filas.
+/// </summary>
+public sealed record ExportTableSection(
+    string SheetName,
+    string SectionTitle,
+    string[] Headers,
+    IReadOnlyList<object?[]> Rows);
+
+public sealed record ReportePersonalizadoPayload(
+    string TituloReporte,
+    string SubtituloFiltros,
+    IReadOnlyList<(string Indicador, string Valor, string Detalle)> EstadisticasKpis,
+    IReadOnlyList<ExportTableSection> Secciones);
 
 public sealed class AppSettings
 {

@@ -7,7 +7,8 @@ using GestionScrap.Domain.Interfaces;
 namespace GestionScrap.Infrastructure.Export;
 
 /// <summary>
-/// Exportador nativo .xlsx con ClosedXML estilizado según la identidad corporativa Cambiaso.
+/// Exportador nativo .xlsx con ClosedXML estilizado según la identidad corporativa Cambiaso,
+/// con soporte para informes estándar, selecciones específicas, análisis personalizados y bitácora de importaciones.
 /// </summary>
 public sealed class ClosedXmlExcelExportService : IExcelExportService
 {
@@ -32,30 +33,23 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
 
         int r = 5;
         WriteSectionHeader(wsRes, r++, "DISTRIBUCIÓN POR PLANTA", ["Planta", "Viajes", "Kilos Netos", "% Participación"], TealAccent);
+        r++;
         long totPl = porPlanta.Sum(x => x.Kilos);
         foreach ((string Planta, int Viajes, long Kilos) p in porPlanta)
         {
             double pct = totPl > 0 ? p.Kilos * 100.0 / totPl : 0.0;
-            wsRes.Cell(r, 1).Value = p.Planta;
-            wsRes.Cell(r, 2).Value = p.Viajes;
-            wsRes.Cell(r, 3).Value = p.Kilos;
-            wsRes.Cell(r, 4).Value = pct / 100.0;
-            wsRes.Cell(r, 2).Style.NumberFormat.Format = "#,##0";
-            wsRes.Cell(r, 3).Style.NumberFormat.Format = "#,##0";
+            WriteRowValues(wsRes, r, [p.Planta, p.Viajes, p.Kilos, pct / 100.0], isZebra: false);
             wsRes.Cell(r, 4).Style.NumberFormat.Format = "0.0%";
             r++;
         }
 
         r += 2;
         WriteSectionHeader(wsRes, r++, "TOP PROVEEDORES DEL PERÍODO", ["RUT / Razón Social", "Viajes", "Kilos Netos", "% Participación"], PetrolDark);
+        r++;
         foreach ((string Rut, string Proveedor, int Viajes, long Kilos, double Porcentaje) tp in topProveedores)
         {
-            wsRes.Cell(r, 1).Value = $"{tp.Rut} · {tp.Proveedor}";
-            wsRes.Cell(r, 2).Value = tp.Viajes;
-            wsRes.Cell(r, 3).Value = tp.Kilos;
-            wsRes.Cell(r, 4).Value = tp.Porcentaje / 100.0;
-            wsRes.Cell(r, 2).Style.NumberFormat.Format = "#,##0";
-            wsRes.Cell(r, 3).Style.NumberFormat.Format = "#,##0";
+            string label = string.IsNullOrWhiteSpace(tp.Rut) ? tp.Proveedor : $"{tp.Rut} · {tp.Proveedor}";
+            WriteRowValues(wsRes, r, [label, tp.Viajes, tp.Kilos, tp.Porcentaje / 100.0], isZebra: false);
             wsRes.Cell(r, 4).Style.NumberFormat.Format = "0.0%";
             r++;
         }
@@ -63,37 +57,25 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
         IXLWorksheet wsGrp = wb.Worksheets.Add("Grupos Material");
         WriteBanner(wsGrp, "CONSOLIDADO POR GRUPO DE MATERIAL", $"Período: {tituloPeriodo}", 4);
         WriteSectionHeader(wsGrp, 5, "GRUPOS DE MATERIAL", ["Grupo Padre", "Viajes", "Kilos Netos", "%"], PetrolDark);
-        int gr = 6;
+        int gr = 7;
         foreach ((string Grupo, int Viajes, long Kilos, double Porcentaje) g in porGrupo)
         {
-            wsGrp.Cell(gr, 1).Value = g.Grupo;
-            wsGrp.Cell(gr, 2).Value = g.Viajes;
-            wsGrp.Cell(gr, 3).Value = g.Kilos;
-            wsGrp.Cell(gr, 4).Value = g.Porcentaje / 100.0;
-            wsGrp.Cell(gr, 2).Style.NumberFormat.Format = "#,##0";
-            wsGrp.Cell(gr, 3).Style.NumberFormat.Format = "#,##0";
+            WriteRowValues(wsGrp, gr, [g.Grupo, g.Viajes, g.Kilos, g.Porcentaje / 100.0], isZebra: (gr - 7) % 2 == 1);
             wsGrp.Cell(gr, 4).Style.NumberFormat.Format = "0.0%";
-            if ((gr - 6) % 2 == 1) wsGrp.Range(gr, 1, gr, 4).Style.Fill.BackgroundColor = ZebraFill;
             gr++;
         }
 
-        IXLWorksheet wsDet = wb.Worksheets.Add("Últimos Movimientos");
-        WriteBanner(wsDet, "DETALLE DE MOVIMIENTOS RECIENTES", $"Período: {tituloPeriodo}", 9);
+        IXLWorksheet wsDet = wb.Worksheets.Add("Movimientos");
+        WriteBanner(wsDet, "DETALLE DE MOVIMIENTOS DEL PERÍODO", $"Período: {tituloPeriodo}", 9);
         WriteHeaders(wsDet, 5, ["Folio", "Planta", "Fecha", "Patente", "RUT", "Proveedor", "Código", "Producto", "Neto Kg"]);
         int dr = 6;
         foreach (Pesaje p in detallePesajes)
         {
-            wsDet.Cell(dr, 1).Value = p.Folio;
-            wsDet.Cell(dr, 2).Value = p.Planta.ToShortTitle();
-            wsDet.Cell(dr, 3).Value = p.FechaIngreso.ToDateTime(TimeOnly.MinValue);
-            wsDet.Cell(dr, 3).Style.DateFormat.Format = "dd-mm-yyyy";
-            wsDet.Cell(dr, 4).Value = p.Patente;
-            wsDet.Cell(dr, 5).Value = p.RutCliente;
-            wsDet.Cell(dr, 6).Value = p.NomCliente;
-            wsDet.Cell(dr, 7).Value = p.CodProducto;
-            wsDet.Cell(dr, 8).Value = p.NomProducto;
-            wsDet.Cell(dr, 9).Value = p.PesoNeto;
-            wsDet.Cell(dr, 9).Style.NumberFormat.Format = "#,##0";
+            WriteRowValues(
+                wsDet,
+                dr,
+                [p.Folio, p.Planta.ToShortTitle(), p.FechaIngreso, p.Patente, p.RutCliente, p.NomCliente, p.CodProducto, p.NomProducto, p.PesoNeto],
+                isZebra: (dr - 6) % 2 == 1);
             dr++;
         }
 
@@ -119,15 +101,7 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
         foreach (var n in nodosPlanos)
         {
             string indent = n.Nivel == 0 ? string.Empty : new string(' ', n.Nivel * 4) + "└─ ";
-            ws.Cell(r, 1).Value = indent + n.Nombre;
-            ws.Cell(r, 2).Value = n.Tipo;
-            ws.Cell(r, 3).Value = n.CodigoProducto;
-            ws.Cell(r, 4).Value = n.Viajes;
-            ws.Cell(r, 5).Value = n.Kilos;
-            ws.Cell(r, 6).Value = n.Porcentaje / 100.0;
-
-            ws.Cell(r, 4).Style.NumberFormat.Format = "#,##0";
-            ws.Cell(r, 5).Style.NumberFormat.Format = "#,##0";
+            WriteRowValues(ws, r, [indent + n.Nombre, n.Tipo, n.CodigoProducto, n.Viajes, n.Kilos, n.Porcentaje / 100.0], isZebra: (r - 6) % 2 == 1);
             ws.Cell(r, 6).Style.NumberFormat.Format = "0.00%";
 
             if (n.Nivel == 0)
@@ -135,10 +109,6 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
                 IXLRange rowRange = ws.Range(r, 1, r, 6);
                 rowRange.Style.Font.Bold = true;
                 rowRange.Style.Fill.BackgroundColor = TotalFill;
-            }
-            else if ((r - 6) % 2 == 1)
-            {
-                ws.Range(r, 1, r, 6).Style.Fill.BackgroundColor = ZebraFill;
             }
 
             r++;
@@ -172,24 +142,15 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
         int r = 6;
         foreach (var item in ranking)
         {
-            wsRank.Cell(r, 1).Value = item.Rut;
-            wsRank.Cell(r, 2).Value = item.RazonSocial;
-            wsRank.Cell(r, 3).Value = item.Ciudad;
-            wsRank.Cell(r, 4).Value = item.ClaseAbc;
-            wsRank.Cell(r, 5).Value = item.Viajes;
-            wsRank.Cell(r, 6).Value = item.Kilos;
-            wsRank.Cell(r, 7).Value = item.Participacion / 100.0;
-            wsRank.Cell(r, 8).Value = item.Acumulado / 100.0;
-            wsRank.Cell(r, 9).Value = item.PromedioKg;
-            wsRank.Cell(r, 10).Value = item.ProductoTop;
+            WriteRowValues(
+                wsRank,
+                r,
+                [item.Rut, item.RazonSocial, item.Ciudad, item.ClaseAbc, item.Viajes, item.Kilos, item.Participacion / 100.0, item.Acumulado / 100.0, item.PromedioKg, item.ProductoTop],
+                isZebra: (r - 6) % 2 == 1);
 
             wsRank.Cell(r, 4).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
-            wsRank.Cell(r, 5).Style.NumberFormat.Format = "#,##0";
-            wsRank.Cell(r, 6).Style.NumberFormat.Format = "#,##0";
             wsRank.Cell(r, 7).Style.NumberFormat.Format = "0.00%";
             wsRank.Cell(r, 8).Style.NumberFormat.Format = "0.00%";
-            wsRank.Cell(r, 9).Style.NumberFormat.Format = "#,##0.0";
-            if ((r - 6) % 2 == 1) wsRank.Range(r, 1, r, 10).Style.Fill.BackgroundColor = ZebraFill;
             r++;
         }
 
@@ -200,15 +161,10 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
             IXLWorksheet wsDet = wb.Worksheets.Add("Ficha Proveedor");
             WriteBanner(wsDet, $"FICHA PROVEEDOR: {proveedorSeleccionadoNombre}", periodoLabel, 8);
             WriteSectionHeader(wsDet, 5, "MIX DE MATERIALES", ["Grupo Material", "Viajes", "Kilos", "%"], TealAccent);
-            int mr = 6;
+            int mr = 7;
             foreach (var g in desgloseSeleccionado)
             {
-                wsDet.Cell(mr, 1).Value = g.Grupo;
-                wsDet.Cell(mr, 2).Value = g.Viajes;
-                wsDet.Cell(mr, 3).Value = g.Kilos;
-                wsDet.Cell(mr, 4).Value = g.Porcentaje / 100.0;
-                wsDet.Cell(mr, 2).Style.NumberFormat.Format = "#,##0";
-                wsDet.Cell(mr, 3).Style.NumberFormat.Format = "#,##0";
+                WriteRowValues(wsDet, mr, [g.Grupo, g.Viajes, g.Kilos, g.Porcentaje / 100.0], isZebra: (mr - 7) % 2 == 1);
                 wsDet.Cell(mr, 4).Style.NumberFormat.Format = "0.0%";
                 mr++;
             }
@@ -217,17 +173,7 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
             WriteHeaders(wsDet, mr++, ["Folio", "Planta", "Fecha", "Patente", "Producto", "Origen", "Bruto", "Neto Kg"]);
             foreach (Pesaje p in entregasSeleccionado)
             {
-                wsDet.Cell(mr, 1).Value = p.Folio;
-                wsDet.Cell(mr, 2).Value = p.Planta.ToShortTitle();
-                wsDet.Cell(mr, 3).Value = p.FechaIngreso.ToDateTime(TimeOnly.MinValue);
-                wsDet.Cell(mr, 3).Style.DateFormat.Format = "dd-mm-yyyy";
-                wsDet.Cell(mr, 4).Value = p.Patente;
-                wsDet.Cell(mr, 5).Value = p.NomProducto;
-                wsDet.Cell(mr, 6).Value = p.Origen;
-                wsDet.Cell(mr, 7).Value = p.PesoBruto;
-                wsDet.Cell(mr, 8).Value = p.PesoNeto;
-                wsDet.Cell(mr, 7).Style.NumberFormat.Format = "#,##0";
-                wsDet.Cell(mr, 8).Style.NumberFormat.Format = "#,##0";
+                WriteRowValues(wsDet, mr, [p.Folio, p.Planta.ToShortTitle(), p.FechaIngreso, p.Patente, p.NomProducto, p.Origen, p.PesoBruto, p.PesoNeto], isZebra: mr % 2 == 1);
                 mr++;
             }
 
@@ -249,18 +195,173 @@ public sealed class ClosedXmlExcelExportService : IExcelExportService
         int r = 6;
         foreach (AuditLogEntry log in logs)
         {
-            ws.Cell(r, 1).Value = log.Id;
-            ws.Cell(r, 2).Value = log.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture);
-            ws.Cell(r, 3).Value = log.Usuario;
-            ws.Cell(r, 4).Value = log.Accion;
-            ws.Cell(r, 5).Value = log.Entidad;
-            ws.Cell(r, 6).Value = log.Detalle;
+            WriteRowValues(ws, r, [log.Id, log.TimestampUtc.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture), log.Usuario, log.Accion, log.Entidad, log.Detalle], isZebra: (r - 6) % 2 == 1);
             r++;
         }
 
         ws.Columns().AdjustToContents();
         wb.SaveAs(filePath);
         return filePath;
+    }
+
+    public string ExportImportHistory(string filePath, IReadOnlyList<ImportacionHistorial> history)
+    {
+        using XLWorkbook wb = new();
+        IXLWorksheet ws = wb.Worksheets.Add("Control Importaciones");
+        WriteBanner(ws, "CAMBIASO HNOS. · CONTROL Y TRAZABILIDAD DE IMPORTACIONES (ORIGEN -> DESTINO)", $"Generado: {DateTime.Now:dd/MM/yyyy HH:mm}", 12);
+        WriteHeaders(ws, 5, ["ID", "Fecha / Hora", "Usuario", "Tipo Origen", "Desde (Origen Exacto)", "Planta Destino", "Hacia (SQLite)", "Rango", "Leídos", "Nuevos", "Duplicados", "Kilos Importados"]);
+
+        int r = 6;
+        foreach (ImportacionHistorial item in history)
+        {
+            WriteRowValues(
+                ws,
+                r,
+                [
+                    item.Id,
+                    item.FechaHoraLocal,
+                    item.Usuario,
+                    item.TipoOrigen,
+                    item.OrigenDetalle,
+                    item.PlantaDestino,
+                    item.DestinoDetalle,
+                    item.RangoFiltro,
+                    item.LeidosOrigen,
+                    item.ImportadosNuevos,
+                    item.DuplicadosOmitidos,
+                    item.KilosImportados
+                ],
+                isZebra: (r - 6) % 2 == 1);
+            r++;
+        }
+
+        ws.Columns().AdjustToContents();
+        wb.SaveAs(filePath);
+        return filePath;
+    }
+
+    public string ExportReportePersonalizado(string filePath, ReportePersonalizadoPayload payload)
+    {
+        using XLWorkbook wb = new();
+        HashSet<string> usedSheetNames = new(StringComparer.OrdinalIgnoreCase);
+
+        if (payload.EstadisticasKpis.Count > 0)
+        {
+            string kpiSheetName = SanitizeSheetName("KPIs y Estadísticas", usedSheetNames);
+            IXLWorksheet wsKpi = wb.Worksheets.Add(kpiSheetName);
+            WriteBanner(wsKpi, payload.TituloReporte.ToUpperInvariant(), payload.SubtituloFiltros, 3);
+            WriteSectionHeader(wsKpi, 5, "INDICADORES CLAVE Y FICHAS ESTADÍSTICAS", ["Indicador", "Valor", "Contexto / Detalle"], PetrolDark);
+            int r = 7;
+            foreach ((string Indicador, string Valor, string Detalle) kpi in payload.EstadisticasKpis)
+            {
+                WriteRowValues(wsKpi, r, [kpi.Indicador, kpi.Valor, kpi.Detalle], isZebra: (r - 7) % 2 == 1);
+                wsKpi.Cell(r, 1).Style.Font.Bold = true;
+                r++;
+            }
+
+            wsKpi.Columns().AdjustToContents();
+        }
+
+        foreach (ExportTableSection sec in payload.Secciones)
+        {
+            string sheetName = SanitizeSheetName(sec.SheetName, usedSheetNames);
+            IXLWorksheet ws = wb.Worksheets.Add(sheetName);
+            int colCount = Math.Max(3, sec.Headers.Length);
+            WriteBanner(ws, payload.TituloReporte.ToUpperInvariant(), $"{sec.SectionTitle} · {payload.SubtituloFiltros}", colCount);
+            WriteHeaders(ws, 5, sec.Headers);
+
+            int r = 6;
+            foreach (object?[] rowVals in sec.Rows)
+            {
+                WriteRowValues(ws, r, rowVals, isZebra: (r - 6) % 2 == 1);
+                r++;
+            }
+
+            ws.Columns().AdjustToContents();
+        }
+
+        if (wb.Worksheets.Count == 0)
+        {
+            IXLWorksheet empty = wb.Worksheets.Add("Sin Datos");
+            WriteBanner(empty, payload.TituloReporte, payload.SubtituloFiltros, 3);
+            empty.Cell(5, 1).Value = "No hubo filas o secciones seleccionadas para exportar.";
+        }
+
+        wb.SaveAs(filePath);
+        return filePath;
+    }
+
+    private static string SanitizeSheetName(string rawName, HashSet<string> used)
+    {
+        char[] invalid = ['\\', '/', '*', '?', ':', '[', ']'];
+        string cleaned = new([.. rawName.Where(c => !invalid.Contains(c))]);
+        if (string.IsNullOrWhiteSpace(cleaned))
+        {
+            cleaned = "Hoja";
+        }
+
+        if (cleaned.Length > 28)
+        {
+            cleaned = cleaned[..28];
+        }
+
+        string candidate = cleaned;
+        int idx = 2;
+        while (!used.Add(candidate))
+        {
+            string suffix = $" ({idx++})";
+            int maxBase = Math.Max(1, 31 - suffix.Length);
+            candidate = (cleaned.Length > maxBase ? cleaned[..maxBase] : cleaned) + suffix;
+        }
+
+        return candidate;
+    }
+
+    private static void WriteRowValues(IXLWorksheet ws, int row, object?[] values, bool isZebra)
+    {
+        for (int i = 0; i < values.Length; i++)
+        {
+            IXLCell cell = ws.Cell(row, i + 1);
+            object? val = values[i];
+            switch (val)
+            {
+                case null:
+                    cell.Value = string.Empty;
+                    break;
+                case DateOnly dOnly:
+                    cell.Value = dOnly.ToDateTime(TimeOnly.MinValue);
+                    cell.Style.DateFormat.Format = "dd-mm-yyyy";
+                    break;
+                case DateTime dt:
+                    cell.Value = dt;
+                    cell.Style.DateFormat.Format = "dd-mm-yyyy HH:mm";
+                    break;
+                case int iv:
+                    cell.Value = iv;
+                    cell.Style.NumberFormat.Format = "#,##0";
+                    break;
+                case long lv:
+                    cell.Value = lv;
+                    cell.Style.NumberFormat.Format = "#,##0";
+                    break;
+                case double dv:
+                    cell.Value = dv;
+                    cell.Style.NumberFormat.Format = "#,##0.0";
+                    break;
+                case decimal mv:
+                    cell.Value = mv;
+                    cell.Style.NumberFormat.Format = "#,##0.0";
+                    break;
+                default:
+                    cell.Value = val.ToString() ?? string.Empty;
+                    break;
+            }
+        }
+
+        if (isZebra && values.Length > 0)
+        {
+            ws.Range(row, 1, row, values.Length).Style.Fill.BackgroundColor = ZebraFill;
+        }
     }
 
     private static void WriteBanner(IXLWorksheet ws, string title, string subtitle, int spanCols)

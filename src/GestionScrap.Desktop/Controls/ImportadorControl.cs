@@ -1,4 +1,5 @@
 using System.Globalization;
+using GestionScrap.Application.DTOs;
 using GestionScrap.Application.Services;
 using GestionScrap.Desktop.Forms.Dialogs;
 using GestionScrap.Desktop.Theme;
@@ -10,8 +11,8 @@ using GestionScrap.Infrastructure.Configuration;
 namespace GestionScrap.Desktop.Controls;
 
 /// <summary>
-/// Módulo 4: Importador multi-origen desde servidores Firebird (WMDBSPC.GDB / PWAREHOUSE.FDB)
-/// y migración histórica desde Microsoft Access (.mdb/.accdb).
+/// Módulo 4: Importador simplificado de 1 clic con flujo claro Origen -> Destino y control detallado
+/// e historial persistente de cada sincronización (Firebird WMDBSPC.GDB / PWAREHOUSE.FDB y Access .mdb).
 /// </summary>
 public sealed class ImportadorControl : ScrapTabControlBase
 {
@@ -23,27 +24,45 @@ public sealed class ImportadorControl : ScrapTabControlBase
 
     private readonly TabControl _tabs = new() { Dock = DockStyle.Fill };
 
-    // Firebird Tab
+    // SubTab 1: Importador Simple Firebird (Origen -> Destino)
     private readonly ComboBox _cmbPlanta = new() { Width = 140 };
-    private readonly Label _lblEndpoint = new();
+    private readonly Label _lblFlowOrigin = new();
+    private readonly Label _lblFlowDest = new();
     private readonly CheckBox _chkTodoHistorial = new();
-    private readonly CheckBox _chkFallbackDemo = new();
+    private readonly CheckBox _chkOmitirCeros = new();
     private readonly DateTimePicker _dtpDesde = new();
     private readonly DateTimePicker _dtpHasta = new();
     private readonly Button _btnTestTcp;
     private readonly Button _btnConfig;
-    private readonly Button _btnBuscar;
-    private readonly Button _btnImportar;
+    private readonly Button _btnVistaPrevia;
+    private readonly Button _btnImportarDirecto;
+    private readonly Button _btnExportarVista;
     private readonly Label _lblResumenExtract = new();
-    private readonly DoubleBufferedDataGridView _dgv = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
+    private readonly DoubleBufferedDataGridView _dgv = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
 
-    // Access MDB Tab
+    // SubTab 2: Access MDB
     private readonly TextBox _txtMdbPath = new();
+    private readonly Label _lblMdbDestino = new();
     private readonly Button _btnBrowseMdb;
     private readonly Button _btnMigrateMdb;
     private readonly TextBox _txtMdbLog = new() { Multiline = true, ReadOnly = true, ScrollBars = ScrollBars.Vertical };
 
+    // SubTab 3: Control e Historial Detallado (Desde -> Hacia)
+    private readonly Label _lblHistCountVal;
+    private readonly Label _lblHistCountSub;
+    private readonly Label _lblDbRowsVal;
+    private readonly Label _lblDbRowsSub;
+    private readonly Label _lblDbKilosVal;
+    private readonly Label _lblDbKilosSub;
+    private readonly Label _lblLastSyncVal;
+    private readonly Label _lblLastSyncSub;
+    private readonly TextBox _txtFiltroHist = new() { Width = 220 };
+    private readonly Button _btnRefreshHist;
+    private readonly Button _btnExportHist;
+    private readonly DoubleBufferedDataGridView _dgvHistory = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
+
     private FirebirdExtractPackage? _currentPackage;
+    private IReadOnlyList<ImportacionHistorial> _allHistory = [];
 
     public ImportadorControl(
         ScrapApplicationService app,
@@ -61,21 +80,60 @@ public sealed class ImportadorControl : ScrapTabControlBase
         Dock = DockStyle.Fill;
         BackColor = AppTheme.CanvasLight;
         Padding = new Padding(12);
+        Size = new Size(1280, 760);
         _tabs.Font = AppTheme.FontBodyBold;
 
-        // 1. SubTab Firebird (WMDBSPC.GDB)
-        TabPage tpFirebird = new("Importar desde Firebird (WMDBSPC.GDB / PWAREHOUSE.FDB)") { BackColor = AppTheme.CanvasLight, Padding = new Padding(8) };
+        // =========================================================================
+        // 1. IMPORTACIÓN SIMPLE FIREBIRD (ORIGEN -> DESTINO)
+        // =========================================================================
+        TabPage tpFirebird = new("Importar Firebird (WMDBSPC.GDB)") { BackColor = AppTheme.CanvasLight, Padding = new Padding(8) };
 
-        Panel topCard = UiHelpers.BuildFilterCard(104);
+        Panel flowCard = new()
+        {
+            Dock = DockStyle.Top,
+            Height = 56,
+            BackColor = AppTheme.HeaderDark,
+            Padding = new Padding(12, 8, 12, 8),
+            Margin = new Padding(0, 0, 0, 6)
+        };
+        TableLayoutPanel flowGrid = new() { Dock = DockStyle.Fill, ColumnCount = 3, RowCount = 1 };
+        flowGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 48F));
+        flowGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 42F));
+        flowGrid.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 52F));
+
+        _lblFlowOrigin.Dock = DockStyle.Fill;
+        _lblFlowOrigin.Font = AppTheme.FontMono;
+        _lblFlowOrigin.ForeColor = AppTheme.AccentGold;
+        _lblFlowOrigin.TextAlign = ContentAlignment.MiddleLeft;
+
+        Label lblArrow = new()
+        {
+            Text = "➔",
+            Font = new Font("Segoe UI", 14F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(103, 232, 249),
+            Dock = DockStyle.Fill,
+            TextAlign = ContentAlignment.MiddleCenter
+        };
+
+        _lblFlowDest.Dock = DockStyle.Fill;
+        _lblFlowDest.Font = AppTheme.FontMono;
+        _lblFlowDest.ForeColor = Color.FromArgb(167, 243, 208);
+        _lblFlowDest.TextAlign = ContentAlignment.MiddleLeft;
+
+        flowGrid.Controls.Add(_lblFlowOrigin, 0, 0);
+        flowGrid.Controls.Add(lblArrow, 1, 0);
+        flowGrid.Controls.Add(_lblFlowDest, 2, 0);
+        flowCard.Controls.Add(flowGrid);
+
+        Panel topCard = UiHelpers.BuildFilterCard(100);
         topCard.BorderStyle = BorderStyle.FixedSingle;
 
         UiHelpers.PopulatePlantaCombo(_cmbPlanta, includeTalcahuano: true);
         UiHelpers.SelectPlanta(_cmbPlanta, Planta.Santiago);
         _cmbPlanta.SelectedIndexChanged += (_, _) => UpdateEndpointBanner();
 
-        DateTime today = DateTime.Today;
         _dtpDesde.Value = new DateTime(2024, 1, 1);
-        _dtpHasta.Value = today;
+        _dtpHasta.Value = DateTime.Today;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
 
@@ -83,7 +141,7 @@ public sealed class ImportadorControl : ScrapTabControlBase
         _chkTodoHistorial.Checked = true;
         _chkTodoHistorial.Font = AppTheme.FontBodyBold;
         _chkTodoHistorial.AutoSize = true;
-        _chkTodoHistorial.Margin = new Padding(8, 8, 6, 0);
+        _chkTodoHistorial.Margin = new Padding(8, 7, 6, 0);
         _chkTodoHistorial.CheckedChanged += (_, _) =>
         {
             _dtpDesde.Enabled = !_chkTodoHistorial.Checked;
@@ -92,52 +150,49 @@ public sealed class ImportadorControl : ScrapTabControlBase
         _dtpDesde.Enabled = false;
         _dtpHasta.Enabled = false;
 
-        _chkFallbackDemo.Text = "Respaldo demo si falla red";
-        _chkFallbackDemo.Checked = false;
-        _chkFallbackDemo.Font = AppTheme.FontBody;
-        _chkFallbackDemo.AutoSize = true;
-        _chkFallbackDemo.Margin = new Padding(8, 8, 6, 0);
-
-        _lblEndpoint.Font = AppTheme.FontMono;
-        _lblEndpoint.ForeColor = AppTheme.AccentBlue;
-        _lblEndpoint.AutoSize = true;
-        _lblEndpoint.Margin = new Padding(10, 9, 0, 0);
+        _chkOmitirCeros.Text = "Omitir 0 Kg";
+        _chkOmitirCeros.Checked = false;
+        _chkOmitirCeros.Font = AppTheme.FontBody;
+        _chkOmitirCeros.AutoSize = true;
+        _chkOmitirCeros.Margin = new Padding(6, 7, 6, 0);
 
         _btnTestTcp = AppTheme.CreateButton("Probar Conexión", IconKind.Check, ButtonVariant.Secondary,
-            async (_, _) => await TestTcpAsync(), "Verifica conectividad TCP 3050, tablas y cantidad real de pesajes en WMDBSPC.GDB", Tip, 150, 32);
+            async (_, _) => await TestTcpAsync(), "Verifica conectividad TCP 3050, tablas y pesajes reales en origen", Tip, 146, 32);
         _btnConfig = AppTheme.CreateButton("Configurar Red", IconKind.Settings, ButtonVariant.Secondary,
-            (_, _) => OpenConfigDialog(), "Configura IPs, rutas .GDB/.FDB y credenciales Firebird", Tip, 142, 32);
-        _btnBuscar = AppTheme.CreateButton("Cargar desde Firebird", IconKind.Search, ButtonVariant.Primary,
-            async (_, _) => await BuscarRemotoAsync(), "Extrae vista previa de DBPESAJES, DBCLIENTES y DBPRODUCTOS", Tip, 175, 32);
-        _btnImportar = AppTheme.CreateButton("Importar a Base Local", IconKind.Import, ButtonVariant.Success,
-            async (_, _) => await ImportarAsync(), "Importa clientes, productos y pesajes evitando duplicados en SQLite", Tip, 185, 32);
+            (_, _) => OpenConfigDialog(), "Configura servidores Firebird, rutas .GDB/.FDB y credenciales", Tip, 138, 32);
+        _btnVistaPrevia = AppTheme.CreateButton("Vista Previa", IconKind.Search, ButtonVariant.Primary,
+            async (_, _) => await BuscarRemotoAsync(), "Consulta previa opcional de los registros antes de guardar", Tip, 130, 32);
+        _btnImportarDirecto = AppTheme.CreateButton("Importar Directo", IconKind.Import, ButtonVariant.Success,
+            async (_, _) => await ImportarDirectoAsync(), "Sincronización simple en 1 clic: extrae del origen e importa al SQLite destino", Tip, 155, 32);
+        _btnExportarVista = AppTheme.CreateButton("Exportar Vista", IconKind.Excel, ButtonVariant.Gold,
+            (_, _) => ExportarVistaPrevia(), "Exporta la vista previa o solo las filas seleccionadas a Excel", Tip, 142, 32);
 
         TableLayoutPanel rows = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        rows.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-        rows.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
+        rows.RowStyles.Add(new RowStyle(SizeType.Percent, 48F));
+        rows.RowStyles.Add(new RowStyle(SizeType.Percent, 52F));
 
         FlowLayoutPanel r1 = new() { Dock = DockStyle.Fill, WrapContents = false };
         r1.Controls.AddRange(
         [
-            new Label { Text = "Planta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 8, 4, 0) },
+            new Label { Text = "Origen / Planta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 0) },
             _cmbPlanta,
             _chkTodoHistorial,
-            new Label { Text = "Desde:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 8, 4, 0) },
+            new Label { Text = "Desde:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 7, 4, 0) },
             _dtpDesde,
-            new Label { Text = "Hasta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 8, 4, 0) },
+            new Label { Text = "Hasta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 7, 4, 0) },
             _dtpHasta,
-            _chkFallbackDemo
+            _chkOmitirCeros
         ]);
 
         FlowLayoutPanel r2 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r2.Controls.AddRange([_btnTestTcp, _btnConfig, _btnBuscar, _btnImportar, _lblEndpoint]);
+        r2.Controls.AddRange([_btnImportarDirecto, _btnVistaPrevia, _btnTestTcp, _btnConfig, _btnExportarVista]);
 
         rows.Controls.Add(r1, 0, 0);
         rows.Controls.Add(r2, 0, 1);
         topCard.Controls.Add(rows);
 
         Panel gridCard = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
-        _lblResumenExtract.Text = "Presione 'Cargar desde Firebird' e 'Importar a Base Local' para sincronizar WMDBSPC.GDB hacia su SQLite local.";
+        _lblResumenExtract.Text = "Use 'Importar Directo' para sincronizar en 1 paso desde WMDBSPC.GDB hacia su SQLite local, o 'Vista Previa' para inspeccionar primero.";
         _lblResumenExtract.Font = AppTheme.FontSection;
         _lblResumenExtract.ForeColor = AppTheme.SidebarDark;
         _lblResumenExtract.Dock = DockStyle.Top;
@@ -165,12 +220,19 @@ public sealed class ImportadorControl : ScrapTabControlBase
         gridCard.Controls.Add(_lblResumenExtract);
         tpFirebird.Controls.Add(gridCard);
         tpFirebird.Controls.Add(topCard);
+        tpFirebird.Controls.Add(flowCard);
 
-        // 2. SubTab Access MDB
-        TabPage tpMdb = new("Importar desde Microsoft Access (.mdb / .accdb)") { BackColor = AppTheme.CanvasLight, Padding = new Padding(8) };
+        // =========================================================================
+        // 2. ACCESS MDB
+        // =========================================================================
+        TabPage tpMdb = new("Importar Access (.mdb / .accdb)") { BackColor = AppTheme.CanvasLight, Padding = new Padding(8) };
         Panel cardMdb = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(16), BorderStyle = BorderStyle.FixedSingle };
-        Label lblMdbTitle = new() { Text = "Migrador de Base Histórica Access (BD_SCRAP.mdb)", Font = AppTheme.FontSection, ForeColor = AppTheme.SidebarDark, Dock = DockStyle.Top, Height = 28 };
-        Label lblMdbSub = new() { Text = "Lee automáticamente tablas históricas con soporte integrado 32/64 bits (SysWOW64) e importa pesajes, clientes y productos.", Font = AppTheme.FontSubtitle, ForeColor = AppTheme.TextSecondary, Dock = DockStyle.Top, Height = 26 };
+        Label lblMdbTitle = new() { Text = "Migración Simple desde Microsoft Access (BD_SCRAP.mdb)", Font = AppTheme.FontSection, ForeColor = AppTheme.SidebarDark, Dock = DockStyle.Top, Height = 28 };
+        _lblMdbDestino.Text = $"Destino local SQLite: {settings.SqliteDatabasePath}";
+        _lblMdbDestino.Font = AppTheme.FontSubtitle;
+        _lblMdbDestino.ForeColor = AppTheme.AccentBlue;
+        _lblMdbDestino.Dock = DockStyle.Top;
+        _lblMdbDestino.Height = 24;
 
         Panel mdbRow = new() { Dock = DockStyle.Top, Height = 46, Padding = new Padding(0, 6, 0, 6) };
         _txtMdbPath.SetBounds(0, 6, 520, 28);
@@ -182,7 +244,7 @@ public sealed class ImportadorControl : ScrapTabControlBase
         _btnBrowseMdb.Location = new Point(530, 4);
 
         _btnMigrateMdb = AppTheme.CreateButton("Importar Access", IconKind.Import, ButtonVariant.Success,
-            async (_, _) => await RunMdbMigrationAsync(), "Ejecutar migración desde el archivo Access seleccionado", Tip, 165, 32);
+            async (_, _) => await RunMdbMigrationAsync(), "Ejecutar migración desde archivo Access y registrar en historial", Tip, 165, 32);
         _btnMigrateMdb.Location = new Point(686, 4);
         mdbRow.Controls.AddRange([_txtMdbPath, _btnBrowseMdb, _btnMigrateMdb]);
 
@@ -193,15 +255,76 @@ public sealed class ImportadorControl : ScrapTabControlBase
 
         cardMdb.Controls.Add(_txtMdbLog);
         cardMdb.Controls.Add(mdbRow);
-        cardMdb.Controls.Add(lblMdbSub);
+        cardMdb.Controls.Add(_lblMdbDestino);
         cardMdb.Controls.Add(lblMdbTitle);
         tpMdb.Controls.Add(cardMdb);
 
-        _tabs.TabPages.AddRange([tpFirebird, tpMdb]);
+        // =========================================================================
+        // 3. CONTROL E HISTORIAL DE IMPORTACIONES (DESDE -> HACIA)
+        // =========================================================================
+        TabPage tpControl = new("Control e Historial (Desde -> Hacia)") { BackColor = AppTheme.CanvasLight, Padding = new Padding(8) };
+
+        TableLayoutPanel histKpis = new() { Dock = DockStyle.Top, Height = 92, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 0, 0, 6) };
+        for (int i = 0; i < 4; i++) histKpis.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        histKpis.Controls.Add(UiHelpers.CreateKpiCard("IMPORTACIONES REGISTRADAS", AppTheme.AccentBlue, out _lblHistCountVal, out _lblHistCountSub), 0, 0);
+        histKpis.Controls.Add(UiHelpers.CreateKpiCard("PESAJES EN BASE DESTINO", AppTheme.AccentCyan, out _lblDbRowsVal, out _lblDbRowsSub), 1, 0);
+        histKpis.Controls.Add(UiHelpers.CreateKpiCard("VOLUMEN ALMACENADO", AppTheme.AccentEmerald, out _lblDbKilosVal, out _lblDbKilosSub), 2, 0);
+        histKpis.Controls.Add(UiHelpers.CreateKpiCard("ÚLTIMA SINCRONIZACIÓN", AppTheme.AccentGold, out _lblLastSyncVal, out _lblLastSyncSub), 3, 0);
+
+        Panel histToolbar = UiHelpers.BuildFilterCard(52);
+        histToolbar.BorderStyle = BorderStyle.FixedSingle;
+        AppTheme.ApplyInputStyle(_txtFiltroHist);
+        _txtFiltroHist.PlaceholderText = "Filtrar origen, planta o usuario...";
+        _txtFiltroHist.TextChanged += (_, _) => ApplyHistoryFilter();
+
+        _btnRefreshHist = AppTheme.CreateButton("Actualizar Control", IconKind.Refresh, ButtonVariant.Primary,
+            async (_, _) => await RefreshHistoryAndStatsAsync(), "Recargar historial Origen -> Destino y estadísticas SQLite", Tip, 155, 30);
+        _btnExportHist = AppTheme.CreateButton("Exportar Control", IconKind.Excel, ButtonVariant.Success,
+            (_, _) => ExportarControlHistorial(), "Exporta historial completo o filas seleccionadas de importaciones", Tip, 150, 30);
+
+        FlowLayoutPanel histFlow = new() { Dock = DockStyle.Fill, WrapContents = false };
+        histFlow.Controls.AddRange(
+        [
+            new Label { Text = "Buscar:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 6, 0) },
+            _txtFiltroHist,
+            _btnRefreshHist,
+            _btnExportHist
+        ]);
+        histToolbar.Controls.Add(histFlow);
+
+        Panel histGridCard = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(8), BorderStyle = BorderStyle.FixedSingle };
+        _dgvHistory.Columns.AddRange(
+        [
+            UiHelpers.AddTextCol("Fecha / Hora", nameof(ImportacionHistorial.FechaHoraLocal), 95),
+            UiHelpers.AddTextCol("Usuario", nameof(ImportacionHistorial.Usuario), 65),
+            UiHelpers.AddTextCol("Tipo", nameof(ImportacionHistorial.TipoOrigen), 72),
+            UiHelpers.AddTextCol("Desde (Origen Exacto)", nameof(ImportacionHistorial.OrigenDetalle), 175),
+            UiHelpers.AddTextCol("Planta", nameof(ImportacionHistorial.PlantaDestino), 68),
+            UiHelpers.AddTextCol("Hacia (Destino SQLite)", nameof(ImportacionHistorial.DestinoDetalle), 150),
+            UiHelpers.AddTextCol("Rango", nameof(ImportacionHistorial.RangoFiltro), 88),
+            UiHelpers.AddNumberCol("Leídos", nameof(ImportacionHistorial.LeidosOrigen), "N0", 52),
+            UiHelpers.AddNumberCol("Nuevos", nameof(ImportacionHistorial.ImportadosNuevos), "N0", 52),
+            UiHelpers.AddNumberCol("Dup.", nameof(ImportacionHistorial.DuplicadosOmitidos), "N0", 45),
+            UiHelpers.AddNumberCol("Kilos Imp.", nameof(ImportacionHistorial.KilosImportados), "N0", 72),
+            UiHelpers.AddTextCol("Estado", nameof(ImportacionHistorial.Estado), 72)
+        ]);
+        histGridCard.Controls.Add(_dgvHistory);
+
+        tpControl.Controls.Add(histGridCard);
+        tpControl.Controls.Add(histToolbar);
+        tpControl.Controls.Add(histKpis);
+
+        _tabs.TabPages.AddRange([tpFirebird, tpMdb, tpControl]);
         Controls.Add(_tabs);
 
         UpdateEndpointBanner();
         RefreshPermissions();
+    }
+
+    public override async Task ActivateAsync(CancellationToken ct = default)
+    {
+        UpdateEndpointBanner();
+        await RefreshHistoryAndStatsAsync(ct);
     }
 
     private FirebirdPlantaEndpoint GetCurrentEndpoint()
@@ -220,18 +343,24 @@ public sealed class ImportadorControl : ScrapTabControlBase
     private void UpdateEndpointBanner()
     {
         FirebirdPlantaEndpoint ep = GetCurrentEndpoint();
-        _lblEndpoint.Text = $"{ep.ServidorIp}:{ep.Puerto} -> {ep.RutaArchivo}";
-        _chkFallbackDemo.Checked = ep.UsarModoLocalSiFallaRed;
+        _lblFlowOrigin.Text = $"DESDE: Firebird ({ep.ServidorIp}:{ep.Puerto}) · {ep.RutaArchivo}";
+        string dest = string.IsNullOrWhiteSpace(_settings.SqliteDatabasePath) ? "Base Local SQLite (WAL)" : _settings.SqliteDatabasePath;
+        _lblFlowDest.Text = $"HACIA: SQLite [{ep.Planta.ToShortTitle()}] · {dest}";
+        _lblMdbDestino.Text = $"Destino local SQLite: {dest}";
     }
 
     public override void RefreshPermissions()
     {
         bool canImp = _auth.HasPermission(PermisoSistema.ImportarDatos);
+        bool canExport = _auth.HasPermission(PermisoSistema.ExportarExcel);
         _btnTestTcp.Enabled = canImp;
-        _btnBuscar.Enabled = canImp;
-        _btnImportar.Enabled = canImp;
+        _btnVistaPrevia.Enabled = canImp;
+        _btnImportarDirecto.Enabled = canImp;
         _btnBrowseMdb.Enabled = canImp;
         _btnMigrateMdb.Enabled = canImp;
+        _btnRefreshHist.Enabled = canImp;
+        _btnExportHist.Enabled = canImp && canExport;
+        _btnExportarVista.Enabled = canExport;
         _btnConfig.Enabled = canImp || _auth.HasPermission(PermisoSistema.MantenimientoBaseDatos);
     }
 
@@ -265,47 +394,130 @@ public sealed class ImportadorControl : ScrapTabControlBase
             DateOnly? desde = _chkTodoHistorial.Checked ? null : DateOnly.FromDateTime(_dtpDesde.Value);
             DateOnly? hasta = _chkTodoHistorial.Checked ? null : DateOnly.FromDateTime(_dtpHasta.Value);
 
-            _currentPackage = await _app.QueryFirebirdPackageAsync(ep, desde, hasta, _chkFallbackDemo.Checked);
-            _dgv.DataSource = null;
-            _dgv.DataSource = _currentPackage.Pesajes;
+            _currentPackage = await _app.QueryFirebirdPackageAsync(ep, desde, hasta, ep.UsarModoLocalSiFallaRed);
+            IEnumerable<FirebirdRemotePesaje> preview = _chkOmitirCeros.Checked
+                ? _currentPackage.Pesajes.Where(p => p.PesoNeto > 0 || p.PesoBruto > p.PesoTara)
+                : _currentPackage.Pesajes;
 
-            long kilos = _currentPackage.Pesajes.Sum(r => (long)r.PesoNeto);
+            List<FirebirdRemotePesaje> previewList = [.. preview];
+            _dgv.DataSource = null;
+            _dgv.DataSource = previewList;
+
+            long kilos = previewList.Sum(r => (long)r.PesoNeto);
             _lblResumenExtract.Text = string.Create(
                 UiHelpers.EsCl,
-                $"{ep.Planta.ToShortTitle()}: {_currentPackage.Pesajes.Count:N0} pesajes ({kilos:N0} Kg), {_currentPackage.Clientes.Count:N0} clientes y {_currentPackage.Productos.Count:N0} productos listos para importar.");
+                $"{ep.Planta.ToShortTitle()}: {previewList.Count:N0} pesajes en vista previa ({kilos:N0} Kg), {_currentPackage.Clientes.Count:N0} clientes y {_currentPackage.Productos.Count:N0} productos.");
             NotifyStatus(_currentPackage.StatusMessage);
         }, NotifyStatus, "Consultando Firebird WMDBSPC...");
     }
 
-    private async Task ImportarAsync()
+    private async Task ImportarDirectoAsync()
     {
-        if (_currentPackage is null || (_currentPackage.Pesajes.Count == 0 && _currentPackage.Clientes.Count == 0))
-        {
-            await BuscarRemotoAsync();
-            if (_currentPackage is null || (_currentPackage.Pesajes.Count == 0 && _currentPackage.Clientes.Count == 0))
-            {
-                return;
-            }
-        }
-
         await UiHelpers.RunSafeAsync(this, async () =>
         {
-            Planta planta = UiHelpers.GetSelectedPlanta(_cmbPlanta);
-            var res = await _app.ImportFirebirdPackageAsync(planta, _currentPackage);
-            string summary = $"Sincronización completada ({planta.ToShortTitle()}):\n\n" +
-                             $"• Pesajes nuevos importados: {res.ImportedPesajes.ToString("N0", UiHelpers.EsCl)}\n" +
-                             $"• Pesajes ya existentes omitidos: {res.Duplicates.ToString("N0", UiHelpers.EsCl)}\n" +
-                             $"• Clientes / Proveedores sincronizados: {res.ClientesUpserted.ToString("N0", UiHelpers.EsCl)}\n" +
-                             $"• Productos actualizados: {res.ProductosUpserted.ToString("N0", UiHelpers.EsCl)}";
+            FirebirdPlantaEndpoint ep = GetCurrentEndpoint();
+            DateOnly? desde = _chkTodoHistorial.Checked ? null : DateOnly.FromDateTime(_dtpDesde.Value);
+            DateOnly? hasta = _chkTodoHistorial.Checked ? null : DateOnly.FromDateTime(_dtpHasta.Value);
 
-            NotifyStatus($"Importados {res.ImportedPesajes:N0} pesajes nuevos desde Firebird ({planta.ToShortTitle()}).");
-            MessageBox.Show(this, summary, "Importación Firebird Exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            FirebirdExtractPackage pkg;
+            int impCount, dupCount, cliCount, prodCount;
 
-            if ((res.ImportedPesajes > 0 || res.ClientesUpserted > 0) && _onDataChanged is not null)
+            if (_currentPackage is not null && _currentPackage.Pesajes.Count > 0)
+            {
+                pkg = _currentPackage;
+                string rango = desde.HasValue && hasta.HasValue ? $"{desde.Value:dd/MM/yyyy} - {hasta.Value:dd/MM/yyyy}" : "Todo el historial";
+                var res = await _app.ImportFirebirdPackageAsync(ep.Planta, pkg, ep, rango, _chkOmitirCeros.Checked);
+                impCount = res.ImportedPesajes;
+                dupCount = res.Duplicates;
+                cliCount = res.ClientesUpserted;
+                prodCount = res.ProductosUpserted;
+            }
+            else
+            {
+                var res = await _app.ImportDirectFromFirebirdAsync(ep, desde, hasta, ep.UsarModoLocalSiFallaRed, _chkOmitirCeros.Checked);
+                pkg = res.Package;
+                _currentPackage = pkg;
+                impCount = res.ImportedPesajes;
+                dupCount = res.Duplicates;
+                cliCount = res.ClientesUpserted;
+                prodCount = res.ProductosUpserted;
+
+                _dgv.DataSource = null;
+                _dgv.DataSource = pkg.Pesajes;
+            }
+
+            string summary = $"Sincronización completada:\n\n" +
+                             $"• Origen: {ep.ServidorIp}:{ep.Puerto} · {ep.RutaArchivo}\n" +
+                             $"• Destino: SQLite [{ep.Planta.ToShortTitle()}]\n" +
+                             $"• Pesajes nuevos importados: {impCount.ToString("N0", UiHelpers.EsCl)}\n" +
+                             $"• Duplicados omitidos: {dupCount.ToString("N0", UiHelpers.EsCl)}\n" +
+                             $"• Clientes sincronizados: {cliCount.ToString("N0", UiHelpers.EsCl)}\n" +
+                             $"• Productos sincronizados: {prodCount.ToString("N0", UiHelpers.EsCl)}";
+
+            await RefreshHistoryAndStatsCoreAsync(CancellationToken.None);
+            NotifyStatus($"Importados {impCount:N0} pesajes nuevos desde {ep.Planta.ToShortTitle()}.");
+            MessageBox.Show(this, summary, "Importación Completada", MessageBoxButtons.OK, MessageBoxIcon.Information);
+
+            if ((impCount > 0 || cliCount > 0) && _onDataChanged is not null)
             {
                 await _onDataChanged();
             }
-        }, NotifyStatus, "Importando registros hacia SQLite WAL...");
+
+            _currentPackage = null;
+        }, NotifyStatus, "Sincronizando origen Firebird hacia SQLite...");
+    }
+
+    private void ExportarVistaPrevia()
+    {
+        if (_dgv.DataSource is not IEnumerable<FirebirdRemotePesaje> bound)
+        {
+            MessageBox.Show(this, "Consulte una vista previa antes de exportar.", "Sin Datos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        List<FirebirdRemotePesaje> selected = [.. _dgv.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as FirebirdRemotePesaje).OfType<FirebirdRemotePesaje>()];
+        List<FirebirdRemotePesaje> all = [.. bound];
+        if (all.Count == 0)
+        {
+            MessageBox.Show(this, "No hay registros en vista previa para exportar.", "Sin Datos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        List<FirebirdRemotePesaje> target = selected.Count > 1 ? selected : all;
+        string? path = UiHelpers.PromptSaveExcelPath(this, $"VistaPrevia_Firebird_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            FirebirdPlantaEndpoint ep = GetCurrentEndpoint();
+            string saved = _app.ExcelExporter.ExportReportePersonalizado(
+                path,
+                new ReportePersonalizadoPayload(
+                    $"Vista Previa Firebird · {ep.Planta.ToShortTitle()}",
+                    $"Origen: {ep.ServidorIp}:{ep.Puerto} · {ep.RutaArchivo}",
+                    [
+                        ("Origen", $"{ep.ServidorIp}:{ep.Puerto}", ep.RutaArchivo),
+                        ("Registros Exportados", $"{target.Count:N0}", selected.Count > 1 ? "Selección de filas" : "Vista completa"),
+                        ("Kilos Netos", $"{target.Sum(x => (long)x.PesoNeto):N0} Kg", string.Empty)
+                    ],
+                    [
+                        new ExportTableSection(
+                            "Vista Previa",
+                            "Pesajes Leídos desde Firebird",
+                            ["Folio", "Tipo", "Patente", "Bruto", "Tara", "Neto Kg", "Código", "Producto", "RUT", "Cliente", "Origen", "Destino", "Chofer", "Ingreso"],
+                            [.. target.Select(r => new object?[] { r.Folio, r.TipoPesajeRaw, r.Patente, r.PesoBruto, r.PesoTara, r.PesoNeto, r.CodProducto, r.NomProducto, r.RutCliente, r.NomCliente, r.Origen, r.Destino, r.Chofer, r.FechaIngreso })])
+                    ]));
+
+            NotifyStatus($"Vista previa exportada: {saved}");
+            MessageBox.Show(this, $"Excel generado correctamente:\n{saved}", "Exportación Exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Error al Exportar", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 
     private void BrowseMdb()
@@ -335,7 +547,8 @@ public sealed class ImportadorControl : ScrapTabControlBase
             _settings.LastMdbPath = path;
             _settingsStore.Save(_settings);
 
-            _txtMdbLog.Text = $"[{DateTime.Now:HH:mm:ss}] Iniciando migración desde: {path}{Environment.NewLine}";
+            _txtMdbLog.Text = $"[{DateTime.Now:HH:mm:ss}] Origen Access: {path}{Environment.NewLine}" +
+                              $"[{DateTime.Now:HH:mm:ss}] Destino SQLite: {_settings.SqliteDatabasePath}{Environment.NewLine}";
             var res = await _app.ImportFromAccessMdbAsync(path);
 
             _txtMdbLog.AppendText(string.Create(
@@ -350,6 +563,8 @@ public sealed class ImportadorControl : ScrapTabControlBase
                 _txtMdbLog.AppendText($"  [AVISO] {w}{Environment.NewLine}");
             }
 
+            await RefreshHistoryAndStatsCoreAsync(CancellationToken.None);
+
             if (_onDataChanged is not null)
             {
                 await _onDataChanged();
@@ -357,5 +572,79 @@ public sealed class ImportadorControl : ScrapTabControlBase
 
             NotifyStatus($"Access MDB migrado: {res.PesajesImported} pesajes, {res.ClientesImported} clientes.");
         }, NotifyStatus, "Ejecutando migración Access MDB...");
+    }
+
+    private async Task RefreshHistoryAndStatsAsync(CancellationToken ct = default)
+    {
+        await UiHelpers.RunSafeAsync(this, async () => await RefreshHistoryAndStatsCoreAsync(ct), NotifyStatus);
+    }
+
+    private async Task RefreshHistoryAndStatsCoreAsync(CancellationToken ct)
+    {
+        _allHistory = await _app.GetImportHistoryAsync(250, ct);
+        DatabaseResumenStatsDto stats = await _app.GetDatabaseResumenStatsAsync(ct);
+
+        _lblHistCountVal.Text = stats.TotalImportaciones.ToString("N0", UiHelpers.EsCl);
+        _lblHistCountSub.Text = "Ejecuciones auditadas Origen -> Destino";
+
+        _lblDbRowsVal.Text = string.Create(UiHelpers.EsCl, $"{stats.TotalPesajes:N0} pesajes");
+        _lblDbRowsSub.Text = stats.FechaMinima.HasValue && stats.FechaMaxima.HasValue
+            ? $"{stats.FechaMinima:dd/MM/yyyy} al {stats.FechaMaxima:dd/MM/yyyy}"
+            : "Base sin pesajes aún";
+
+        _lblDbKilosVal.Text = string.Create(UiHelpers.EsCl, $"{stats.TotalKilos:N0} Kg");
+        _lblDbKilosSub.Text = string.Create(UiHelpers.EsCl, $"{stats.TotalClientes} clientes · {stats.TotalProductos} productos");
+
+        _lblLastSyncVal.Text = stats.UltimaImportacionUtc.HasValue
+            ? stats.UltimaImportacionUtc.Value.ToLocalTime().ToString("dd/MM HH:mm", UiHelpers.EsCl)
+            : "Sin registros";
+        _lblLastSyncSub.Text = stats.UltimoOrigen.Length > 34 ? stats.UltimoOrigen[..32] + "…" : stats.UltimoOrigen;
+
+        ApplyHistoryFilter();
+    }
+
+    private void ApplyHistoryFilter()
+    {
+        string term = _txtFiltroHist.Text.Trim();
+        List<ImportacionHistorial> filtered = string.IsNullOrEmpty(term)
+            ? [.. _allHistory]
+            : [.. _allHistory.Where(h =>
+                h.OrigenDetalle.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                h.TipoOrigen.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                h.PlantaDestino.Contains(term, StringComparison.OrdinalIgnoreCase) ||
+                h.Usuario.Contains(term, StringComparison.OrdinalIgnoreCase))];
+
+        _dgvHistory.DataSource = null;
+        _dgvHistory.DataSource = filtered;
+    }
+
+    private void ExportarControlHistorial()
+    {
+        List<ImportacionHistorial> selected = [.. _dgvHistory.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as ImportacionHistorial).OfType<ImportacionHistorial>()];
+        List<ImportacionHistorial> visible = [.. (_dgvHistory.DataSource as IEnumerable<ImportacionHistorial> ?? _allHistory)];
+        List<ImportacionHistorial> toExport = selected.Count > 1 ? selected : visible;
+
+        if (toExport.Count == 0)
+        {
+            MessageBox.Show(this, "No hay registros de importación para exportar.", "Sin Datos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        string? path = UiHelpers.PromptSaveExcelPath(this, $"Control_Importaciones_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            string saved = _app.ExcelExporter.ExportImportHistory(path, toExport);
+            NotifyStatus($"Control de importaciones exportado: {saved}");
+            MessageBox.Show(this, $"Control de importaciones exportado correctamente:\n{saved}", "Exportación Exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Error al Exportar", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
     }
 }

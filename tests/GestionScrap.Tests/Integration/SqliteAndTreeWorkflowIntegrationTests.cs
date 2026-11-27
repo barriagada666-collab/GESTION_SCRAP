@@ -266,8 +266,62 @@ public sealed class SqliteAndTreeWorkflowIntegrationTests : IDisposable
         string bk = await _app.BackupDatabaseAsync(Path.Combine(_tempDir, "backup.db"));
         Assert.True(File.Exists(bk));
 
+        // Verificar historial Origen -> Destino y Exportación Personalizada + Historial
+        FirebirdPlantaEndpoint ep = new()
+        {
+            Planta = Planta.Santiago,
+            ServidorIp = "192.168.2.56",
+            Puerto = 3050,
+            RutaArchivo = @"C:\bdwm\placilla2\WMDBSPC.GDB"
+        };
+        FirebirdExtractPackage pkg = new(
+            [
+                new FirebirdRemotePesaje
+                {
+                    Folio = 103, TipoPesajeRaw = "1", Patente = "ZZ1122",
+                    PesoBruto = 16_000, PesoTara = 6_000, PesoNeto = 10_000,
+                    CodProducto = "5300000009", NomProducto = "MIX SUPERMERCADO",
+                    RutCliente = "89201400", NomCliente = "ENV. IMPRESOS CORDILLERA SPA",
+                    FechaIngreso = new DateOnly(2026, 11, 26), HoraIngreso = new TimeOnly(9, 0),
+                    FechaSalida = new DateOnly(2026, 11, 26), HoraSalida = new TimeOnly(9, 20)
+                }
+            ],
+            [],
+            [],
+            false,
+            "OK");
+
+        var impRes = await _app.ImportFirebirdPackageAsync(Planta.Santiago, pkg, ep, "Todo el historial", true);
+        Assert.Equal(1, impRes.ImportedPesajes);
+
+        IReadOnlyList<ImportacionHistorial> history = await _app.GetImportHistoryAsync();
+        Assert.Single(history);
+        Assert.Contains("WMDBSPC.GDB", history[0].OrigenDetalle, StringComparison.OrdinalIgnoreCase);
+        Assert.EndsWith("core_test.db", history[0].DestinoDetalle, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(10_000, history[0].KilosImportados);
+
+        string xlsxPers = Path.Combine(_tempDir, "personalizado.xlsx");
+        _app.ExcelExporter.ExportReportePersonalizado(
+            xlsxPers,
+            new ReportePersonalizadoPayload(
+                "Análisis Personalizado Test",
+                resumen.PeriodoActualLabel,
+                [("Volumen", $"{resumen.TotalKilos:N0} Kg", "OK")],
+                [new ExportTableSection("Resumen", "Segmentación", ["Grupo", "Kilos"], [["MIX", 12_000L]])]));
+        using (XLWorkbook wb = new(xlsxPers))
+        {
+            Assert.Equal(2, wb.Worksheets.Count);
+        }
+
+        string xlsxHist = Path.Combine(_tempDir, "historial.xlsx");
+        _app.ExcelExporter.ExportImportHistory(xlsxHist, history);
+        using (XLWorkbook wb = new(xlsxHist))
+        {
+            Assert.Single(wb.Worksheets);
+        }
+
         await Assert.ThrowsAsync<ArgumentException>(() => _app.PurgeAllPesajesAsync("NO"));
         int purged = await _app.PurgeAllPesajesAsync("ELIMINAR");
-        Assert.Equal(2, purged);
+        Assert.Equal(3, purged);
     }
 }

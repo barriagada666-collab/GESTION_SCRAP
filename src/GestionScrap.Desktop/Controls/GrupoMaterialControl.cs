@@ -9,22 +9,23 @@ using GestionScrap.Domain.Interfaces;
 namespace GestionScrap.Desktop.Controls;
 
 /// <summary>
-/// Módulo 2: Informe por Grupo de Material con CRUD completo en árbol jerárquico
-/// (agregar grupo padre, agregar subgrupo/producto hijo, editar, mover entre padres / drag-drop, reordenar y quitar).
+/// Módulo 2: Informe por Grupo de Material con CRUD completo en árbol jerárquico,
+/// exclusión de totales en cero y exportación completa o por rama/selección.
 /// </summary>
 public sealed class GrupoMaterialControl : ScrapTabControlBase
 {
     private readonly ScrapApplicationService _app;
     private readonly IAuthService _auth;
 
-    private readonly ComboBox _cmbPlanta = new() { Width = 140, DropDownStyle = ComboBoxStyle.DropDownList };
+    private readonly ComboBox _cmbPlanta = new() { Width = 145 };
     private readonly DateTimePicker _dtpDesde = new();
     private readonly DateTimePicker _dtpHasta = new();
     private readonly CheckBox _chkSoloRecepciones = new();
+    private readonly CheckBox _chkExcluirCeros = new();
     private readonly Button _btnConsultar;
     private readonly Button _btnExportar;
+    private readonly Button _btnExportarSeleccion;
 
-    // Toolbar CRUD Árbol
     private readonly Button _btnAddPadre;
     private readonly Button _btnAddSubgrupo;
     private readonly Button _btnAddProducto;
@@ -44,17 +45,12 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
     private readonly Label _lblUnassignedVal;
     private readonly Label _lblUnassignedSub;
 
-    private readonly DoubleBufferedDataGridView _dgvJerarquia = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false };
+    private readonly DoubleBufferedDataGridView _dgvJerarquia = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
     private readonly DashboardChartControl _chartProductos = new() { Dock = DockStyle.Fill };
 
     private IReadOnlyList<MaterialGroupNode> _nodes = [];
     private GrupoMaterialReportResultDto? _lastReport;
     private long? _selectedNodeId;
-
-    private sealed record PlantaOption(Planta? Planta, string Label)
-    {
-        public override string ToString() => Label;
-    }
 
     public GrupoMaterialControl(ScrapApplicationService app, IAuthService auth)
     {
@@ -68,53 +64,61 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         _treeIcons.Images.Add("folder", IconFactory.GetIcon(IconKind.Layers, AppTheme.AccentGold, 16));
         _treeIcons.Images.Add("product", IconFactory.GetIcon(IconKind.Document, AppTheme.AccentCyan, 16));
 
-        // Barra filtros superior
-        Panel filterCard = UiHelpers.BuildFilterCard(60);
+        Panel filterCard = UiHelpers.BuildFilterCard(90);
         filterCard.BorderStyle = BorderStyle.FixedSingle;
 
-        _cmbPlanta.Font = AppTheme.FontBody;
-        _cmbPlanta.Items.AddRange(
-        [
-            new PlantaOption(null, "Todas las Plantas"),
-            new PlantaOption(Planta.Santiago, "Santiago (Placilla 2)"),
-            new PlantaOption(Planta.Placilla, "Placilla"),
-            new PlantaOption(Planta.Talcahuano, "Talcahuano")
-        ]);
-        _cmbPlanta.SelectedIndex = 0;
+        UiHelpers.PopulatePlantaFilterCombo(_cmbPlanta);
 
         _dtpDesde.Value = new DateTime(2024, 1, 1);
         _dtpHasta.Value = DateTime.Today;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
 
-        _chkSoloRecepciones.Text = "Solo Recepciones / Compras";
+        _chkSoloRecepciones.Text = "Solo Recepciones";
         _chkSoloRecepciones.Font = AppTheme.FontBody;
         _chkSoloRecepciones.AutoSize = true;
-        _chkSoloRecepciones.Margin = new Padding(10, 8, 8, 0);
+        _chkSoloRecepciones.Margin = new Padding(8, 7, 4, 0);
+        _chkSoloRecepciones.CheckedChanged += async (_, _) => await LoadReportOnlyAsync();
+
+        _chkExcluirCeros.Text = "Excluir totales en 0";
+        _chkExcluirCeros.Font = AppTheme.FontBodyBold;
+        _chkExcluirCeros.AutoSize = true;
+        _chkExcluirCeros.Margin = new Padding(8, 7, 6, 0);
+        _chkExcluirCeros.CheckedChanged += async (_, _) => await LoadReportOnlyAsync();
 
         _btnConsultar = AppTheme.CreateButton("Calcular Informe", IconKind.Search, ButtonVariant.Primary,
-            async (_, _) => await RefreshTreeAndReportAsync(), "Recalcula acumulados por jerarquía de grupos", Tip, 150, 32);
+            async (_, _) => await RefreshTreeAndReportAsync(), "Recalcula acumulados por jerarquía de grupos", Tip, 145, 30);
         _btnExportar = AppTheme.CreateButton("Exportar Jerarquía", IconKind.Excel, ButtonVariant.Success,
-            (_, _) => Exportar(), "Exporta la estructura padre/hijo y kilos a Excel", Tip, 160, 32);
+            (_, _) => ExportarDirecto(), "Exporta la estructura completa padre/hijo y kilos a Excel", Tip, 152, 30);
+        _btnExportarSeleccion = AppTheme.CreateButton("Exportar Selección...", IconKind.Save, ButtonVariant.Gold,
+            (_, _) => ExportarPersonalizado(), "Exportar solo la rama o filas seleccionadas a Excel", Tip, 168, 30);
 
-        FlowLayoutPanel filterFlow = new() { Dock = DockStyle.Fill, WrapContents = false };
-        filterFlow.Controls.AddRange(
+        TableLayoutPanel filterRows = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
+        filterRows.RowStyles.Add(new RowStyle(SizeType.Percent, 48F));
+        filterRows.RowStyles.Add(new RowStyle(SizeType.Percent, 52F));
+
+        FlowLayoutPanel r1 = new() { Dock = DockStyle.Fill, WrapContents = false };
+        r1.Controls.AddRange(
         [
-            new Label { Text = "Planta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 8, 4, 0) },
+            new Label { Text = "Planta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 0) },
             _cmbPlanta,
-            new Label { Text = "Desde:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(10, 8, 4, 0) },
+            new Label { Text = "Desde:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 7, 4, 0) },
             _dtpDesde,
-            new Label { Text = "Hasta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 8, 4, 0) },
+            new Label { Text = "Hasta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 7, 4, 0) },
             _dtpHasta,
             _chkSoloRecepciones,
-            _btnConsultar,
-            _btnExportar
+            _chkExcluirCeros
         ]);
-        filterCard.Controls.Add(filterFlow);
+
+        FlowLayoutPanel r2 = new() { Dock = DockStyle.Fill, WrapContents = false };
+        r2.Controls.AddRange([_btnConsultar, _btnExportar, _btnExportarSeleccion]);
+
+        filterRows.Controls.Add(r1, 0, 0);
+        filterRows.Controls.Add(r2, 0, 1);
+        filterCard.Controls.Add(filterRows);
 
         Size = new Size(1280, 760);
 
-        // Split principal: Árbol CRUD (Izquierda) + Reporte (Derecha)
         SplitContainer split = new()
         {
             Dock = DockStyle.Fill,
@@ -127,11 +131,10 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
             {
                 split.Panel1MinSize = 320;
                 split.Panel2MinSize = 460;
-                split.SplitterDistance = 405;
+                split.SplitterDistance = 395;
             }
         };
 
-        // Panel Izquierdo: Editor de Árbol de Grupos
         Panel pnlLeft = new()
         {
             Dock = DockStyle.Fill,
@@ -170,7 +173,7 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
             "Renombrar o editar el nodo seleccionado", Tip, 86, 30);
         _btnMover = AppTheme.CreateButton("Mover", IconKind.Move, ButtonVariant.Secondary,
             async (_, _) => await MoveSelectedNodeAsync(),
-            "Mover el nodo o subrama hacia otro grupo padre (o arrastre directamente en el árbol)", Tip, 90, 30);
+            "Mover el nodo o subrama hacia otro grupo padre", Tip, 90, 30);
         _btnSubir = AppTheme.CreateButton("Subir", IconKind.ArrowUp, ButtonVariant.Secondary,
             async (_, _) => await ReorderSelectedAsync(moveUp: true),
             "Mover nodo hacia arriba dentro del mismo grupo", Tip, 80, 30);
@@ -239,7 +242,7 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
 
         Label lblDragHint = new()
         {
-            Text = "Tip: arrastre un nodo sobre un Grupo Padre o use 'Mover' para reubicar ramas completas.",
+            Text = "Tip: arrastre un nodo o use Shift/Ctrl en la tabla para exportar ramas/filas seleccionadas.",
             Font = new Font("Segoe UI", 8.2F, FontStyle.Italic),
             ForeColor = AppTheme.TextSecondary,
             Dock = DockStyle.Bottom,
@@ -251,7 +254,6 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         pnlLeft.Controls.Add(crudBar);
         pnlLeft.Controls.Add(lblTreeTitle);
 
-        // Panel Derecho: KPIs + Grilla Jerárquica + Gráfico Productos del Nodo
         Panel pnlRight = new() { Dock = DockStyle.Fill, Padding = new Padding(6, 0, 0, 0) };
 
         TableLayoutPanel kpis = new() { Dock = DockStyle.Top, Height = 92, ColumnCount = 3, RowCount = 1 };
@@ -263,7 +265,7 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         Panel chartHost = new()
         {
             Dock = DockStyle.Bottom,
-            Height = 210,
+            Height = 205,
             Padding = new Padding(0, 6, 0, 0)
         };
         chartHost.Controls.Add(_chartProductos);
@@ -275,7 +277,7 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
             Padding = new Padding(10),
             BorderStyle = BorderStyle.FixedSingle
         };
-        Label lblGridTitle = new() { Text = "Consolidado Jerárquico (Padre -> Subgrupos -> Códigos)", Font = AppTheme.FontSection, ForeColor = AppTheme.AccentBlue, Dock = DockStyle.Top, Height = 26 };
+        Label lblGridTitle = new() { Text = "Consolidado Jerárquico (multi-selección habilitada)", Font = AppTheme.FontSection, ForeColor = AppTheme.AccentBlue, Dock = DockStyle.Top, Height = 26 };
 
         _dgvJerarquia.Columns.AddRange(
         [
@@ -317,8 +319,11 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
     {
         bool canRead = _auth.HasPermission(PermisoSistema.VerGrupoMaterial);
         bool canEdit = _auth.HasPermission(PermisoSistema.AdministrarGrupoMaterial);
+        bool canExport = _auth.HasPermission(PermisoSistema.ExportarExcel);
+
         _btnConsultar.Enabled = canRead;
-        _btnExportar.Enabled = _auth.HasPermission(PermisoSistema.ExportarExcel);
+        _btnExportar.Enabled = canExport;
+        _btnExportarSeleccion.Enabled = canExport;
 
         _btnAddPadre.Enabled = canEdit;
         _btnAddSubgrupo.Enabled = canEdit;
@@ -349,17 +354,18 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
 
     private async Task LoadReportCoreAsync(CancellationToken ct)
     {
-        Planta? planta = (_cmbPlanta.SelectedItem as PlantaOption)?.Planta;
+        Planta? planta = UiHelpers.GetSelectedNullablePlanta(_cmbPlanta);
         DateOnly desde = DateOnly.FromDateTime(_dtpDesde.Value);
         DateOnly hasta = DateOnly.FromDateTime(_dtpHasta.Value);
 
-        _lastReport = await _app.GetGrupoMaterialReportAsync(planta, desde, hasta, _chkSoloRecepciones.Checked, _selectedNodeId, ct);
+        _lastReport = await _app.GetGrupoMaterialReportAsync(
+            planta, desde, hasta, _chkSoloRecepciones.Checked, _selectedNodeId, _chkExcluirCeros.Checked, ct);
 
         _lblKilosVal.Text = string.Create(UiHelpers.EsCl, $"{_lastReport.TotalKilos:N0} Kg");
         _lblKilosSub.Text = string.Create(UiHelpers.EsCl, $"{_lastReport.TotalViajes:N0} entregas acumuladas");
 
         _lblNodosVal.Text = string.Create(UiHelpers.EsCl, $"{_lastReport.GruposPadreCount} grupos");
-        _lblNodosSub.Text = string.Create(UiHelpers.EsCl, $"{_lastReport.NodosTotalesCount} nodos totales en árbol");
+        _lblNodosSub.Text = string.Create(UiHelpers.EsCl, $"{_lastReport.NodosTotalesCount} nodos totales · {_lastReport.Filas.Count} visibles");
 
         _lblUnassignedVal.Text = _lastReport.ProductosSinClasificarCount.ToString(UiHelpers.EsCl);
         _lblUnassignedSub.Text = _lastReport.ProductosSinClasificarCount == 0
@@ -374,7 +380,7 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
             : "Top Productos del Período";
         _chartProductos.SetBarData(chartTitle, _lastReport.DetalleProductosSeleccionados);
 
-        NotifyStatus($"Grupos de Material: {_lastReport.GruposPadreCount} grupos padre · {_lastReport.TotalKilos.ToString("N0", UiHelpers.EsCl)} Kg.");
+        NotifyStatus($"Grupos de Material: {_lastReport.Filas.Count} filas visibles · {_lastReport.TotalKilos.ToString("N0", UiHelpers.EsCl)} Kg.");
     }
 
     private void PopulateTree(IReadOnlyList<MaterialGroupNode> nodes, long? selectId)
@@ -605,7 +611,7 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         }, NotifyStatus, "Eliminando nodo...");
     }
 
-    private void Exportar()
+    private void ExportarDirecto()
     {
         if (_lastReport is null || _lastReport.Filas.Count == 0)
         {
@@ -634,6 +640,155 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         {
             MessageBox.Show(this, ex.Message, "Error al Exportar", MessageBoxButtons.OK, MessageBoxIcon.Error);
         }
+    }
+
+    private void ExportarPersonalizado()
+    {
+        if (_lastReport is null || _lastReport.Filas.Count == 0)
+        {
+            MessageBox.Show(this, "No hay datos en el informe actual para exportar.", "Sin Datos", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        List<MaterialTreeFlatRowDto> gridSel = [.. _dgvJerarquia.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as MaterialTreeFlatRowDto).OfType<MaterialTreeFlatRowDto>()];
+        List<MaterialTreeFlatRowDto> branchSel = [];
+        MaterialGroupNode? treeSel = GetSelectedNode();
+        if (treeSel is not null)
+        {
+            HashSet<long> subtreeIds = CollectSubtreeNodeIds(treeSel.Id);
+            branchSel = [.. _lastReport.Filas.Where(f => subtreeIds.Contains(f.NodeId))];
+        }
+
+        List<MaterialTreeFlatRowDto> effectiveSelection = gridSel.Count > 0 ? gridSel : branchSel;
+        string selDesc = gridSel.Count > 0
+            ? $"{gridSel.Count} fila(s) de la tabla"
+            : (treeSel is not null ? $"Rama '{treeSel.Nombre}' ({branchSel.Count} nodos)" : string.Empty);
+
+        string[] sections =
+        [
+            "Resumen KPIs del Árbol",
+            "Consolidado Grupos Padre",
+            "Jerarquía Padre / Hijo",
+            "Detalle Productos del Nodo"
+        ];
+
+        using ExportacionPersonalizadaDialog dlg = new(
+            "Cambiaso · Informe Personalizado por Grupos de Material",
+            effectiveSelection.Count,
+            sections,
+            _chkExcluirCeros.Checked,
+            string.IsNullOrWhiteSpace(selDesc) ? null : selDesc);
+
+        if (dlg.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        string? path = UiHelpers.PromptSaveExcelPath(this, $"GruposMaterial_Personalizado_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return;
+        }
+
+        try
+        {
+            bool onlySel = dlg.SoloSeleccionActual;
+            bool exZero = dlg.ExcluirCeros;
+            IReadOnlyList<string> inc = dlg.SeccionesSeleccionadas;
+
+            IEnumerable<MaterialTreeFlatRowDto> targetRows = onlySel && effectiveSelection.Count > 0
+                ? effectiveSelection
+                : _lastReport.Filas;
+            if (exZero) targetRows = targetRows.Where(r => r.TotalKilos > 0);
+            List<MaterialTreeFlatRowDto> rowsList = [.. targetRows];
+
+            List<(string Indicador, string Valor, string Detalle)> kpis = [];
+            if (inc.Contains("Resumen KPIs del Árbol"))
+            {
+                kpis.Add(("Kilos Exportados", $"{rowsList.Where(r => r.Nivel == 0 || onlySel).Sum(r => r.TotalKilos):N0} Kg", _lastReport.PeriodoLabel));
+                kpis.Add(("Grupos Padre / Nodos Totales", $"{_lastReport.GruposPadreCount} / {_lastReport.NodosTotalesCount}", $"{rowsList.Count} filas exportadas"));
+                kpis.Add(("Productos sin Asignar", _lastReport.ProductosSinClasificarCount.ToString(UiHelpers.EsCl), "Catálogo operativo"));
+            }
+
+            List<ExportTableSection> exportSections = [];
+            if (inc.Contains("Consolidado Grupos Padre"))
+            {
+                IEnumerable<GrupoKilosItem> roots = exZero ? _lastReport.ConsolidadoPadre.Where(c => c.Kilos > 0) : _lastReport.ConsolidadoPadre;
+                exportSections.Add(new ExportTableSection(
+                    "Consolidado Padre",
+                    "Resumen por Grupo Padre",
+                    ["Grupo Padre", "Viajes", "Kilos Netos", "% Participación"],
+                    [.. roots.Select(c => new object?[] { c.Grupo, c.Viajes, c.Kilos, c.Porcentaje })]));
+            }
+
+            if (inc.Contains("Jerarquía Padre / Hijo"))
+            {
+                exportSections.Add(new ExportTableSection(
+                    "Jerarquía",
+                    onlySel ? "Nodos / Subrama Seleccionada" : "Jerarquía Completa",
+                    ["Grupo / Nodo Material", "Tipo", "Código Prod.", "Viajes", "Kilos Netos", "% Total", "Prom. Kg/Viaje"],
+                    [.. rowsList.Select(f => new object?[]
+                    {
+                        f.NombreConSangria,
+                        f.TipoNodo == NodoGrupoTipo.CarpetaGrupo ? "Grupo" : "Producto",
+                        f.CodigoProducto,
+                        f.Viajes,
+                        f.TotalKilos,
+                        f.Porcentaje,
+                        f.PromedioKgViaje
+                    })]));
+            }
+
+            if (inc.Contains("Detalle Productos del Nodo"))
+            {
+                IEnumerable<BarChartItemDto> prods = exZero
+                    ? _lastReport.DetalleProductosSeleccionados.Where(p => p.Value > 0)
+                    : _lastReport.DetalleProductosSeleccionados;
+                exportSections.Add(new ExportTableSection(
+                    "Productos del Nodo",
+                    treeSel is not null ? $"Productos en {treeSel.Nombre}" : "Top Productos",
+                    ["Producto", "Kilos Netos"],
+                    [.. prods.Select(p => new object?[] { p.Label, p.Value })]));
+            }
+
+            string saved = _app.ExcelExporter.ExportReportePersonalizado(
+                path,
+                new ReportePersonalizadoPayload(dlg.TituloPersonalizado, _lastReport.PeriodoLabel, kpis, exportSections));
+
+            NotifyStatus($"Exportación personalizada generada: {saved}");
+            MessageBox.Show(this, $"Excel de grupos generado correctamente:\n{saved}", "Exportación Exitosa", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show(this, ex.Message, "Error al Exportar", MessageBoxButtons.OK, MessageBoxIcon.Error);
+        }
+    }
+
+    private HashSet<long> CollectSubtreeNodeIds(long rootId)
+    {
+        HashSet<long> ids = [];
+        Dictionary<long, List<MaterialGroupNode>> byParent = _nodes
+            .GroupBy(n => n.ParentId ?? 0L)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        void Walk(long id)
+        {
+            if (!ids.Add(id))
+            {
+                return;
+            }
+
+            if (byParent.TryGetValue(id, out List<MaterialGroupNode>? kids))
+            {
+                foreach (MaterialGroupNode k in kids)
+                {
+                    Walk(k.Id);
+                }
+            }
+        }
+
+        Walk(rootId);
+        return ids;
     }
 
     protected override void Dispose(bool disposing)

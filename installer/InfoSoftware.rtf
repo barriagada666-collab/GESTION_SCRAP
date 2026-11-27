@@ -2,12 +2,12 @@
 {\colortbl ;\red15\green23\blue42;\red11\green60\blue93;\red8\green145\blue178;\red71\green85\blue105;}
 \viewkind4\uc1
 \pard\sa120\sl276\slmult1\cf2\b\f0\fs26 Gesti\'f3n de Scrap y Pesajes \emdash  Versi\'f3n 4.0 (.NET 10)\par
-\cf1\b0\fs20 Sistema de escritorio x64 para consolidaci\'f3n de pesajes de b\'e1scula, clasificaci\'f3n jer\'e1rquica de materiales, an\'e1lisis Pareto ABC de proveedores e importaci\'f3n Firebird/Access.\par
+\cf1\b0\fs20 Sistema de escritorio x64 para consolidaci\'f3n de pesajes de b\'e1scula, an\'e1lisis estad\'edstico YoY/MoM, clasificaci\'f3n jer\'e1rquica de materiales, ranking Pareto ABC de proveedores e importaci\'f3n trazable Firebird/Access.\par
 \pard\sa100\sl250\slmult1\cf3\b\fs21 M\'f3dulos principales:\par
-\cf1\b0\fs19\bullet  Informe Resumen (Ctrl+1): KPIs comparativos, gr\'e1ficos GDI+ y desglose por planta, tipo y grupo.\par
-\bullet  Grupos de Material (Ctrl+2): \'c1rbol CRUD jer\'e1rquico (Padre / Subgrupo / Producto Hijo) con arrastrar y soltar.\par
-\bullet  An\'e1lisis de Proveedores (Ctrl+3): Ranking Pareto ABC, variaci\'f3n entre per\'edodos, flota y detalle completo.\par
-\bullet  Importador Multi-Origen (Ctrl+4): Conector TCP/IP directo a servidores Firebird (WMDBSPC.GDB) y migraci\'f3n Access.\par
+\cf1\b0\fs19\bullet  Informe Resumen y Datos (Ctrl+1): Filtros avanzados, exclusi\'f3n de totales en cero, segmentaci\'f3n din\'e1mica, comparativos a\'f1o a a\'f1o (YoY) y mes a mes (MoM), fichas estad\'edsticas y exportaci\'f3n personalizada o por selecci\'f3n.\par
+\bullet  Grupos de Material (Ctrl+2): \'c1rbol CRUD jer\'e1rquico (Padre / Subgrupo / Producto Hijo), exclusi\'f3n de ceros y exportaci\'f3n de rama o filas seleccionadas.\par
+\bullet  An\'e1lisis de Proveedores (Ctrl+3): Ranking Pareto ABC, variaci\'f3n entre per\'edodos, flota y exportaci\'f3n personalizada por selecci\'f3n.\par
+\bullet  Importador y Control Origen-Destino (Ctrl+4): Sincronizaci\'f3n simple en 1 clic desde Firebird (WMDBSPC.GDB) / Access y bit\'e1cora hist\'f3rica detallada Desde -> Hacia.\par
 \bullet  Seguridad y Perfiles (Ctrl+5): Perfiles RBAC configurables, usuarios PBKDF2-SHA256, bit\'e1cora y respaldo SQLite WAL.\par
 \pard\sa100\sl250\slmult1\cf3\b\fs21 Arquitectura sin dependencias externas:\par
 \cf4\b0\fs18 Motor embebido SQLite WAL, exportaci\'f3n nativa Excel (.xlsx) y recursos gr\'e1ficos corporativos integrados en el ejecutable. Los datos locales se conservan autom\'e1ticamente en %LocalAppData%\\GestionScrap al actualizar.\par

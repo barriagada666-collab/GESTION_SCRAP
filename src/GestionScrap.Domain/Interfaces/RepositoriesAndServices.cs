@@ -5,6 +5,7 @@ namespace GestionScrap.Domain.Interfaces;
 
 public interface IScrapRepository
 {
+    string DatabasePath { get; }
     Task InitializeAsync(CancellationToken ct = default);
     Task<IReadOnlyList<Pesaje>> GetPesajesAsync(Planta? planta = null, DateOnly? desde = null, DateOnly? hasta = null, CancellationToken ct = default);
     Task<IReadOnlyList<Cliente>> GetClientesAsync(Planta? planta = null, CancellationToken ct = default);
@@ -20,6 +21,9 @@ public interface IScrapRepository
     Task UpsertClientesAsync(IEnumerable<Cliente> clientes, string usuario, CancellationToken ct = default);
     Task UpsertProductosAsync(IEnumerable<Producto> productos, string usuario, CancellationToken ct = default);
     Task<int> PurgeAllPesajesAsync(string usuario, CancellationToken ct = default);
+
+    Task<IReadOnlyList<ImportacionHistorial>> GetImportHistoryAsync(int limit = 200, CancellationToken ct = default);
+    Task AddImportHistoryAsync(ImportacionHistorial entry, CancellationToken ct = default);
 
     Task<IReadOnlyList<AuditLogEntry>> GetAuditLogsAsync(int limit = 500, string? accion = null, string? usuario = null, CancellationToken ct = default);
     Task AddAuditLogAsync(AuditLogEntry entry, CancellationToken ct = default);
@@ -70,6 +74,10 @@ public interface IExcelExportService
         string? proveedorSeleccionadoNombre);
 
     string ExportAuditLogs(string filePath, IReadOnlyList<AuditLogEntry> logs);
+
+    string ExportImportHistory(string filePath, IReadOnlyList<ImportacionHistorial> history);
+
+    string ExportReportePersonalizado(string filePath, ReportePersonalizadoPayload payload);
 }
 
 public interface IMdbMigrationService

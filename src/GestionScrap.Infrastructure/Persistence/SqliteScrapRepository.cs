@@ -70,8 +70,11 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         ("TIX-14", "COAGULANTE")
     ];
 
+    public string DatabasePath { get; }
+
     public SqliteScrapRepository(string dbPath)
     {
+        DatabasePath = dbPath;
         string? dir = Path.GetDirectoryName(dbPath);
         if (!string.IsNullOrWhiteSpace(dir))
         {
@@ -215,6 +218,27 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
                 );
 
                 CREATE INDEX IF NOT EXISTS idx_audit_ts ON audit_log(timestamp_utc DESC);
+
+                CREATE TABLE IF NOT EXISTS import_history (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    timestamp_utc TEXT NOT NULL,
+                    usuario TEXT NOT NULL,
+                    tipo_origen TEXT NOT NULL,
+                    origen_detalle TEXT NOT NULL,
+                    planta_destino TEXT NOT NULL,
+                    destino_detalle TEXT NOT NULL,
+                    rango_filtro TEXT NOT NULL,
+                    leidos_origen INTEGER NOT NULL DEFAULT 0,
+                    importados_nuevos INTEGER NOT NULL DEFAULT 0,
+                    duplicados_omitidos INTEGER NOT NULL DEFAULT 0,
+                    clientes_sincronizados INTEGER NOT NULL DEFAULT 0,
+                    productos_sincronizados INTEGER NOT NULL DEFAULT 0,
+                    kilos_importados INTEGER NOT NULL DEFAULT 0,
+                    estado TEXT NOT NULL DEFAULT 'COMPLETADA',
+                    observacion TEXT NOT NULL DEFAULT ''
+                );
+
+                CREATE INDEX IF NOT EXISTS idx_import_hist_ts ON import_history(timestamp_utc DESC);
                 """;
 
             await using (SqliteCommand cmd = conn.CreateCommand())
@@ -920,6 +944,79 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         await InitializeAsync(ct).ConfigureAwait(false);
         await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
         await AddAuditTxAsync(conn, null, entry.Usuario, entry.Accion, entry.Entidad, entry.RegistroId, entry.Detalle, ct).ConfigureAwait(false);
+    }
+
+    public async Task<IReadOnlyList<ImportacionHistorial>> GetImportHistoryAsync(int limit = 200, CancellationToken ct = default)
+    {
+        await InitializeAsync(ct).ConfigureAwait(false);
+        await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
+        await using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            SELECT id, timestamp_utc, usuario, tipo_origen, origen_detalle, planta_destino, destino_detalle,
+                   rango_filtro, leidos_origen, importados_nuevos, duplicados_omitidos,
+                   clientes_sincronizados, productos_sincronizados, kilos_importados, estado, observacion
+            FROM import_history
+            ORDER BY id DESC
+            LIMIT @lim
+            """;
+        cmd.Parameters.AddWithValue("@lim", Math.Clamp(limit, 1, 1000));
+
+        List<ImportacionHistorial> list = [];
+        await using SqliteDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
+        while (await rd.ReadAsync(ct).ConfigureAwait(false))
+        {
+            list.Add(new ImportacionHistorial
+            {
+                Id = rd.GetInt64(0),
+                TimestampUtc = DateTime.Parse(rd.GetString(1), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                Usuario = rd.GetString(2),
+                TipoOrigen = rd.GetString(3),
+                OrigenDetalle = rd.GetString(4),
+                PlantaDestino = rd.GetString(5),
+                DestinoDetalle = rd.GetString(6),
+                RangoFiltro = rd.GetString(7),
+                LeidosOrigen = rd.GetInt32(8),
+                ImportadosNuevos = rd.GetInt32(9),
+                DuplicadosOmitidos = rd.GetInt32(10),
+                ClientesSincronizados = rd.GetInt32(11),
+                ProductosSincronizados = rd.GetInt32(12),
+                KilosImportados = rd.GetInt64(13),
+                Estado = rd.GetString(14),
+                Observacion = rd.GetString(15)
+            });
+        }
+
+        return list;
+    }
+
+    public async Task AddImportHistoryAsync(ImportacionHistorial entry, CancellationToken ct = default)
+    {
+        await InitializeAsync(ct).ConfigureAwait(false);
+        await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
+        await using SqliteCommand cmd = conn.CreateCommand();
+        cmd.CommandText = """
+            INSERT INTO import_history(
+                timestamp_utc, usuario, tipo_origen, origen_detalle, planta_destino, destino_detalle,
+                rango_filtro, leidos_origen, importados_nuevos, duplicados_omitidos,
+                clientes_sincronizados, productos_sincronizados, kilos_importados, estado, observacion)
+            VALUES(@ts, @u, @to, @od, @pd, @dd, @rf, @le, @im, @du, @cl, @pr, @kg, @es, @ob)
+            """;
+        cmd.Parameters.AddWithValue("@ts", entry.TimestampUtc.ToString("O", CultureInfo.InvariantCulture));
+        cmd.Parameters.AddWithValue("@u", entry.Usuario);
+        cmd.Parameters.AddWithValue("@to", entry.TipoOrigen);
+        cmd.Parameters.AddWithValue("@od", entry.OrigenDetalle);
+        cmd.Parameters.AddWithValue("@pd", entry.PlantaDestino);
+        cmd.Parameters.AddWithValue("@dd", entry.DestinoDetalle);
+        cmd.Parameters.AddWithValue("@rf", entry.RangoFiltro);
+        cmd.Parameters.AddWithValue("@le", entry.LeidosOrigen);
+        cmd.Parameters.AddWithValue("@im", entry.ImportadosNuevos);
+        cmd.Parameters.AddWithValue("@du", entry.DuplicadosOmitidos);
+        cmd.Parameters.AddWithValue("@cl", entry.ClientesSincronizados);
+        cmd.Parameters.AddWithValue("@pr", entry.ProductosSincronizados);
+        cmd.Parameters.AddWithValue("@kg", entry.KilosImportados);
+        cmd.Parameters.AddWithValue("@es", entry.Estado);
+        cmd.Parameters.AddWithValue("@ob", entry.Observacion);
+        await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
     }
 
     public async Task<IReadOnlyList<PerfilUsuario>> GetPerfilesAsync(CancellationToken ct = default)

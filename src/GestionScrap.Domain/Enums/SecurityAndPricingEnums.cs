@@ -24,3 +24,18 @@ public enum NodoGrupoTipo
     CarpetaGrupo = 1,
     ProductoAsignado = 2
 }
+
+/// <summary>
+/// Dimensión de segmentación dinámica para análisis de datos e informes personalizados.
+/// </summary>
+public enum SegmentacionDimension
+{
+    GrupoMaterial = 1,
+    Planta = 2,
+    TipoPesaje = 3,
+    Proveedor = 4,
+    Producto = 5,
+    Origen = 6,
+    Mes = 7,
+    Anio = 8
+}
