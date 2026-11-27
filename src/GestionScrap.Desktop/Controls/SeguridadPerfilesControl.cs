@@ -116,26 +116,39 @@ public sealed class SeguridadPerfilesControl : ScrapTabControlBase
         }
 
         _clbUserOverrides.Font = AppTheme.FontBody;
-        _clbUserOverrides.Size = new Size(380, 155);
+        _clbUserOverrides.Dock = DockStyle.Top;
+        _clbUserOverrides.Height = 165;
+        _clbUserOverrides.Margin = new Padding(0, 4, 0, 6);
 
         _btnClearOverrides = AppTheme.CreateButton("Heredar del Perfil", IconKind.Refresh, ButtonVariant.Secondary,
-            (_, _) => ClearOverrideCheckboxes(), "Deja vacías las excepciones para que use exactamente los permisos de su perfil", Tip, 155, 30);
+            (_, _) => ClearOverrideCheckboxes(), "Deja vacías las excepciones para que use exactamente los permisos de su perfil", Tip, 0, 30, AppTheme.FontButtonCompact);
         _btnNuevoUser = AppTheme.CreateButton("Nuevo", IconKind.Plus, ButtonVariant.Secondary,
-            (_, _) => ResetUserEditor(), "Prepara el editor para crear una nueva cuenta", Tip, 95, 34);
+            (_, _) => ResetUserEditor(), "Prepara el editor para crear una nueva cuenta", Tip, 0, 32);
         _btnGuardarUser = AppTheme.CreateButton("Guardar Usuario", IconKind.Save, ButtonVariant.Success,
-            async (_, _) => await SaveUserAsync(), "Crea o actualiza el usuario seleccionado", Tip, 145, 34);
+            async (_, _) => await SaveUserAsync(), "Crea o actualiza el usuario seleccionado", Tip, 0, 32);
         _btnDesbloquearUser = AppTheme.CreateButton("Desbloquear", IconKind.Lock, ButtonVariant.Warning,
-            async (_, _) => await UnlockSelectedUserAsync(), "Desbloquea cuenta tras intentos fallidos", Tip, 125, 34);
+            async (_, _) => await UnlockSelectedUserAsync(), "Desbloquea cuenta tras intentos fallidos", Tip, 0, 32);
         _btnEliminarUser = AppTheme.CreateButton("Eliminar", IconKind.Trash, ButtonVariant.Danger,
-            async (_, _) => await DeleteUserAsync(), "Elimina el usuario seleccionado", Tip, 105, 34);
+            async (_, _) => await DeleteUserAsync(), "Elimina el usuario seleccionado", Tip, 0, 32);
 
-        TableLayoutPanel uEdLayout = new() { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
-        uEdLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130F));
+        TableLayoutPanel uEdLayout = new()
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink
+        };
+        uEdLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         uEdLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
         void AddUserRow(int r, string lbl, Control c)
         {
-            uEdLayout.Controls.Add(new Label { Text = lbl, Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 4) }, 0, r);
+            uEdLayout.Controls.Add(new Label { Text = lbl, Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 10, 4) }, 0, r);
+            if (c is TextBox or ComboBox)
+            {
+                c.Dock = DockStyle.Fill;
+            }
+
             c.Margin = new Padding(0, 4, 4, 4);
             uEdLayout.Controls.Add(c, 1, r);
         }
@@ -146,15 +159,31 @@ public sealed class SeguridadPerfilesControl : ScrapTabControlBase
         AddUserRow(3, "Contraseña:", _txtPass);
         AddUserRow(4, "Estado:", _chkActivo);
 
-        FlowLayoutPanel ovTop = new() { FlowDirection = FlowDirection.LeftToRight, AutoSize = true };
-        ovTop.Controls.AddRange([new Label { Text = "Excepciones por Usuario (opcional):", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 6, 8, 0) }, _btnClearOverrides]);
+        FlowLayoutPanel ovTop = new()
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = true,
+            Margin = new Padding(0, 6, 0, 2)
+        };
+        ovTop.Controls.AddRange([new Label { Text = "Excepciones por Usuario (opcional):", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 6, 10, 4) }, _btnClearOverrides]);
         uEdLayout.Controls.Add(ovTop, 0, 5);
         uEdLayout.SetColumnSpan(ovTop, 2);
 
         uEdLayout.Controls.Add(_clbUserOverrides, 0, 6);
         uEdLayout.SetColumnSpan(_clbUserOverrides, 2);
 
-        FlowLayoutPanel uBtns = new() { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Margin = new Padding(0, 8, 0, 0) };
+        FlowLayoutPanel uBtns = new()
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = true,
+            Margin = new Padding(0, 8, 0, 4)
+        };
         uBtns.Controls.AddRange([_btnNuevoUser, _btnGuardarUser, _btnDesbloquearUser, _btnEliminarUser]);
         uEdLayout.Controls.Add(uBtns, 0, 7);
         uEdLayout.SetColumnSpan(uBtns, 2);
@@ -200,29 +229,50 @@ public sealed class SeguridadPerfilesControl : ScrapTabControlBase
         }
 
         _clbPerfilPermisos.Font = AppTheme.FontBody;
-        _clbPerfilPermisos.Size = new Size(390, 200);
+        _clbPerfilPermisos.Dock = DockStyle.Top;
+        _clbPerfilPermisos.Height = 200;
+        _clbPerfilPermisos.Margin = new Padding(0, 4, 0, 6);
 
         _btnNuevoPerfil = AppTheme.CreateButton("Nuevo Perfil", IconKind.Plus, ButtonVariant.Secondary,
-            (_, _) => ResetPerfilEditor(), "Crear un nuevo perfil de acceso", Tip, 130, 34);
+            (_, _) => ResetPerfilEditor(), "Crear un nuevo perfil de acceso", Tip, 0, 32);
         _btnGuardarPerfil = AppTheme.CreateButton("Guardar Perfil", IconKind.Save, ButtonVariant.Success,
-            async (_, _) => await SavePerfilAsync(), "Guarda el perfil y actualiza los permisos de sus usuarios", Tip, 145, 34);
+            async (_, _) => await SavePerfilAsync(), "Guarda el perfil y actualiza los permisos de sus usuarios", Tip, 0, 32);
         _btnEliminarPerfil = AppTheme.CreateButton("Eliminar Perfil", IconKind.Trash, ButtonVariant.Danger,
-            async (_, _) => await DeletePerfilAsync(), "Elimina el perfil personalizado seleccionado", Tip, 140, 34);
+            async (_, _) => await DeletePerfilAsync(), "Elimina el perfil personalizado seleccionado", Tip, 0, 32);
 
-        TableLayoutPanel pEdLayout = new() { Dock = DockStyle.Fill, ColumnCount = 2, AutoSize = true };
-        pEdLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 125F));
+        TableLayoutPanel pEdLayout = new()
+        {
+            Dock = DockStyle.Top,
+            ColumnCount = 2,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink
+        };
+        pEdLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
         pEdLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
-        pEdLayout.Controls.Add(new Label { Text = "Nombre Perfil:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 4) }, 0, 0);
+        _txtPerfilNombre.Dock = DockStyle.Fill;
+        _txtPerfilNombre.Margin = new Padding(0, 4, 4, 4);
+        _txtPerfilDesc.Dock = DockStyle.Fill;
+        _txtPerfilDesc.Margin = new Padding(0, 4, 4, 4);
+
+        pEdLayout.Controls.Add(new Label { Text = "Nombre Perfil:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 10, 4) }, 0, 0);
         pEdLayout.Controls.Add(_txtPerfilNombre, 1, 0);
-        pEdLayout.Controls.Add(new Label { Text = "Descripción:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 4) }, 0, 1);
+        pEdLayout.Controls.Add(new Label { Text = "Descripción:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 10, 4) }, 0, 1);
         pEdLayout.Controls.Add(_txtPerfilDesc, 1, 1);
         pEdLayout.Controls.Add(new Label { Text = "Permisos Habilitados:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 8, 4, 4) }, 0, 2);
         pEdLayout.SetColumnSpan(pEdLayout.GetControlFromPosition(0, 2)!, 2);
         pEdLayout.Controls.Add(_clbPerfilPermisos, 0, 3);
         pEdLayout.SetColumnSpan(_clbPerfilPermisos, 2);
 
-        FlowLayoutPanel pBtns = new() { FlowDirection = FlowDirection.LeftToRight, AutoSize = true, Margin = new Padding(0, 10, 0, 0) };
+        FlowLayoutPanel pBtns = new()
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.LeftToRight,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = true,
+            Margin = new Padding(0, 10, 0, 4)
+        };
         pBtns.Controls.AddRange([_btnNuevoPerfil, _btnGuardarPerfil, _btnEliminarPerfil]);
         pEdLayout.Controls.Add(pBtns, 0, 4);
         pEdLayout.SetColumnSpan(pBtns, 2);
@@ -237,8 +287,8 @@ public sealed class SeguridadPerfilesControl : ScrapTabControlBase
         // -----------------------------------------------------------------
         TabPage tabAudit = new("Auditoría y Respaldo SQLite") { BackColor = AppTheme.CanvasLight, Padding = new Padding(8) };
 
-        Panel auditTop = UiHelpers.BuildFilterCard(58);
-        auditTop.BorderStyle = BorderStyle.FixedSingle;
+        _cmbAccion.Font = AppTheme.FontBody;
+        _cmbAccion.Margin = new Padding(0, 3, 8, 3);
         _cmbAccion.Items.AddRange(
         [
             "Todas",
@@ -264,24 +314,22 @@ public sealed class SeguridadPerfilesControl : ScrapTabControlBase
         ]);
         _cmbAccion.SelectedIndex = 0;
         AppTheme.ApplyInputStyle(_txtUserFiltro);
+        _txtUserFiltro.Margin = new Padding(0, 4, 8, 3);
         _txtUserFiltro.PlaceholderText = "Filtrar usuario...";
 
         _btnFiltrarAudit = AppTheme.CreateButton("Filtrar Logs", IconKind.Search, ButtonVariant.Primary,
-            async (_, _) => await LoadAuditLogsAsync(), "Consulta los registros de auditoría en SQLite", Tip, 125, 32);
+            async (_, _) => await LoadAuditLogsAsync(), "Consulta los registros de auditoría en SQLite", Tip, 0, 32);
         _btnExportarAudit = AppTheme.CreateButton("Exportar Logs", IconKind.Excel, ButtonVariant.Success,
-            (_, _) => ExportAuditLogs(), "Exporta la bitácora de auditoría a Excel", Tip, 138, 32);
+            (_, _) => ExportAuditLogs(), "Exporta la bitácora de auditoría a Excel", Tip, 0, 32);
 
-        FlowLayoutPanel aFlow = new() { Dock = DockStyle.Fill, WrapContents = false };
-        aFlow.Controls.AddRange(
-        [
-            new Label { Text = "Acción:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 8, 4, 0) },
+        FlowLayoutPanel aFlow = UiHelpers.CreateFilterRow(
+            UiHelpers.CreateFilterLabel("Acción:", 0),
             _cmbAccion,
-            new Label { Text = "Usuario:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(10, 8, 4, 0) },
+            UiHelpers.CreateFilterLabel("Usuario:"),
             _txtUserFiltro,
             _btnFiltrarAudit,
-            _btnExportarAudit
-        ]);
-        auditTop.Controls.Add(aFlow);
+            _btnExportarAudit);
+        Panel auditTop = UiHelpers.BuildAutoFilterCard(aFlow);
 
         Panel auditGridCard = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
         _dgvAudit.Columns.AddRange(
@@ -296,16 +344,49 @@ public sealed class SeguridadPerfilesControl : ScrapTabControlBase
         ]);
         auditGridCard.Controls.Add(_dgvAudit);
 
-        Panel maintCard = new() { Dock = DockStyle.Bottom, Height = 64, BackColor = AppTheme.CardSurface, Padding = new Padding(12), Margin = new Padding(0, 8, 0, 0), BorderStyle = BorderStyle.FixedSingle };
-        Label lblDb = new() { Text = $"Base SQLite: {settings.SqliteDatabasePath}", Font = AppTheme.FontMono, ForeColor = AppTheme.TextSecondary, AutoSize = true, Margin = new Padding(0, 10, 14, 0) };
-        _btnBackupSqlite = AppTheme.CreateButton("Respaldar SQLite (.db)", IconKind.Backup, ButtonVariant.Primary,
-            async (_, _) => await BackupSqliteAsync(), "Genera copia íntegra en caliente usando SQLite Backup API", Tip, 185, 34);
-        _btnPurgarDb = AppTheme.CreateButton("Purgar Pesajes", IconKind.Trash, ButtonVariant.Danger,
-            (_, _) => OpenPurgeDialog(), "Elimina registros de pesajes (requiere confirmación escrita ELIMINAR)", Tip, 150, 34);
+        TableLayoutPanel maintCard = new()
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 2,
+            RowCount = 1,
+            BackColor = AppTheme.CardSurface,
+            Padding = new Padding(12, 10, 12, 10),
+            Margin = new Padding(0, 8, 0, 0),
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        maintCard.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        maintCard.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        maintCard.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        FlowLayoutPanel maintFlow = new() { Dock = DockStyle.Fill, WrapContents = false };
-        maintFlow.Controls.AddRange([lblDb, _btnBackupSqlite, _btnPurgarDb]);
-        maintCard.Controls.Add(maintFlow);
+        Label lblDb = new()
+        {
+            Text = $"Base SQLite: {settings.SqliteDatabasePath}",
+            Font = AppTheme.FontMono,
+            ForeColor = AppTheme.TextSecondary,
+            Dock = DockStyle.Fill,
+            AutoEllipsis = true,
+            TextAlign = ContentAlignment.MiddleLeft,
+            Margin = new Padding(0, 0, 12, 0)
+        };
+        _btnBackupSqlite = AppTheme.CreateButton("Respaldar SQLite (.db)", IconKind.Backup, ButtonVariant.Primary,
+            async (_, _) => await BackupSqliteAsync(), "Genera copia íntegra en caliente usando SQLite Backup API", Tip, 0, 34);
+        _btnPurgarDb = AppTheme.CreateButton("Purgar Pesajes", IconKind.Trash, ButtonVariant.Danger,
+            (_, _) => OpenPurgeDialog(), "Elimina registros de pesajes (requiere confirmación escrita ELIMINAR)", Tip, 0, 34);
+        _btnPurgarDb.Margin = new Padding(0, 2, 0, 2);
+
+        FlowLayoutPanel maintFlow = new()
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = false,
+            Margin = Padding.Empty
+        };
+        maintFlow.Controls.AddRange([_btnBackupSqlite, _btnPurgarDb]);
+        maintCard.Controls.Add(lblDb, 0, 0);
+        maintCard.Controls.Add(maintFlow, 1, 0);
 
         tabAudit.Controls.Add(auditGridCard);
         tabAudit.Controls.Add(maintCard);

@@ -1,5 +1,17 @@
 # Historial de Cambios (Changelog) · Gestión de Scrap
 
+## [4.1.1] — 2026-11-26 — Reparación Integral UI High-DPI, Botones, Diálogos, Grillas y Gráficos
+
+### Interfaz de Usuario, Botones y Escalado High-DPI (`PerMonitorV2`)
+- **Dimensionamiento Automático de Botones en Una Línea (`AppTheme.EnsureButtonFitsText`):** Recálculo dinámico con `TextRenderer.MeasureText(..., SingleLine | NoPrefix)` sensible al `DeviceDpi`, eliminando saltos de línea, textos cortados y botones vacíos (`Config. BD`, `Mi Clave`, `Salir`, barra CRUD de `Grupos de Material` y barras de filtros).
+- **Tarjetas de Filtros y Toolbars Autoajustables (`UiHelpers.BuildAutoFilterCard`):** Reemplazadas las alturas fijas de filtros y la barra CRUD de [GrupoMaterialControl.cs](../src/GestionScrap.Desktop/Controls/GrupoMaterialControl.cs) por contenedores `AutoSize` con sincronización de `MaximumSize`, evitando recortes verticales y superposición sobre el `TreeView`.
+- **Pies Uniformes y Anclaje Seguro en `LoginForm` y los 6 Diálogos Modales:** Nuevo `AppTheme.CreateDialogFooter` con altura explícita y botones alineados a la derecha; corregido el desbordamiento por `Anchor` en `CambiarPasswordDialog`, `ConfiguracionDbDialog`, `ExportacionPersonalizadaDialog`, `LimpiarTablasDialog`, `MaterialNodeEditorDialog` y `MoverNodoDialog`; corregida visualización del carácter `&` (`UseMnemonic = false`) en `SplashForm` y `MaterialNodeEditorDialog`.
+- **Layouts Responsivos en Importador y Seguridad:** Migradas la fila Access `.mdb` de [ImportadorControl.cs](../src/GestionScrap.Desktop/Controls/ImportadorControl.cs) y la barra inferior de respaldo/purga en [SeguridadPerfilesControl.cs](../src/GestionScrap.Desktop/Controls/SeguridadPerfilesControl.cs) a `TableLayoutPanel` responsivo sin coordenadas fijas.
+- **Contraste de Cabeceras `DataGridView` y Gráficos GDI+:** Fijados `SelectionBackColor = HeaderDark` y `SelectionForeColor = Color.White` en cabeceras de todas las grillas, calculados anchos mínimos `MinimumWidth` según texto de encabezado y corregidos solapamientos/recortes en gráficos de tendencia, barras y donut en [DoubleBufferedControls.cs](../src/GestionScrap.Desktop/Controls/DoubleBufferedControls.cs).
+- **Auditoría Automatizada UI Endurecida:** [WinFormsAuditTests.cs](../tests/GestionScrap.Tests/UI/WinFormsAuditTests.cs) ahora verifica ajuste en 1 línea, cero recortes, altura mínima de footers, cero solapamientos entre hermanos, cero desbordamiento en diálogos y alto contraste de cabeceras (`27/27` pruebas exitosas, `0` errores, `0` advertencias).
+
+---
+
 ## [4.1.0] — 2026-11-26 — Auditoría Integral, Migraciones SQLite, Rendimiento, Logger Sanitizado y CI/CD
 
 ### Base de Datos SQLite y Optimización de Rendimiento

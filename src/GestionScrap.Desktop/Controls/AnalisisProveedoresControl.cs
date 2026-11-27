@@ -63,13 +63,13 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         BackColor = AppTheme.CanvasLight;
         Padding = new Padding(12);
 
-        Panel filterCard = UiHelpers.BuildFilterCard(90);
-        filterCard.BorderStyle = BorderStyle.FixedSingle;
-
         UiHelpers.PopulatePlantaFilterCombo(_cmbPlanta);
         UiHelpers.PopulateTipoFilterCombo(_cmbTipo, defaultRecepcion: true);
+        _cmbPlanta.Margin = new Padding(0, 3, 6, 3);
+        _cmbTipo.Margin = new Padding(0, 3, 6, 3);
 
         _cmbGrupo.Font = AppTheme.FontBody;
+        _cmbGrupo.Margin = new Padding(0, 3, 6, 3);
         _cmbGrupo.Items.Add(new GrupoOpt(null, "Todos los Grupos"));
         _cmbGrupo.SelectedIndex = 0;
 
@@ -77,8 +77,11 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         _dtpHasta.Value = DateTime.Today;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
+        _dtpDesde.Margin = new Padding(0, 3, 6, 3);
+        _dtpHasta.Margin = new Padding(0, 3, 6, 3);
 
         AppTheme.ApplyInputStyle(_txtBuscar);
+        _txtBuscar.Margin = new Padding(0, 4, 8, 3);
         _txtBuscar.PlaceholderText = "Filtrar RUT, nombre o patente...";
         _txtBuscar.KeyDown += async (_, e) =>
         {
@@ -90,51 +93,39 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         };
 
         _chkExcluirCeros.Font = AppTheme.FontBodyBold;
-        _chkExcluirCeros.Margin = new Padding(10, 7, 6, 0);
+        _chkExcluirCeros.Margin = new Padding(6, 7, 10, 3);
         _chkExcluirCeros.CheckedChanged += async (_, _) => await LoadAnalisisAsync();
 
         _btnAnalizar = AppTheme.CreateButton("Analizar Proveedores", IconKind.Search, ButtonVariant.Primary,
-            async (_, _) => await LoadAnalisisAsync(), "Ejecuta ranking Pareto ABC, variaciones y detalle de entregas", Tip, 175, 32);
+            async (_, _) => await LoadAnalisisAsync(), "Ejecuta ranking Pareto ABC, variaciones y detalle de entregas", Tip, 0, 32);
         _btnExportar = AppTheme.CreateButton("Exportar Todo", IconKind.Excel, ButtonVariant.Success,
-            (_, _) => ExportarDirecto(), "Exporta Ranking ABC y Ficha del Proveedor seleccionado a Excel", Tip, 145, 32);
+            (_, _) => ExportarDirecto(), "Exporta Ranking ABC y Ficha del Proveedor seleccionado a Excel", Tip, 0, 32);
         _btnExportarSeleccion = AppTheme.CreateButton("Exportar Selección...", IconKind.Save, ButtonVariant.Gold,
-            (_, _) => ExportarPersonalizado(), "Exportar solo proveedores o entregas seleccionadas / secciones elegidas", Tip, 172, 32);
+            (_, _) => ExportarPersonalizado(), "Exportar solo proveedores o entregas seleccionadas / secciones elegidas", Tip, 0, 32);
 
-        TableLayoutPanel fRows = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        fRows.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-        fRows.RowStyles.Add(new RowStyle(SizeType.Percent, 50F));
-
-        FlowLayoutPanel r1 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r1.Controls.AddRange(
-        [
-            new Label { Text = "Planta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 0) },
+        FlowLayoutPanel r1 = UiHelpers.CreateFilterRow(
+            UiHelpers.CreateFilterLabel("Planta:", 0),
             _cmbPlanta,
-            new Label { Text = "Mov:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 7, 4, 0) },
+            UiHelpers.CreateFilterLabel("Mov:"),
             _cmbTipo,
-            new Label { Text = "Grupo:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 7, 4, 0) },
+            UiHelpers.CreateFilterLabel("Grupo:"),
             _cmbGrupo,
-            new Label { Text = "Desde:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 7, 4, 0) },
+            UiHelpers.CreateFilterLabel("Desde:"),
             _dtpDesde,
-            new Label { Text = "Hasta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 7, 4, 0) },
-            _dtpHasta
-        ]);
+            UiHelpers.CreateFilterLabel("Hasta:"),
+            _dtpHasta);
 
-        FlowLayoutPanel r2 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r2.Controls.AddRange(
-        [
-            new Label { Text = "Buscar:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 0) },
+        FlowLayoutPanel r2 = UiHelpers.CreateFilterRow(
+            UiHelpers.CreateFilterLabel("Buscar:", 0),
             _txtBuscar,
             _chkExcluirCeros,
             _btnAnalizar,
             _btnExportar,
-            _btnExportarSeleccion
-        ]);
+            _btnExportarSeleccion);
 
-        fRows.Controls.Add(r1, 0, 0);
-        fRows.Controls.Add(r2, 0, 1);
-        filterCard.Controls.Add(fRows);
+        Panel filterCard = UiHelpers.BuildAutoFilterCard(r1, r2);
 
-        TableLayoutPanel kpis = new() { Dock = DockStyle.Top, Height = 94, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 4, 0, 6) };
+        TableLayoutPanel kpis = new() { Dock = DockStyle.Top, Height = 98, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 4, 0, 6) };
         for (int i = 0; i < 4; i++) kpis.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
         kpis.Controls.Add(UiHelpers.CreateKpiCard("PROVEEDORES ACTIVOS", AppTheme.AccentBlue, out _lblProvActivosVal, out _lblProvActivosSub), 0, 0);
         kpis.Controls.Add(UiHelpers.CreateKpiCard("VOLUMEN ANALIZADO", AppTheme.AccentCyan, out _lblVolumenVal, out _lblVolumenSub), 1, 0);
@@ -164,7 +155,7 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         topGridCharts.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 36F));
 
         Panel pnlRank = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(8), Margin = new Padding(0, 0, 4, 0), BorderStyle = BorderStyle.FixedSingle };
-        Label lblRankT = new() { Text = "Ranking ABC / Pareto de Proveedores (Ctrl/Shift + clic para seleccionar múltiples)", Font = AppTheme.FontSection, ForeColor = AppTheme.SidebarDark, Dock = DockStyle.Top, Height = 24 };
+        Label lblRankT = new() { Text = "Ranking ABC / Pareto de Proveedores (Ctrl/Shift + clic para seleccionar múltiples)", Font = AppTheme.FontSection, ForeColor = AppTheme.SidebarDark, AutoEllipsis = true, Dock = DockStyle.Top, Height = 28 };
 
         _dgvRanking.Columns.AddRange(
         [
@@ -226,8 +217,9 @@ public sealed class AnalisisProveedoresControl : ScrapTabControlBase
         _lblProveedorSeleccionado.Text = "Ficha Detallada: Seleccione un proveedor del ranking superior";
         _lblProveedorSeleccionado.Font = AppTheme.FontSection;
         _lblProveedorSeleccionado.ForeColor = AppTheme.AccentBlue;
+        _lblProveedorSeleccionado.AutoEllipsis = true;
         _lblProveedorSeleccionado.Dock = DockStyle.Top;
-        _lblProveedorSeleccionado.Height = 26;
+        _lblProveedorSeleccionado.Height = 28;
 
         _detailTabs.Font = AppTheme.FontBodyBold;
 

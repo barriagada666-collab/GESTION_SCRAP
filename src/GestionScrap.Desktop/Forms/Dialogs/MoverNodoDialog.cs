@@ -20,19 +20,26 @@ public sealed class MoverNodoDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(460, 390);
+        ClientSize = new Size(500, 425);
         BackColor = AppTheme.CanvasLight;
         Icon = AppTheme.LoadAppIcon();
+
+        Panel body = new()
+        {
+            Dock = DockStyle.Fill,
+            BackColor = AppTheme.CanvasLight,
+            Padding = new Padding(16, 14, 16, 12)
+        };
 
         Label lblInfo = new()
         {
             Text = "Seleccione el Grupo / Nodo Padre de destino:",
             Font = AppTheme.FontBodyBold,
-            Location = new Point(16, 14),
-            AutoSize = true
+            Dock = DockStyle.Top,
+            Height = 28
         };
 
-        _tree.SetBounds(16, 42, 428, 282);
+        _tree.Dock = DockStyle.Fill;
         _tree.Font = AppTheme.FontBody;
         _tree.HideSelection = false;
         _tree.ShowLines = true;
@@ -66,24 +73,28 @@ public sealed class MoverNodoDialog : Form
         rootVirtual.ExpandAll();
         _tree.SelectedNode = rootVirtual;
 
+        body.Controls.Add(_tree);
+        body.Controls.Add(lblInfo);
+
         Button btnCancel = AppTheme.CreateButton("Cancelar", IconKind.Close, ButtonVariant.Secondary, (_, _) =>
         {
             DialogResult = DialogResult.Cancel;
             Close();
-        }, "Cancelar movimiento", _toolTip, 115, 34);
-        btnCancel.Location = new Point(195, 340);
+        }, "Cancelar movimiento", _toolTip, 0, 34);
 
         Button btnConfirm = AppTheme.CreateButton("Mover Aquí", IconKind.Move, ButtonVariant.Primary, (_, _) =>
         {
             SelectedParentId = _tree.SelectedNode?.Tag as long?;
             DialogResult = DialogResult.OK;
             Close();
-        }, "Reubicar el nodo dentro del destino seleccionado", _toolTip, 128, 34);
-        btnConfirm.Location = new Point(316, 340);
+        }, "Reubicar el nodo dentro del destino seleccionado", _toolTip, 0, 34);
+
+        Panel footer = AppTheme.CreateDialogFooter(btnCancel, btnConfirm);
 
         AcceptButton = btnConfirm;
         CancelButton = btnCancel;
-        Controls.AddRange([lblInfo, _tree, btnCancel, btnConfirm]);
+        Controls.Add(body);
+        Controls.Add(footer);
     }
 
     private static HashSet<long> CollectDescendantIds(IReadOnlyList<MaterialGroupNode> all, long rootId)

@@ -4,7 +4,7 @@
 
 #define MyAppName "Gestión de Scrap"
 #define MyAppShortName "GestionScrap"
-#define MyAppVersion "4.1.0"
+#define MyAppVersion "4.1.1"
 #define MyAppPublisher "Cambiaso Hnos. S.A.C."
 #define MyAppURL "https://github.com/barriagada666-collab/GESTION_SCRAP"
 #define MyAppExeName "GestionScrap.exe"

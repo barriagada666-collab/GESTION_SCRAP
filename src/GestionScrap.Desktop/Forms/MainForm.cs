@@ -72,13 +72,13 @@ public sealed class MainForm : Form
         KeyPreview = true;
 
         _sidebar.Dock = DockStyle.Left;
-        _sidebar.Width = 242;
+        _sidebar.Width = 258;
         _sidebar.BackColor = AppTheme.SidebarDark;
 
         Panel brandPanel = new()
         {
             Dock = DockStyle.Top,
-            Height = 82,
+            Height = 86,
             BackColor = AppTheme.HeaderDark,
             Padding = new Padding(12, 12, 12, 10)
         };
@@ -91,7 +91,7 @@ public sealed class MainForm : Form
         PictureBox picBrand = new()
         {
             Size = new Size(48, 48),
-            Location = new Point(12, 16),
+            Location = new Point(12, 18),
             SizeMode = PictureBoxSizeMode.Zoom,
             Image = AppTheme.LoadAppLogo()
         };
@@ -100,7 +100,7 @@ public sealed class MainForm : Form
             Text = "CAMBIASO SCRAP",
             Font = AppTheme.FontBrandTitle,
             ForeColor = AppTheme.AccentGold,
-            Location = new Point(68, 17),
+            Location = new Point(68, 18),
             AutoSize = true
         };
         Label lblBrandVer = new()
@@ -108,7 +108,7 @@ public sealed class MainForm : Form
             Text = $"{AppMetadata.ShortVersion} · .NET 10 · SQLite",
             Font = AppTheme.FontSmall,
             ForeColor = Color.FromArgb(186, 210, 228),
-            Location = new Point(69, 41),
+            Location = new Point(69, 44),
             AutoSize = true
         };
         brandPanel.Controls.AddRange([picBrand, lblBrandTitle, lblBrandVer]);
@@ -138,43 +138,62 @@ public sealed class MainForm : Form
         _sidebar.Controls.Add(brandPanel);
 
         _header.Dock = DockStyle.Top;
-        _header.Height = 62;
+        _header.Height = 68;
         _header.BackColor = AppTheme.HeaderDark;
-        _header.Padding = new Padding(16, 8, 14, 8);
+        _header.Padding = new Padding(16, 10, 14, 10);
         _header.Paint += (_, e) =>
         {
             using Pen goldBar = new(AppTheme.AccentGold, 2f);
             e.Graphics.DrawLine(goldBar, 0, _header.Height - 1, _header.Width, _header.Height - 1);
         };
 
-        Panel headerTitleBox = new() { Dock = DockStyle.Fill };
+        TableLayoutPanel headerTitleBox = new()
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        headerTitleBox.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        headerTitleBox.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        headerTitleBox.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         _lblHeaderModule.Text = "Informe Resumen";
         _lblHeaderModule.Font = AppTheme.FontHeaderModule;
         _lblHeaderModule.ForeColor = Color.White;
-        _lblHeaderModule.Location = new Point(0, 2);
+        _lblHeaderModule.Dock = DockStyle.Fill;
+        _lblHeaderModule.AutoEllipsis = true;
         _lblHeaderModule.AutoSize = true;
+        _lblHeaderModule.Margin = new Padding(0, 0, 8, 2);
 
         _lblHeaderSub.Text = "Resumen ejecutivo operativo";
         _lblHeaderSub.Font = AppTheme.FontSmall;
         _lblHeaderSub.ForeColor = Color.FromArgb(186, 210, 228);
-        _lblHeaderSub.Location = new Point(1, 27);
+        _lblHeaderSub.Dock = DockStyle.Fill;
+        _lblHeaderSub.AutoEllipsis = true;
         _lblHeaderSub.AutoSize = true;
-        headerTitleBox.Controls.AddRange([_lblHeaderModule, _lblHeaderSub]);
+        _lblHeaderSub.Margin = new Padding(1, 0, 8, 0);
+        headerTitleBox.Controls.Add(_lblHeaderModule, 0, 0);
+        headerTitleBox.Controls.Add(_lblHeaderSub, 0, 1);
 
         _btnQuickConfig = AppTheme.CreateButton("Config. BD", IconKind.Settings, ButtonVariant.GhostDark,
-            (_, _) => OpenConfigDbDialog(), "Configuración de rutas SQLite y servidores Firebird", _toolTip, 114, 32);
+            (_, _) => OpenConfigDbDialog(), "Configuración de rutas SQLite y servidores Firebird", _toolTip, 0, 34);
         _btnQuickPassword = AppTheme.CreateButton("Mi Clave", IconKind.Key, ButtonVariant.GhostDark,
-            (_, _) => OpenChangePasswordDialog(), "Cambiar contraseña de la sesión actual", _toolTip, 108, 32);
+            (_, _) => OpenChangePasswordDialog(), "Cambiar contraseña de la sesión actual", _toolTip, 0, 34);
         _btnLogout = AppTheme.CreateButton("Salir", IconKind.Logout, ButtonVariant.Danger,
-            (_, _) => RequestLogout(), "Cerrar sesión actual y regresar al login", _toolTip, 86, 32);
+            (_, _) => RequestLogout(), "Cerrar sesión actual y regresar al login", _toolTip, 0, 34);
+        _btnLogout.Margin = new Padding(0, 2, 0, 2);
 
         FlowLayoutPanel headerActions = new()
         {
             Dock = DockStyle.Right,
             AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
             FlowDirection = FlowDirection.LeftToRight,
             WrapContents = false,
-            Padding = new Padding(0, 6, 0, 0)
+            Padding = new Padding(8, 6, 0, 0),
+            Margin = Padding.Empty
         };
         headerActions.Controls.AddRange([_btnQuickConfig, _btnQuickPassword, _btnLogout]);
         _header.Controls.Add(headerTitleBox);
@@ -219,18 +238,19 @@ public sealed class MainForm : Form
     {
         Button btn = new()
         {
-            Text = "  " + title,
+            Text = " " + title,
             Image = IconFactory.GetIcon(icon, Color.FromArgb(203, 213, 225), 16),
             ImageAlign = ContentAlignment.MiddleLeft,
             TextAlign = ContentAlignment.MiddleLeft,
             TextImageRelation = TextImageRelation.ImageBeforeText,
+            UseMnemonic = false,
             Dock = DockStyle.Top,
-            Height = 44,
+            Height = 46,
             FlatStyle = FlatStyle.Flat,
             BackColor = AppTheme.SidebarDark,
             ForeColor = Color.FromArgb(226, 232, 240),
             Font = AppTheme.FontBodyBold,
-            Padding = new Padding(12, 0, 8, 0),
+            Padding = new Padding(14, 0, 10, 0),
             Cursor = Cursors.Hand,
             AccessibleName = title,
             AccessibleDescription = tooltip,

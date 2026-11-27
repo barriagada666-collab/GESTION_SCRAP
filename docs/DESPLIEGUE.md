@@ -1,15 +1,15 @@
-# Guía de Despliegue e Instalación · Gestión de Scrap v4.1.0
+# Guía de Despliegue e Instalación · Gestión de Scrap v4.1.1
 
 ## 1. Modalidades de Distribución (Inno Setup 7 + Portable)
 
 Se generan tres paquetes x64 verificados mediante `checksums_sha256.txt`:
 
-1. **Instalador Autocontenido (`GestionScrap_Setup_v4.1.0_x64_SelfContained.exe`):**
+1. **Instalador Autocontenido (`GestionScrap_Setup_v4.1.1_x64_SelfContained.exe`):**
    - Incluye el runtime `.NET 10 Desktop x64` completo, SQLite nativo (`e_sqlite3.dll`) y todos los activos visuales Cambiaso embebidos.
    - **Cero dependencias previas requeridas en el equipo cliente.**
-2. **Instalador Dependiente de Framework (`GestionScrap_Setup_v4.1.0_x64_FrameworkDependent.exe`):**
+2. **Instalador Dependiente de Framework (`GestionScrap_Setup_v4.1.1_x64_FrameworkDependent.exe`):**
    - Paquete liviano para estaciones que ya cuentan con **Microsoft Windows Desktop Runtime 10.0 (x64)**.
-3. **Paquete Portable (`GestionScrap_Portable_v4.1.0_win-x64.zip`):**
+3. **Paquete Portable (`GestionScrap_Portable_v4.1.1_win-x64.zip`):**
    - Distribución sin instalador (autocontenida x64), lista para descomprimir y ejecutar `GestionScrap.exe`.
 
 ## 2. Rutas de Instalación y Datos Persistentes
@@ -26,7 +26,7 @@ Se generan tres paquetes x64 verificados mediante `checksums_sha256.txt`:
 
 ```cmd
 :: Instalación silenciosa para usuario actual
-GestionScrap_Setup_v4.1.0_x64_SelfContained.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER
+GestionScrap_Setup_v4.1.1_x64_SelfContained.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER
 
 :: Desinstalación silenciosa (conserva %LocalAppData%\GestionScrap\gestion_scrap.db)
 "%LocalAppData%\Programs\GestionScrap\unins000.exe" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART

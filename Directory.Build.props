@@ -9,9 +9,9 @@
     <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <Deterministic>true</Deterministic>
-    <Version>4.1.0</Version>
-    <AssemblyVersion>4.1.0.0</AssemblyVersion>
-    <FileVersion>4.1.0.0</FileVersion>
+    <Version>4.1.1</Version>
+    <AssemblyVersion>4.1.1.0</AssemblyVersion>
+    <FileVersion>4.1.1.0</FileVersion>
     <Product>Gestión de Scrap</Product>
     <Company>Cambiaso Hnos. S.A.C.</Company>
     <Description>Sistema de escritorio para gestión de scrap, control de pesajes, analítica YoY/MoM e informes operativos (.NET 10).</Description>

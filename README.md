@@ -1,9 +1,9 @@
 <div align="center">
   <img src="installer/assets/app_logo.png" alt="Cambiaso Gestión de Scrap Logo" width="128" />
-  <h1>Cambiaso · Gestión de Scrap y Pesajes v4.1.0</h1>
+  <h1>Cambiaso · Gestión de Scrap y Pesajes v4.1.1</h1>
   <p><strong>Plataforma Corporativa de Escritorio .NET 10 x64 para Control de Pesajes, Analítica YoY/MoM, Segmentación de Datos, Árbol de Materiales e Importación Trazable Firebird / Access</strong></p>
 
-  ![Version](https://img.shields.io/badge/Version-v4.1.0-0B3C5D?style=for-the-badge)
+  ![Version](https://img.shields.io/badge/Version-v4.1.1-0B3C5D?style=for-the-badge)
   ![.NET 10](https://img.shields.io/badge/.NET-10.0%20WinForms%20x64-0E608A?style=for-the-badge&logo=dotnet)
   ![SQLite WAL](https://img.shields.io/badge/Database-SQLite%20WAL%20%2B%20Firebird-0891B2?style=for-the-badge&logo=sqlite)
   ![Inno Setup 7](https://img.shields.io/badge/Installer-Inno%20Setup%207-C9A46E?style=for-the-badge)
@@ -16,7 +16,7 @@
 
 ## Descripción General
 
-**Gestión de Scrap v4.1.0** es la aplicación corporativa de **Cambiaso Hnos. S.A.C.** desarrollada en **.NET 10 (`C# 14` + Windows Forms `x64` `PerMonitorV2`)** y empaquetada con **Inno Setup 7 (`7.1.1`)** para consolidar, clasificar, segmentar y analizar pesajes de báscula provenientes de servidores productivos **Firebird (`WMDBSPC.GDB` / `PWAREHOUSE.FDB`)** y bases históricas **Microsoft Access (`.mdb`/`.accdb`)**.
+**Gestión de Scrap v4.1.1** es la aplicación corporativa de **Cambiaso Hnos. S.A.C.** desarrollada en **.NET 10 (`C# 14` + Windows Forms `x64` `PerMonitorV2`)** y empaquetada con **Inno Setup 7 (`7.1.1`)** para consolidar, clasificar, segmentar y analizar pesajes de báscula provenientes de servidores productivos **Firebird (`WMDBSPC.GDB` / `PWAREHOUSE.FDB`)** y bases históricas **Microsoft Access (`.mdb`/`.accdb`)**.
 
 Opera con almacenamiento embebido **SQLite en modo WAL** con migraciones versionadas (`schema_migrations`), integridad referencial estricta (`PRAGMA foreign_keys = ON` en cada conexión), exportación nativa **Excel (`.xlsx`)** mediante **ClosedXML** (sin dependencia de Office COM), bitácora diagnóstica diaria con redacción automática de secretos (`FileAppLogger`), activos visuales Cambiaso 100 % embebidos (`EmbeddedResource`) y seguridad dinámica basada en perfiles (**RBAC**).
 
@@ -66,20 +66,20 @@ Opera con almacenamiento embebido **SQLite en modo WAL** con migraciones version
 
 ## Descarga, Instalación y Configuración
 
-Descargue el paquete deseado desde **[GitHub Releases — v4.1.0](https://github.com/barriagada666-collab/GESTION_SCRAP/releases/tag/v4.1.0)**:
+Descargue el paquete deseado desde **[GitHub Releases — v4.1.1](https://github.com/barriagada666-collab/GESTION_SCRAP/releases/tag/v4.1.1)**:
 
 | Artefacto | Modalidad | Uso Recomendado |
 | :--- | :--- | :--- |
-| `GestionScrap_Setup_v4.1.0_x64_SelfContained.exe` | Instalador Inno Setup 7 (Autocontenido) | **Recomendado** — incluye runtime `.NET 10 x64`, cero requisitos previos |
-| `GestionScrap_Setup_v4.1.0_x64_FrameworkDependent.exe` | Instalador Inno Setup 7 (Liviano) | Estaciones con `.NET 10 Desktop Runtime x64` ya instalado |
-| `GestionScrap_Portable_v4.1.0_win-x64.zip` | Paquete Portable Autocontenido | Descomprimir y ejecutar `GestionScrap.exe` sin instalador |
+| `GestionScrap_Setup_v4.1.1_x64_SelfContained.exe` | Instalador Inno Setup 7 (Autocontenido) | **Recomendado** — incluye runtime `.NET 10 x64`, cero requisitos previos |
+| `GestionScrap_Setup_v4.1.1_x64_FrameworkDependent.exe` | Instalador Inno Setup 7 (Liviano) | Estaciones con `.NET 10 Desktop Runtime x64` ya instalado |
+| `GestionScrap_Portable_v4.1.1_win-x64.zip` | Paquete Portable Autocontenido | Descomprimir y ejecutar `GestionScrap.exe` sin instalador |
 | `checksums_sha256.txt` | Verificación criptográfica | Validar integridad de descarga (`Get-FileHash -Algorithm SHA256`) |
 
 ### Instalación Silenciosa y Datos Persistentes
 
 ```cmd
 :: Instalación desatendida para el usuario actual
-GestionScrap_Setup_v4.1.0_x64_SelfContained.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER
+GestionScrap_Setup_v4.1.1_x64_SelfContained.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /CURRENTUSER
 ```
 
 - **Base de datos SQLite WAL:** `%LocalAppData%\GestionScrap\gestion_scrap.db` *(conservada intacta al actualizar o desinstalar)*
@@ -136,6 +136,7 @@ GESTION_SCRAP/
 
 ## Documentación Técnica y Evidencias
 
+- [Notas de Versión — Release v4.1.1](docs/releases/README-v4.1.1.md)
 - [Notas de Versión — Release v4.1.0](docs/releases/README-v4.1.0.md)
 - [Informe de Auditoría, Optimización y Validación v4.1.0](docs/evidencias/v4.1.0/INFORME_AUDITORIA_Y_VALIDACION_v4.1.0.md)
 - [Historial de Cambios (CHANGELOG)](docs/CHANGELOG.md)

@@ -3,7 +3,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 
 string outDir = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "assets");
-string versionText = args.Length > 1 ? args[1] : "v4.1.0";
+string versionText = args.Length > 1 ? args[1] : "v4.1.1";
 
 Directory.CreateDirectory(outDir);
 

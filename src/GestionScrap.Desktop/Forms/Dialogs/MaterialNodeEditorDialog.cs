@@ -61,24 +61,34 @@ public sealed class MaterialNodeEditorDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(490, tipo == NodoGrupoTipo.ProductoAsignado ? 295 : 235);
+        ClientSize = new Size(525, tipo == NodoGrupoTipo.ProductoAsignado ? 335 : 270);
         BackColor = AppTheme.CanvasLight;
         Icon = AppTheme.LoadAppIcon();
+
+        Panel body = new()
+        {
+            Dock = DockStyle.Fill,
+            Size = new Size(ClientSize.Width, ClientSize.Height - 58),
+            BackColor = AppTheme.CanvasLight
+        };
 
         Label lblParent = new()
         {
             Text = $"Ubicación Padre: {parentDisplayName}",
+            UseMnemonic = false,
             Font = AppTheme.FontBodyBold,
             ForeColor = AppTheme.AccentBlue,
+            AutoEllipsis = true,
             Location = new Point(18, 14),
-            Size = new Size(450, 22)
+            Size = new Size(489, 24)
         };
 
-        int y = 44;
+        int y = 46;
         if (tipo == NodoGrupoTipo.ProductoAsignado)
         {
             Label lblProd = new() { Text = "Producto del Catálogo (DBPRODUCTOS):", Font = AppTheme.FontBodyBold, Location = new Point(18, y), AutoSize = true };
-            _cmbProducto.SetBounds(18, y + 24, 452, 28);
+            _cmbProducto.SetBounds(18, y + 24, 489, 28);
+            _cmbProducto.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
             _cmbProducto.Font = AppTheme.FontBody;
             foreach (Producto p in productosDisponibles)
             {
@@ -117,8 +127,8 @@ public sealed class MaterialNodeEditorDialog : Form
                 }
             };
 
-            Controls.AddRange([lblProd, _cmbProducto]);
-            y += 62;
+            body.Controls.AddRange([lblProd, _cmbProducto]);
+            y += 64;
         }
 
         Label lblNom = new()
@@ -128,13 +138,14 @@ public sealed class MaterialNodeEditorDialog : Form
             Location = new Point(18, y),
             AutoSize = true
         };
-        _txtNombre.SetBounds(18, y + 24, 452, 28);
+        _txtNombre.SetBounds(18, y + 24, 489, 28);
+        _txtNombre.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         AppTheme.ApplyInputStyle(_txtNombre);
         _txtNombre.Text = existing?.Nombre ?? (_cmbProducto.SelectedItem is ProductItem sel ? sel.ToString() : string.Empty);
 
-        y += 62;
+        y += 64;
         Label lblCol = new() { Text = "Color Identificador:", Font = AppTheme.FontBodyBold, Location = new Point(18, y), AutoSize = true };
-        _cmbColor.SetBounds(18, y + 24, 240, 28);
+        _cmbColor.SetBounds(18, y + 24, 260, 28);
         _cmbColor.Font = AppTheme.FontBody;
         foreach ((string name, string hex) in PaletteOptions)
         {
@@ -154,21 +165,23 @@ public sealed class MaterialNodeEditorDialog : Form
             }
         }
 
-        int btnY = ClientSize.Height - 52;
+        body.Controls.AddRange([lblParent, lblNom, _txtNombre, lblCol, _cmbColor]);
+
         Button btnCancel = AppTheme.CreateButton("Cancelar", IconKind.Close, ButtonVariant.Secondary, (_, _) =>
         {
             DialogResult = DialogResult.Cancel;
             Close();
-        }, "Cancelar sin guardar cambios", _toolTip, 115, 34);
-        btnCancel.Location = new Point(225, btnY);
+        }, "Cancelar sin guardar cambios", _toolTip, 0, 34);
 
         Button btnSave = AppTheme.CreateButton("Guardar Nodo", IconKind.Save, ButtonVariant.Success, (_, _) => SaveAndClose(),
-            "Guarda el nodo dentro de la jerarquía de materiales", _toolTip, 136, 34);
-        btnSave.Location = new Point(346, btnY);
+            "Guarda el nodo dentro de la jerarquía de materiales", _toolTip, 0, 34);
+
+        Panel footer = AppTheme.CreateDialogFooter(btnCancel, btnSave);
 
         AcceptButton = btnSave;
         CancelButton = btnCancel;
-        Controls.AddRange([lblParent, lblNom, _txtNombre, lblCol, _cmbColor, btnCancel, btnSave]);
+        Controls.Add(body);
+        Controls.Add(footer);
     }
 
     private void SaveAndClose()

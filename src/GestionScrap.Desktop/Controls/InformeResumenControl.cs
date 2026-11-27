@@ -85,15 +85,18 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         Padding = new Padding(12);
         Size = new Size(1280, 760);
 
-        Panel filterCard = UiHelpers.BuildFilterCard(124);
-        filterCard.BorderStyle = BorderStyle.FixedSingle;
-
-        _cmbPlanta.Width = 132;
-        _cmbTipo.Width = 128;
-        _cmbGrupo.Width = 152;
-        _cmbSegmento.Width = 132;
-        _txtProveedor.Width = 142;
-        _txtProducto.Width = 120;
+        _cmbPlanta.Width = 136;
+        _cmbPlanta.Margin = new Padding(0, 3, 6, 3);
+        _cmbTipo.Width = 138;
+        _cmbTipo.Margin = new Padding(0, 3, 6, 3);
+        _cmbGrupo.Width = 158;
+        _cmbGrupo.Margin = new Padding(0, 3, 6, 3);
+        _cmbSegmento.Width = 142;
+        _cmbSegmento.Margin = new Padding(0, 3, 6, 3);
+        _txtProveedor.Width = 150;
+        _txtProveedor.Margin = new Padding(0, 3, 6, 3);
+        _txtProducto.Width = 128;
+        _txtProducto.Margin = new Padding(0, 3, 6, 3);
 
         UiHelpers.PopulatePlantaFilterCombo(_cmbPlanta);
         UiHelpers.PopulateTipoFilterCombo(_cmbTipo, defaultRecepcion: false);
@@ -120,8 +123,8 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         _dtpHasta.Value = DateTime.Today;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
-        _dtpDesde.Width = 104;
-        _dtpHasta.Width = 104;
+        _dtpDesde.Margin = new Padding(0, 3, 6, 3);
+        _dtpHasta.Margin = new Padding(0, 3, 6, 3);
 
         AppTheme.ApplyInputStyle(_txtProveedor);
         _txtProveedor.PlaceholderText = "Proveedor / RUT / Patente";
@@ -129,74 +132,60 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         _txtProducto.PlaceholderText = "Cód / Producto";
 
         _chkExcluirCeros.Font = AppTheme.FontBodyBold;
-        _chkExcluirCeros.Margin = new Padding(8, 6, 4, 0);
+        _chkExcluirCeros.Margin = new Padding(8, 7, 8, 3);
         _chkExcluirCeros.CheckedChanged += async (_, _) => await ActivateAsync();
 
         _chkSinTraslados.Font = AppTheme.FontBody;
-        _chkSinTraslados.Margin = new Padding(6, 6, 4, 0);
+        _chkSinTraslados.Margin = new Padding(6, 7, 6, 3);
         _chkSinTraslados.CheckedChanged += async (_, _) => await ActivateAsync();
 
         _btnConsultar = AppTheme.CreateButton("Analizar", IconKind.Search, ButtonVariant.Primary,
-            async (_, _) => await ActivateAsync(), "Ejecuta análisis, KPIs, comparativos y segmentación", Tip, 102, 30);
+            async (_, _) => await ActivateAsync(), "Ejecuta análisis, KPIs, comparativos y segmentación", Tip, 0, 32);
         _btnTodoHistorial = AppTheme.CreateButton("Histórico", IconKind.Refresh, ButtonVariant.Secondary,
             async (_, _) =>
             {
                 _dtpDesde.Value = new DateTime(2011, 1, 1);
                 _dtpHasta.Value = DateTime.Today;
                 await ActivateAsync();
-            }, "Amplía el rango de consulta desde 2011 hasta hoy", Tip, 98, 30);
+            }, "Amplía el rango de consulta desde 2011 hasta hoy", Tip, 0, 32);
         _btnLimpiarFiltros = AppTheme.CreateButton("Limpiar", IconKind.Close, ButtonVariant.Secondary,
-            async (_, _) => await ClearFiltersAsync(), "Restablece todos los filtros", Tip, 92, 30);
+            async (_, _) => await ClearFiltersAsync(), "Restablece todos los filtros", Tip, 0, 32);
         _btnExportar = AppTheme.CreateButton("Exportar Resumen", IconKind.Excel, ButtonVariant.Success,
-            (_, _) => ExportarResumenDirecto(), "Exporta informe resumen completo a Excel (.xlsx)", Tip, 148, 30);
+            (_, _) => ExportarResumenDirecto(), "Exporta informe resumen completo a Excel (.xlsx)", Tip, 0, 32);
         _btnExportarSeleccion = AppTheme.CreateButton("Exportar Selección...", IconKind.Save, ButtonVariant.Gold,
-            (_, _) => ExportarPersonalizado(), "Exportar solo las filas seleccionadas o armar un informe personalizado", Tip, 168, 30);
+            (_, _) => ExportarPersonalizado(), "Exportar solo las filas seleccionadas o armar un informe personalizado", Tip, 0, 32);
 
-        TableLayoutPanel filterRows = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 3 };
-        filterRows.RowStyles.Add(new RowStyle(SizeType.Percent, 33F));
-        filterRows.RowStyles.Add(new RowStyle(SizeType.Percent, 33F));
-        filterRows.RowStyles.Add(new RowStyle(SizeType.Percent, 34F));
-
-        FlowLayoutPanel r1 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r1.Controls.AddRange(
-        [
-            new Label { Text = "Planta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 5, 3, 0) },
+        FlowLayoutPanel r1 = UiHelpers.CreateFilterRow(
+            UiHelpers.CreateFilterLabel("Planta:", 0),
             _cmbPlanta,
-            new Label { Text = "Mov:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 5, 3, 0) },
+            UiHelpers.CreateFilterLabel("Mov:"),
             _cmbTipo,
-            new Label { Text = "Grupo:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 5, 3, 0) },
+            UiHelpers.CreateFilterLabel("Grupo:"),
             _cmbGrupo,
-            new Label { Text = "Desde:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 5, 3, 0) },
+            UiHelpers.CreateFilterLabel("Desde:"),
             _dtpDesde,
-            new Label { Text = "Hasta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 5, 3, 0) },
-            _dtpHasta
-        ]);
+            UiHelpers.CreateFilterLabel("Hasta:"),
+            _dtpHasta);
 
-        FlowLayoutPanel r2 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r2.Controls.AddRange(
-        [
-            new Label { Text = "Segmentar:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 6, 3, 0) },
+        FlowLayoutPanel r2 = UiHelpers.CreateFilterRow(
+            UiHelpers.CreateFilterLabel("Segmentar:", 0),
             _cmbSegmento,
-            new Label { Text = "Prov:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 6, 3, 0) },
+            UiHelpers.CreateFilterLabel("Prov:"),
             _txtProveedor,
-            new Label { Text = "Prod:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 6, 3, 0) },
+            UiHelpers.CreateFilterLabel("Prod:"),
             _txtProducto,
             _chkExcluirCeros,
-            _chkSinTraslados
-        ]);
+            _chkSinTraslados);
 
-        FlowLayoutPanel r3 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r3.Controls.AddRange([_btnConsultar, _btnTodoHistorial, _btnLimpiarFiltros, _btnExportar, _btnExportarSeleccion]);
+        FlowLayoutPanel r3 = UiHelpers.CreateFilterRow(
+            _btnConsultar, _btnTodoHistorial, _btnLimpiarFiltros, _btnExportar, _btnExportarSeleccion);
 
-        filterRows.Controls.Add(r1, 0, 0);
-        filterRows.Controls.Add(r2, 0, 1);
-        filterRows.Controls.Add(r3, 0, 2);
-        filterCard.Controls.Add(filterRows);
+        Panel filterCard = UiHelpers.BuildAutoFilterCard(r1, r2, r3);
 
         _emptyBanner.Dock = DockStyle.Top;
-        _emptyBanner.Height = 44;
+        _emptyBanner.Height = 50;
         _emptyBanner.BackColor = Color.FromArgb(254, 249, 195);
-        _emptyBanner.Padding = new Padding(12, 5, 12, 5);
+        _emptyBanner.Padding = new Padding(12, 6, 12, 6);
         _emptyBanner.Visible = false;
         Label lblBannerMsg = new()
         {
@@ -204,16 +193,18 @@ public sealed class InformeResumenControl : ScrapTabControlBase
             Font = AppTheme.FontBodyBold,
             ForeColor = AppTheme.HeaderDark,
             Dock = DockStyle.Fill,
+            AutoEllipsis = true,
             TextAlign = ContentAlignment.MiddleLeft
         };
         _btnImportarAhora = AppTheme.CreateButton("Ir a Importador Firebird", IconKind.Import, ButtonVariant.Gold,
-            (_, _) => _navigateToTab(3), "Abrir módulo Importador WMDBSPC.GDB", Tip, 195, 32);
-        FlowLayoutPanel bannerRight = new() { Dock = DockStyle.Right, AutoSize = true, WrapContents = false };
+            (_, _) => _navigateToTab(3), "Abrir módulo Importador WMDBSPC.GDB", Tip, 0, 34);
+        _btnImportarAhora.Margin = new Padding(0, 2, 0, 0);
+        FlowLayoutPanel bannerRight = new() { Dock = DockStyle.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
         bannerRight.Controls.Add(_btnImportarAhora);
         _emptyBanner.Controls.Add(lblBannerMsg);
         _emptyBanner.Controls.Add(bannerRight);
 
-        TableLayoutPanel kpis = new() { Dock = DockStyle.Top, Height = 92, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 4, 0, 2) };
+        TableLayoutPanel kpis = new() { Dock = DockStyle.Top, Height = 98, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 4, 0, 4) };
         for (int i = 0; i < 4; i++) kpis.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
         kpis.Controls.Add(UiHelpers.CreateKpiCard("VOLUMEN DEL PERÍODO", AppTheme.AccentCyan, out _lblKpiKilosVal, out _lblKpiKilosSub), 0, 0);
         kpis.Controls.Add(UiHelpers.CreateKpiCard("VIAJES / PROMEDIO Y MEDIANA", AppTheme.AccentBlue, out _lblKpiViajesVal, out _lblKpiViajesSub), 1, 0);
@@ -223,14 +214,15 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         Panel statsBanner = new()
         {
             Dock = DockStyle.Top,
-            Height = 30,
+            Height = 34,
             BackColor = AppTheme.HeaderDark,
             Padding = new Padding(12, 4, 12, 4),
             Margin = new Padding(0, 2, 0, 6)
         };
         _lblFichaStats.Dock = DockStyle.Fill;
-        _lblFichaStats.Font = new Font("Segoe UI", 8.8F, FontStyle.Bold);
+        _lblFichaStats.Font = AppTheme.FontSmallBold;
         _lblFichaStats.ForeColor = AppTheme.AccentGold;
+        _lblFichaStats.AutoEllipsis = true;
         _lblFichaStats.TextAlign = ContentAlignment.MiddleLeft;
         _lblFichaStats.Text = "Ficha Estadística: cargando indicadores del período...";
         statsBanner.Controls.Add(_lblFichaStats);
@@ -360,17 +352,19 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         };
 
         Panel pnlSegTop = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(8), BorderStyle = BorderStyle.FixedSingle };
-        Panel segHdr = new() { Dock = DockStyle.Top, Height = 30 };
-        Label lblSegTitle = new() { Text = "Segmentación Dinámica (seleccione una o varias filas para filtrar/exportar)", Font = AppTheme.FontSection, ForeColor = AppTheme.SidebarDark, Dock = DockStyle.Fill };
+        Panel segHdr = new() { Dock = DockStyle.Top, Height = 40, Padding = new Padding(0, 0, 0, 4) };
+        Label lblSegTitle = new() { Text = "Segmentación Dinámica (seleccione una o varias filas para filtrar/exportar)", Font = AppTheme.FontSection, ForeColor = AppTheme.SidebarDark, Dock = DockStyle.Fill, TextAlign = ContentAlignment.MiddleLeft, AutoEllipsis = true };
         _btnVerTodosMovs = AppTheme.CreateButton("Ver Todos", IconKind.Refresh, ButtonVariant.Secondary,
             (_, _) =>
             {
                 _dgvSegmentacion.ClearSelection();
                 BindMovimientosGrid(_lastDto?.MovimientosFiltrados ?? []);
-            }, "Mostrar todos los movimientos filtrados sin filtro por segmento", Tip, 115, 28);
-        _btnVerTodosMovs.Dock = DockStyle.Right;
+            }, "Mostrar todos los movimientos filtrados sin filtro por segmento", Tip, 0, 32);
+        _btnVerTodosMovs.Margin = new Padding(8, 2, 0, 0);
+        FlowLayoutPanel segHdrRight = new() { Dock = DockStyle.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
+        segHdrRight.Controls.Add(_btnVerTodosMovs);
         segHdr.Controls.Add(lblSegTitle);
-        segHdr.Controls.Add(_btnVerTodosMovs);
+        segHdr.Controls.Add(segHdrRight);
 
         _dgvSegmentacion.Columns.AddRange(
         [

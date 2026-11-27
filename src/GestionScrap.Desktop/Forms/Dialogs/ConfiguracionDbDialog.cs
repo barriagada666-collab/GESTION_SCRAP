@@ -33,12 +33,20 @@ public sealed class ConfiguracionDbDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(580, 405);
+        ClientSize = new Size(640, 448);
         BackColor = AppTheme.CanvasLight;
         Icon = AppTheme.LoadAppIcon();
 
-        Label lblSql = new() { Text = "Base de Datos Central SQLite:", Font = AppTheme.FontBodyBold, Location = new Point(16, 16), AutoSize = true };
-        _txtSqlite.SetBounds(16, 40, 548, 26);
+        Panel body = new()
+        {
+            Dock = DockStyle.Fill,
+            Size = new Size(ClientSize.Width, ClientSize.Height - 58),
+            BackColor = AppTheme.CanvasLight
+        };
+
+        Label lblSql = new() { Text = "Base de Datos Central SQLite:", Font = AppTheme.FontBodyBold, Location = new Point(16, 14), AutoSize = true };
+        _txtSqlite.SetBounds(16, 38, 608, 28);
+        _txtSqlite.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _txtSqlite.ReadOnly = true;
         _txtSqlite.Text = settings.SqliteDatabasePath;
         AppTheme.ApplyInputStyle(_txtSqlite);
@@ -47,58 +55,70 @@ public sealed class ConfiguracionDbDialog : Form
         {
             Text = "Conexiones Remotas Firebird (TCP/IP)",
             Font = AppTheme.FontSection,
-            Location = new Point(16, 80),
-            Size = new Size(548, 254),
+            Location = new Point(16, 78),
+            Size = new Size(608, 290),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             BackColor = Color.White
         };
 
-        Label lp = new() { Text = "Planta:", Font = AppTheme.FontBodyBold, Location = new Point(16, 32), AutoSize = true };
+        Label lp = new() { Text = "Planta:", Font = AppTheme.FontBodyBold, Location = new Point(16, 34), AutoSize = true };
         _cmbPlanta.DropDownStyle = ComboBoxStyle.DropDownList;
         _cmbPlanta.Font = AppTheme.FontBody;
-        _cmbPlanta.SetBounds(120, 28, 220, 28);
+        _cmbPlanta.SetBounds(130, 30, 230, 28);
         _cmbPlanta.Items.AddRange(["Placilla", "Santiago", "Talcahuano"]);
         _cmbPlanta.SelectedIndexChanged += (_, _) => LoadEndpointFields();
 
-        Label lip = new() { Text = "IP Servidor:", Font = AppTheme.FontBodyBold, Location = new Point(16, 70), AutoSize = true };
-        _txtIp.SetBounds(120, 66, 220, 26);
+        Label lip = new() { Text = "IP Servidor:", Font = AppTheme.FontBodyBold, Location = new Point(16, 74), AutoSize = true };
+        _txtIp.SetBounds(130, 70, 230, 28);
         AppTheme.ApplyInputStyle(_txtIp);
 
-        Label lpo = new() { Text = "Puerto TCP:", Font = AppTheme.FontBodyBold, Location = new Point(356, 70), AutoSize = true };
-        _numPort.SetBounds(440, 66, 90, 26);
+        Label lpo = new() { Text = "Puerto TCP:", Font = AppTheme.FontBodyBold, Location = new Point(378, 74), AutoSize = true };
+        _numPort.SetBounds(474, 70, 114, 28);
+        _numPort.Font = AppTheme.FontBody;
         _numPort.Maximum = 65535;
         _numPort.Minimum = 1;
         _numPort.Value = 3050;
 
-        Label lru = new() { Text = "Ruta GDB/FDB:", Font = AppTheme.FontBodyBold, Location = new Point(16, 106), AutoSize = true };
-        _txtRuta.SetBounds(120, 102, 410, 26);
+        Label lru = new() { Text = "Ruta GDB/FDB:", Font = AppTheme.FontBodyBold, Location = new Point(16, 112), AutoSize = true };
+        _txtRuta.SetBounds(130, 108, 458, 28);
         AppTheme.ApplyInputStyle(_txtRuta);
 
-        Label lus = new() { Text = "Usuario:", Font = AppTheme.FontBodyBold, Location = new Point(16, 142), AutoSize = true };
-        _txtUser.SetBounds(120, 138, 170, 26);
+        Label lus = new() { Text = "Usuario:", Font = AppTheme.FontBodyBold, Location = new Point(16, 150), AutoSize = true };
+        _txtUser.SetBounds(130, 146, 195, 28);
         AppTheme.ApplyInputStyle(_txtUser);
 
-        Label lpw = new() { Text = "Contraseña:", Font = AppTheme.FontBodyBold, Location = new Point(304, 142), AutoSize = true };
-        _txtPass.SetBounds(386, 138, 144, 26);
+        Label lpw = new() { Text = "Contraseña:", Font = AppTheme.FontBodyBold, Location = new Point(340, 150), AutoSize = true };
+        _txtPass.SetBounds(432, 146, 156, 28);
         _txtPass.UseSystemPasswordChar = true;
         AppTheme.ApplyInputStyle(_txtPass);
 
         _chkFallback.Text = "Permitir modo demostrativo si el servidor no responde en red";
         _chkFallback.Font = AppTheme.FontBody;
-        _chkFallback.Location = new Point(16, 176);
+        _chkFallback.Location = new Point(16, 188);
         _chkFallback.AutoSize = true;
 
         Button btnProbar = AppTheme.CreateButton("Probar Conexión TCP", IconKind.Refresh, ButtonVariant.Secondary, async (_, _) => await TestCurrentAsync(),
-            "Probar conectividad TCP y consultar metadata Firebird", _toolTip, 185, 32);
-        btnProbar.Location = new Point(345, 208);
+            "Probar conectividad TCP y consultar metadata Firebird", _toolTip, 0, 34);
+        btnProbar.Margin = Padding.Empty;
 
-        grpFb.Controls.AddRange([lp, _cmbPlanta, lip, _txtIp, lpo, _numPort, lru, _txtRuta, lus, _txtUser, lpw, _txtPass, _chkFallback, btnProbar]);
+        FlowLayoutPanel grpFooter = new()
+        {
+            Dock = DockStyle.Bottom,
+            Height = btnProbar.Height + 22,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Padding = new Padding(16, 4, 18, 12)
+        };
+        grpFooter.Controls.Add(btnProbar);
+
+        grpFb.Controls.AddRange([lp, _cmbPlanta, lip, _txtIp, lpo, _numPort, lru, _txtRuta, lus, _txtUser, lpw, _txtPass, _chkFallback, grpFooter]);
+        body.Controls.AddRange([lblSql, _txtSqlite, grpFb]);
 
         Button btnCerrar = AppTheme.CreateButton("Cancelar", IconKind.Close, ButtonVariant.Secondary, (_, _) =>
         {
             DialogResult = DialogResult.Cancel;
             Close();
-        }, "Cerrar sin guardar", _toolTip, 115, 34);
-        btnCerrar.Location = new Point(308, 352);
+        }, "Cerrar sin guardar", _toolTip, 0, 34);
 
         Button btnGuardar = AppTheme.CreateButton("Guardar Cambios", IconKind.Save, ButtonVariant.Primary, (_, _) =>
         {
@@ -106,10 +126,14 @@ public sealed class ConfiguracionDbDialog : Form
             _settingsStore.Save(_settings);
             DialogResult = DialogResult.OK;
             Close();
-        }, "Guardar configuración cifrada con DPAPI", _toolTip, 135, 34);
-        btnGuardar.Location = new Point(429, 352);
+        }, "Guardar configuración cifrada con DPAPI", _toolTip, 0, 34);
 
-        Controls.AddRange([lblSql, _txtSqlite, grpFb, btnCerrar, btnGuardar]);
+        Panel footer = AppTheme.CreateDialogFooter(btnCerrar, btnGuardar);
+
+        Controls.Add(body);
+        Controls.Add(footer);
+        AcceptButton = btnGuardar;
+        CancelButton = btnCerrar;
         _cmbPlanta.SelectedIndex = 0;
     }
 
@@ -122,6 +146,7 @@ public sealed class ConfiguracionDbDialog : Form
             ep = new FirebirdPlantaEndpoint { Planta = p, Nombre = $"Firebird {p.ToShortTitle()}" };
             _settings.FirebirdEndpoints.Add(ep);
         }
+
         return ep;
     }
 
@@ -162,6 +187,7 @@ public sealed class ConfiguracionDbDialog : Form
         {
             _toolTip.Dispose();
         }
+
         base.Dispose(disposing);
     }
 }
