@@ -1,8 +1,10 @@
 using GestionScrap.Application.Services;
 using GestionScrap.Desktop.Forms;
+using GestionScrap.Domain;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Interfaces;
 using GestionScrap.Infrastructure.Configuration;
+using GestionScrap.Infrastructure.Diagnostics;
 using GestionScrap.Infrastructure.Export;
 using GestionScrap.Infrastructure.Firebird;
 using GestionScrap.Infrastructure.Migration;
@@ -13,6 +15,8 @@ namespace GestionScrap.Desktop;
 
 internal static class Program
 {
+    private static readonly FileAppLogger AppLogger = new();
+
     [STAThread]
     private static void Main()
     {
@@ -25,8 +29,19 @@ internal static class Program
                 HandleFatalException("AppDomain", ex);
             }
         };
+        TaskScheduler.UnobservedTaskException += (_, e) =>
+        {
+            AppLogger.Log(
+                DiagnosticLogLevel.Error,
+                "TaskScheduler",
+                "Excepción asíncrona no observada capturada globalmente.",
+                context: $"Runtime={Environment.Version}",
+                exception: e.Exception);
+            e.SetObserved();
+        };
 
         ApplicationConfiguration.Initialize();
+        AppLogger.Log(DiagnosticLogLevel.Info, "Startup", $"Iniciando {AppMetadata.ProductName} {AppMetadata.ShortVersion} (.NET {Environment.Version}).");
 
         ServiceProvider? provider = null;
         using (SplashForm splash = new())
@@ -39,6 +54,7 @@ internal static class Program
             AppSettings settings = settingsStore.Load();
 
             ServiceCollection services = new();
+            services.AddSingleton<IAppLogger>(AppLogger);
             services.AddSingleton(settingsStore);
             services.AddSingleton(settings);
             services.AddSingleton<IScrapRepository>(_ => new SqliteScrapRepository(settings.SqliteDatabasePath));
@@ -50,10 +66,18 @@ internal static class Program
 
             provider = services.BuildServiceProvider();
 
-            splash.UpdateProgress(65, "Inicializando SQLite WAL, perfiles RBAC y jerarquía...");
+            splash.UpdateProgress(65, "Inicializando SQLite WAL, migraciones, perfiles RBAC y jerarquía...");
             System.Windows.Forms.Application.DoEvents();
             IScrapRepository repo = provider.GetRequiredService<IScrapRepository>();
             repo.InitializeAsync().GetAwaiter().GetResult();
+
+            DatabaseIntegrityReport integrity = repo.VerifyIntegrityAsync().GetAwaiter().GetResult();
+            AppLogger.Log(
+                integrity.IsHealthy ? DiagnosticLogLevel.Info : DiagnosticLogLevel.Warning,
+                "SQLiteStartup",
+                integrity.Summary,
+                context: settings.SqliteDatabasePath,
+                verification: integrity.IsHealthy ? "OK" : "REVISAR");
 
             splash.UpdateProgress(100, "Sistema listo.");
             System.Windows.Forms.Application.DoEvents();
@@ -95,23 +119,15 @@ internal static class Program
 
     private static void HandleFatalException(string source, Exception ex)
     {
-        try
-        {
-            string logDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                "GestionScrap");
-            Directory.CreateDirectory(logDir);
-            string logFile = Path.Combine(logDir, "error.log");
-            string entry = $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] [{source}] {ex}{Environment.NewLine}{new string('-', 80)}{Environment.NewLine}";
-            File.AppendAllText(logFile, entry);
-        }
-        catch
-        {
-            // Evitar cascada de excepciones al registrar el log
-        }
+        AppLogger.Log(
+            DiagnosticLogLevel.Critical,
+            $"UnhandledException.{source}",
+            $"Error no controlado en origen {source}.",
+            context: $"OS={Environment.OSVersion} | x64={Environment.Is64BitProcess}",
+            exception: ex);
 
         MessageBox.Show(
-            $"Se produjo un error inesperado en la aplicación ({source}):\n\n{ex.Message}",
+            $"Se produjo un error inesperado en la aplicación ({source}):\n\n{ex.Message}\n\nDetalle registrado en:\n{AppLogger.CurrentLogFilePath}",
             "Error de Aplicación",
             MessageBoxButtons.OK,
             MessageBoxIcon.Error);

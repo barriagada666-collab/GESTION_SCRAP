@@ -40,6 +40,14 @@ public static class AppTheme
     public static readonly Font FontSection = new("Segoe UI", 10F, FontStyle.Bold);
     public static readonly Font FontBody = new("Segoe UI", 9.5F, FontStyle.Regular);
     public static readonly Font FontBodyBold = new("Segoe UI", 9.5F, FontStyle.Bold);
+    public static readonly Font FontSmall = new("Segoe UI", 8.5F, FontStyle.Regular);
+    public static readonly Font FontSmallBold = new("Segoe UI", 8.5F, FontStyle.Bold);
+    public static readonly Font FontSmallItalic = new("Segoe UI", 8.5F, FontStyle.Italic);
+    public static readonly Font FontCaption = new("Segoe UI", 8F, FontStyle.Regular);
+    public static readonly Font FontBrandTitle = new("Segoe UI", 11F, FontStyle.Bold);
+    public static readonly Font FontHeaderModule = new("Segoe UI", 12.5F, FontStyle.Bold);
+    public static readonly Font FontLoginTitle = new("Segoe UI", 14.5F, FontStyle.Bold);
+    public static readonly Font FontSplashTitle = new("Segoe UI", 16F, FontStyle.Bold);
     public static readonly Font FontMono = new("Consolas", 9.5F, FontStyle.Regular);
     public static readonly Font FontKpiValue = new("Segoe UI", 15.5F, FontStyle.Bold);
 
@@ -177,7 +185,7 @@ public static class AppTheme
         dtp.Width = 115;
     }
 
-    private static Image? LoadEmbeddedImage(string resourceName)
+    private static Bitmap? LoadEmbeddedImage(string resourceName)
     {
         Assembly asm = typeof(AppTheme).Assembly;
         using Stream? s = asm.GetManifestResourceStream(resourceName);
@@ -189,7 +197,8 @@ public static class AppTheme
         using MemoryStream copy = new();
         s.CopyTo(copy);
         copy.Position = 0;
-        return Image.FromStream(copy);
+        using Image loaded = Image.FromStream(copy);
+        return new Bitmap(loaded);
     }
 
     public static Image LoadAppLogo() =>

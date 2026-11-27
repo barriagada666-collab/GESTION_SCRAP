@@ -15,13 +15,15 @@ public sealed class ScrapApplicationService(
     IAuthService authService,
     IFirebirdSyncService firebirdSync,
     IExcelExportService excelExport,
-    IMdbMigrationService mdbMigration)
+    IMdbMigrationService mdbMigration,
+    IAppLogger? logger = null)
 {
     private readonly IScrapRepository _repository = repository;
     private readonly IAuthService _auth = authService;
     private readonly IFirebirdSyncService _firebird = firebirdSync;
     private readonly IExcelExportService _excel = excelExport;
     private readonly IMdbMigrationService _mdbMigration = mdbMigration;
+    private readonly IAppLogger _logger = logger ?? NullAppLogger.Instance;
 
     private string Actor => _auth.CurrentUser?.NombreUsuario ?? "SISTEMA";
 
@@ -447,14 +449,15 @@ public sealed class ScrapApplicationService(
     private static HashSet<string> CollectDescendantCodes(IReadOnlyList<MaterialGroupNode> nodes, long rootId)
     {
         HashSet<string> codes = new(StringComparer.OrdinalIgnoreCase);
+        Dictionary<long, MaterialGroupNode> byId = nodes.ToDictionary(n => n.Id);
         Dictionary<long, List<MaterialGroupNode>> byParent = nodes
             .GroupBy(n => n.ParentId ?? 0L)
             .ToDictionary(g => g.Key, g => g.ToList());
+        HashSet<long> visited = [];
 
         void Walk(long id)
         {
-            MaterialGroupNode? n = nodes.FirstOrDefault(x => x.Id == id);
-            if (n is null)
+            if (!visited.Add(id) || !byId.TryGetValue(id, out MaterialGroupNode? n))
             {
                 return;
             }
@@ -600,23 +603,30 @@ public sealed class ScrapApplicationService(
     public async Task<DatabaseResumenStatsDto> GetDatabaseResumenStatsAsync(CancellationToken ct = default)
     {
         _auth.EnsurePermission(PermisoSistema.ImportarDatos);
-        IReadOnlyList<Pesaje> pesajes = await _repository.GetPesajesAsync(ct: ct).ConfigureAwait(false);
-        IReadOnlyList<Cliente> clientes = await _repository.GetClientesAsync(ct: ct).ConfigureAwait(false);
-        IReadOnlyList<Producto> prods = await _repository.GetProductosAsync(ct).ConfigureAwait(false);
-        IReadOnlyList<ImportacionHistorial> history = await _repository.GetImportHistoryAsync(50, ct).ConfigureAwait(false);
-
-        ImportacionHistorial? last = history.Count > 0 ? history[0] : null;
+        DatabaseSummaryMetrics metrics = await _repository.GetDatabaseSummaryMetricsAsync(ct).ConfigureAwait(false);
         return new DatabaseResumenStatsDto(
-            pesajes.Count,
-            pesajes.Sum(p => (long)p.PesoNeto),
-            clientes.Count,
-            prods.Count,
-            history.Count,
-            pesajes.Count > 0 ? pesajes.Min(p => p.FechaIngreso) : null,
-            pesajes.Count > 0 ? pesajes.Max(p => p.FechaIngreso) : null,
-            last?.TimestampUtc,
-            last is not null ? $"{last.TipoOrigen}: {last.OrigenDetalle}" : "Sin importaciones registradas aún",
+            metrics.TotalPesajes,
+            metrics.TotalKilos,
+            metrics.TotalClientes,
+            metrics.TotalProductos,
+            metrics.TotalImportaciones,
+            metrics.PrimeraFecha,
+            metrics.UltimaFecha,
+            metrics.UltimaImportacionUtc,
+            metrics.UltimoOrigenResumen,
             _repository.DatabasePath);
+    }
+
+    public async Task<DatabaseIntegrityReport> VerifyDatabaseIntegrityAsync(CancellationToken ct = default)
+    {
+        _auth.EnsurePermission(PermisoSistema.AdministrarSeguridadPerfiles);
+        DatabaseIntegrityReport report = await _repository.VerifyIntegrityAsync(ct).ConfigureAwait(false);
+        _logger.Log(
+            report.IsHealthy ? DiagnosticLogLevel.Info : DiagnosticLogLevel.Warning,
+            nameof(ScrapApplicationService),
+            report.Summary,
+            context: $"Actor={Actor}; SchemaVersion={report.AppliedSchemaVersion}; Pesajes={report.PesajesCount}");
+        return report;
     }
 
     public async Task<IReadOnlyList<AuditLogEntry>> GetAuditLogsAsync(int limit = 500, string? accion = null, string? usuario = null, CancellationToken ct = default)

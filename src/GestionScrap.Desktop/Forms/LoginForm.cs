@@ -52,7 +52,7 @@ public sealed class LoginForm : Form
         Label lblTitle = new()
         {
             Text = "GESTIÓN DE SCRAP",
-            Font = new Font("Segoe UI", 14.5F, FontStyle.Bold),
+            Font = AppTheme.FontLoginTitle,
             ForeColor = Color.White,
             Location = new Point(100, 20),
             AutoSize = true
@@ -61,7 +61,7 @@ public sealed class LoginForm : Form
         Label lblBrand = new()
         {
             Text = "CAMBIASO DESDE 1875 · .NET 10",
-            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+            Font = AppTheme.FontSmallBold,
             ForeColor = AppTheme.AccentGold,
             Location = new Point(101, 48),
             AutoSize = true
@@ -112,7 +112,7 @@ public sealed class LoginForm : Form
         Label lblHint = new()
         {
             Text = "Acceso controlado por perfiles de seguridad RBAC.",
-            Font = new Font("Segoe UI", 8.5F, FontStyle.Italic),
+            Font = AppTheme.FontSmallItalic,
             ForeColor = AppTheme.TextSecondary,
             Location = new Point(28, 214),
             AutoSize = true
