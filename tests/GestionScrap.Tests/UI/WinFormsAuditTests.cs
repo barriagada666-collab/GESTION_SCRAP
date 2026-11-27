@@ -16,8 +16,8 @@ using GestionScrap.Infrastructure.Persistence;
 namespace GestionScrap.Tests.UI;
 
 /// <summary>
-/// Pruebas automatizadas STA para validar UI/UX, branding embebido sin dependencias externas,
-/// botones completos con iconos/acciones y permisos dinámicos de perfiles en MainForm.
+/// Pruebas automatizadas STA para validar UI/UX, ajuste de texto en una línea sin recortes ni solapes,
+/// encabezados legibles en grillas, branding embebido y permisos dinámicos de perfiles en MainForm.
 /// </summary>
 public sealed class WinFormsAuditTests
 {
@@ -50,16 +50,16 @@ public sealed class WinFormsAuditTests
         }
     }
 
-    private static IEnumerable<Button> GetAllButtons(Control root)
+    private static IEnumerable<T> GetAllControls<T>(Control root) where T : Control
     {
         foreach (Control c in root.Controls)
         {
-            if (c is Button b)
+            if (c is T typed)
             {
-                yield return b;
+                yield return typed;
             }
 
-            foreach (Button nested in GetAllButtons(c))
+            foreach (T nested in GetAllControls<T>(c))
             {
                 yield return nested;
             }
@@ -82,29 +82,73 @@ public sealed class WinFormsAuditTests
         return list[ClickEventKey] is not null;
     }
 
-    private static void AssertAllButtonsValid(Control root, string contextName)
+    private static void ForceLayoutRecursive(Control container)
+    {
+        container.CreateControl();
+        container.PerformLayout();
+
+        foreach (Control child in container.Controls)
+        {
+            if (child is TabControl tc)
+            {
+                tc.CreateControl();
+                tc.PerformLayout();
+                int pageW = Math.Max(200, tc.ClientSize.Width - 8);
+                int pageH = Math.Max(200, tc.ClientSize.Height - 28);
+                TabPage? original = tc.SelectedTab;
+                foreach (TabPage page in tc.TabPages)
+                {
+                    tc.SelectedTab = page;
+                    page.CreateControl();
+                    page.Size = new Size(pageW, pageH);
+                    ForceLayoutRecursive(page);
+                }
+
+                if (original is not null)
+                {
+                    tc.SelectedTab = original;
+                }
+            }
+            else
+            {
+                ForceLayoutRecursive(child);
+            }
+        }
+
+        container.PerformLayout();
+    }
+
+    private static void AssertAllButtonsAndLayoutValid(Control root, string contextName)
     {
         if (root is UserControl uc)
         {
-            using Form host = new() { ClientSize = new Size(1280, 760) };
+            using Form host = new()
+            {
+                ClientSize = new Size(1280, 760),
+                StartPosition = FormStartPosition.Manual,
+                Location = new Point(-20000, -20000),
+                ShowInTaskbar = false
+            };
             host.Controls.Add(uc);
             host.CreateControl();
-            host.PerformLayout();
-            ValidateButtonsCore(uc, contextName);
+            uc.Bounds = host.ClientRectangle;
+            ForceLayoutRecursive(host);
+            ValidateButtonsAndGridsCore(uc, contextName);
             host.Controls.Remove(uc);
             return;
         }
 
         root.CreateControl();
-        root.PerformLayout();
-        ValidateButtonsCore(root, contextName);
+        ForceLayoutRecursive(root);
+        ValidateButtonsAndGridsCore(root, contextName);
     }
 
-    private static void ValidateButtonsCore(Control root, string contextName)
+    private static void ValidateButtonsAndGridsCore(Control root, string contextName)
     {
-        List<Button> buttons = [.. GetAllButtons(root)];
+        List<Button> buttons = [.. GetAllControls<Button>(root)];
         Assert.NotEmpty(buttons);
 
+        // Validar cada botón individual: texto completo en 1 línea, icono, evento Click, sin recorte en padre
         foreach (Button btn in buttons)
         {
             string id = $"{contextName} -> '{btn.Text.Trim()}'";
@@ -114,6 +158,74 @@ public sealed class WinFormsAuditTests
             Assert.True(HasClickHandler(btn), $"Botón sin evento Click funcional: {id}");
             Assert.True(btn.Width > 0 && btn.Height > 0, $"Botón con tamaño inválido: {id}");
             Assert.True(btn.Left >= 0 && btn.Top >= 0, $"Botón fuera de área visible: {id} ({btn.Bounds})");
+
+            // Verificar que el texto completo cabe en una sola línea sin saltos ni recortes
+            Size measured = TextRenderer.MeasureText(
+                btn.Text,
+                btn.Font,
+                new Size(int.MaxValue, int.MaxValue),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+            int minInnerWidth = measured.Width + (btn.Image?.Width ?? 0) + btn.Padding.Horizontal + 6;
+            Assert.True(
+                btn.ClientSize.Width >= minInnerWidth,
+                $"Texto de botón demasiado apretado o con salto de línea en {id}: ClientWidth={btn.ClientSize.Width}, Requerido>={minInnerWidth}");
+            Assert.True(
+                btn.ClientSize.Height >= measured.Height + 6,
+                $"Altura insuficiente para texto de botón en {id}: ClientHeight={btn.ClientSize.Height}, TextHeight={measured.Height}");
+
+            // Verificar que el botón no queda recortado dentro de su contenedor padre (ni colapsado en altura)
+            Control? parent = btn.Parent;
+            if (parent is not null && (parent is not ScrollableControl sc || !sc.AutoScroll))
+            {
+                Assert.True(
+                    parent.ClientSize.Height >= btn.Height - 2,
+                    $"Contenedor padre demasiado bajo (colapsado) en {id}: parent.ClientHeight={parent.ClientSize.Height} < btn.Height={btn.Height}");
+                Assert.True(
+                    btn.Right <= parent.ClientSize.Width + 2,
+                    $"Botón recortado a la derecha en {id}: btn.Right={btn.Right} > parent.ClientWidth={parent.ClientSize.Width}");
+                Assert.True(
+                    btn.Bottom <= parent.ClientSize.Height + 2,
+                    $"Botón recortado abajo en {id}: btn.Bottom={btn.Bottom} > parent.ClientHeight={parent.ClientSize.Height}");
+            }
+        }
+
+        // En diálogos/formularios de tamaño fijo verificar que ningún TextBox/ComboBox/GroupBox desborde el ancho de su padre
+        if (root is Form dlgForm && dlgForm.FormBorderStyle == FormBorderStyle.FixedDialog)
+        {
+            foreach (Control ctrl in GetAllControls<Control>(dlgForm))
+            {
+                if (ctrl is TextBox or ComboBox or GroupBox or CheckedListBox && ctrl.Parent is Control p && p.ClientSize.Width > 0)
+                {
+                    Assert.True(
+                        ctrl.Right <= p.ClientSize.Width + 2,
+                        $"Control '{ctrl.GetType().Name}' desborda a la derecha en {contextName}: Right={ctrl.Right} > ParentClientWidth={p.ClientSize.Width}");
+                }
+            }
+        }
+
+        // Verificar cero superposición entre botones hermanos dentro del mismo contenedor
+        foreach (IGrouping<Control?, Button> group in buttons.GroupBy(b => b.Parent))
+        {
+            List<Button> siblings = [.. group];
+            for (int i = 0; i < siblings.Count; i++)
+            {
+                for (int j = i + 1; j < siblings.Count; j++)
+                {
+                    Button a = siblings[i];
+                    Button b = siblings[j];
+                    Assert.False(
+                        a.Bounds.IntersectsWith(b.Bounds),
+                        $"Superposición detectada en {contextName}: '{a.Text.Trim()}' ({a.Bounds}) intersecta '{b.Text.Trim()}' ({b.Bounds})");
+                }
+            }
+        }
+
+        // Validar contraste y selección de encabezados en todas las grillas DataGridView
+        foreach (DataGridView dgv in GetAllControls<DataGridView>(root))
+        {
+            Assert.False(dgv.EnableHeadersVisualStyles, $"DataGridView en {contextName} debe desactivar estilos visuales de cabecera para conservar paleta corporativa.");
+            Assert.Equal(dgv.ColumnHeadersDefaultCellStyle.BackColor, dgv.ColumnHeadersDefaultCellStyle.SelectionBackColor);
+            Assert.Equal(dgv.ColumnHeadersDefaultCellStyle.ForeColor, dgv.ColumnHeadersDefaultCellStyle.SelectionForeColor);
         }
     }
 
@@ -167,14 +279,21 @@ public sealed class WinFormsAuditTests
 
                 using (LoginForm login = new(auth))
                 {
-                    AssertAllButtonsValid(login, nameof(LoginForm));
+                    AssertAllButtonsAndLayoutValid(login, nameof(LoginForm));
                 }
 
                 using (MainForm main = new(app, auth, store, settings))
                 {
-                    AssertAllButtonsValid(main, nameof(MainForm));
+                    main.WindowState = FormWindowState.Normal;
+                    main.Size = new Size(1380, 840);
+                    AssertAllButtonsAndLayoutValid(main, nameof(MainForm));
                     Assert.Equal(5, main.NavigationButtons.Count);
                     Assert.All(main.NavigationButtons, b => Assert.True(b.Enabled));
+
+                    // Verificar también en tamaño mínimo soportado (1180x720)
+                    main.Size = new Size(1180, 720);
+                    main.PerformLayout();
+                    AssertAllButtonsAndLayoutValid(main, $"{nameof(MainForm)}_MinSize");
                 }
 
                 UserControl[] tabs =
@@ -191,7 +310,7 @@ public sealed class WinFormsAuditTests
                     using (tab)
                     {
                         tab.Size = new Size(1280, 760);
-                        AssertAllButtonsValid(tab, tab.GetType().Name);
+                        AssertAllButtonsAndLayoutValid(tab, tab.GetType().Name);
                     }
                 }
 
@@ -203,6 +322,7 @@ public sealed class WinFormsAuditTests
                     new CambiarPasswordDialog(auth),
                     new ConfiguracionDbDialog(store, settings, app),
                     new LimpiarTablasDialog(app),
+                    new MaterialNodeEditorDialog(NodoGrupoTipo.CarpetaGrupo, null, "Raíz Principal", prods),
                     new MaterialNodeEditorDialog(NodoGrupoTipo.ProductoAsignado, nodes[0].Id, nodes[0].Nombre, prods),
                     new MoverNodoDialog(nodes[^1], nodes),
                     new ExportacionPersonalizadaDialog("Informe Personalizado", 2, ["KPIs y Estadísticas", "Segmentación"])
@@ -212,7 +332,7 @@ public sealed class WinFormsAuditTests
                 {
                     using (dlg)
                     {
-                        AssertAllButtonsValid(dlg, dlg.GetType().Name);
+                        AssertAllButtonsAndLayoutValid(dlg, dlg.GetType().Name);
                     }
                 }
             }

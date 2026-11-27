@@ -30,6 +30,84 @@ public static class UiHelpers
         Margin = new Padding(0, 0, 0, 10)
     };
 
+    /// <summary>
+    /// Crea una tarjeta de filtros autoajustable en altura que envuelve controles y botones sin recortes en cualquier DPI.
+    /// </summary>
+    public static Panel BuildAutoFilterCard(params FlowLayoutPanel[] rows)
+    {
+        Panel card = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            BackColor = AppTheme.CardSurface,
+            BorderStyle = BorderStyle.FixedSingle,
+            Padding = new Padding(12, 8, 12, 8),
+            Margin = new Padding(0, 0, 0, 10)
+        };
+
+        TableLayoutPanel stack = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 1,
+            RowCount = rows.Length,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        stack.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+
+        for (int i = 0; i < rows.Length; i++)
+        {
+            stack.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            FlowLayoutPanel row = rows[i];
+            row.Dock = DockStyle.Fill;
+            row.AutoSize = true;
+            row.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+            row.WrapContents = true;
+            row.FlowDirection = FlowDirection.LeftToRight;
+            row.Margin = i == 0 ? new Padding(0, 0, 0, 2) : new Padding(0, 4, 0, 0);
+            stack.Controls.Add(row, 0, i);
+        }
+
+        card.Controls.Add(stack);
+        card.SizeChanged += (_, _) =>
+        {
+            int avail = Math.Max(120, card.ClientSize.Width - card.Padding.Horizontal);
+            if (stack.MaximumSize.Width != avail)
+            {
+                stack.MaximumSize = new Size(avail, 0);
+                stack.PerformLayout();
+            }
+        };
+        return card;
+    }
+
+    public static FlowLayoutPanel CreateFilterRow(params Control[] controls)
+    {
+        FlowLayoutPanel row = new()
+        {
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            WrapContents = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+        row.Controls.AddRange(controls);
+        return row;
+    }
+
+    public static Label CreateFilterLabel(string text, int leftGap = 8) => new()
+    {
+        Text = text,
+        Font = AppTheme.FontBodyBold,
+        ForeColor = AppTheme.TextPrimary,
+        AutoSize = true,
+        Margin = new Padding(leftGap, 8, 4, 4)
+    };
+
     public static void PopulatePlantaCombo(ComboBox cmb, bool includeTalcahuano = true)
     {
         cmb.DropDownStyle = ComboBoxStyle.DropDownList;
@@ -142,10 +220,11 @@ public static class UiHelpers
         Label lblTitle = new()
         {
             Text = title,
-            Font = new Font("Segoe UI", 8.2F, FontStyle.Bold),
+            Font = AppTheme.FontSmallBold,
             ForeColor = AppTheme.TextSecondary,
+            AutoEllipsis = true,
             Dock = DockStyle.Top,
-            Height = 19
+            Height = 20
         };
 
         valueLabel = new Label
@@ -153,15 +232,17 @@ public static class UiHelpers
             Text = "0",
             Font = AppTheme.FontKpiValue,
             ForeColor = AppTheme.TextPrimary,
+            AutoEllipsis = true,
             Dock = DockStyle.Top,
-            Height = 31
+            Height = 34
         };
 
         subtitleLabel = new Label
         {
             Text = "Sin datos",
-            Font = AppTheme.FontSubtitle,
+            Font = AppTheme.FontSmall,
             ForeColor = AppTheme.TextSecondary,
+            AutoEllipsis = true,
             Dock = DockStyle.Fill
         };
 
@@ -232,12 +313,23 @@ public static class UiHelpers
         }
     }
 
+    private static int ComputeHeaderMinWidth(string header, int floor = 56)
+    {
+        int measured = TextRenderer.MeasureText(
+            header,
+            AppTheme.FontSmallBold,
+            new Size(int.MaxValue, int.MaxValue),
+            TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix).Width;
+        return Math.Clamp(measured + 22, floor, 210);
+    }
+
     public static DataGridViewTextBoxColumn AddTextCol(string header, string dataProperty, float fillWeight = 100f) => new()
     {
         HeaderText = header,
         DataPropertyName = dataProperty,
         Name = "col_" + dataProperty,
         FillWeight = fillWeight,
+        MinimumWidth = ComputeHeaderMinWidth(header, 62),
         SortMode = DataGridViewColumnSortMode.Automatic
     };
 
@@ -247,6 +339,7 @@ public static class UiHelpers
         DataPropertyName = dataProperty,
         Name = "col_" + dataProperty,
         FillWeight = fillWeight,
+        MinimumWidth = ComputeHeaderMinWidth(header, 54),
         DefaultCellStyle = new DataGridViewCellStyle
         {
             Alignment = DataGridViewContentAlignment.MiddleRight,
@@ -264,6 +357,7 @@ public static class UiHelpers
         DataPropertyName = dataProperty,
         Name = "col_" + dataProperty,
         FillWeight = fillWeight,
+        MinimumWidth = Math.Max(82, ComputeHeaderMinWidth(header, 82)),
         DefaultCellStyle = new DataGridViewCellStyle
         {
             Alignment = DataGridViewContentAlignment.MiddleCenter,

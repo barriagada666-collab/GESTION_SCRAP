@@ -64,58 +64,47 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         _treeIcons.Images.Add("folder", IconFactory.GetIcon(IconKind.Layers, AppTheme.AccentGold, 16));
         _treeIcons.Images.Add("product", IconFactory.GetIcon(IconKind.Document, AppTheme.AccentCyan, 16));
 
-        Panel filterCard = UiHelpers.BuildFilterCard(90);
-        filterCard.BorderStyle = BorderStyle.FixedSingle;
-
         UiHelpers.PopulatePlantaFilterCombo(_cmbPlanta);
+        _cmbPlanta.Margin = new Padding(0, 3, 6, 3);
 
         _dtpDesde.Value = new DateTime(2024, 1, 1);
         _dtpHasta.Value = DateTime.Today;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
+        _dtpDesde.Margin = new Padding(0, 3, 6, 3);
+        _dtpHasta.Margin = new Padding(0, 3, 6, 3);
 
         _chkSoloRecepciones.Text = "Solo Recepciones";
         _chkSoloRecepciones.Font = AppTheme.FontBody;
         _chkSoloRecepciones.AutoSize = true;
-        _chkSoloRecepciones.Margin = new Padding(8, 7, 4, 0);
+        _chkSoloRecepciones.Margin = new Padding(8, 7, 8, 3);
         _chkSoloRecepciones.CheckedChanged += async (_, _) => await LoadReportOnlyAsync();
 
         _chkExcluirCeros.Text = "Excluir totales en 0";
         _chkExcluirCeros.Font = AppTheme.FontBodyBold;
         _chkExcluirCeros.AutoSize = true;
-        _chkExcluirCeros.Margin = new Padding(8, 7, 6, 0);
+        _chkExcluirCeros.Margin = new Padding(6, 7, 6, 3);
         _chkExcluirCeros.CheckedChanged += async (_, _) => await LoadReportOnlyAsync();
 
         _btnConsultar = AppTheme.CreateButton("Calcular Informe", IconKind.Search, ButtonVariant.Primary,
-            async (_, _) => await RefreshTreeAndReportAsync(), "Recalcula acumulados por jerarquía de grupos", Tip, 145, 30);
+            async (_, _) => await RefreshTreeAndReportAsync(), "Recalcula acumulados por jerarquía de grupos", Tip, 0, 34);
         _btnExportar = AppTheme.CreateButton("Exportar Jerarquía", IconKind.Excel, ButtonVariant.Success,
-            (_, _) => ExportarDirecto(), "Exporta la estructura completa padre/hijo y kilos a Excel", Tip, 152, 30);
+            (_, _) => ExportarDirecto(), "Exporta la estructura completa padre/hijo y kilos a Excel", Tip, 0, 34);
         _btnExportarSeleccion = AppTheme.CreateButton("Exportar Selección...", IconKind.Save, ButtonVariant.Gold,
-            (_, _) => ExportarPersonalizado(), "Exportar solo la rama o filas seleccionadas a Excel", Tip, 168, 30);
+            (_, _) => ExportarPersonalizado(), "Exportar solo la rama o filas seleccionadas a Excel", Tip, 0, 34);
 
-        TableLayoutPanel filterRows = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        filterRows.RowStyles.Add(new RowStyle(SizeType.Percent, 48F));
-        filterRows.RowStyles.Add(new RowStyle(SizeType.Percent, 52F));
-
-        FlowLayoutPanel r1 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r1.Controls.AddRange(
-        [
-            new Label { Text = "Planta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 0) },
+        FlowLayoutPanel r1 = UiHelpers.CreateFilterRow(
+            UiHelpers.CreateFilterLabel("Planta:", 0),
             _cmbPlanta,
-            new Label { Text = "Desde:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(8, 7, 4, 0) },
+            UiHelpers.CreateFilterLabel("Desde:"),
             _dtpDesde,
-            new Label { Text = "Hasta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 7, 4, 0) },
+            UiHelpers.CreateFilterLabel("Hasta:"),
             _dtpHasta,
             _chkSoloRecepciones,
-            _chkExcluirCeros
-        ]);
+            _chkExcluirCeros);
 
-        FlowLayoutPanel r2 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r2.Controls.AddRange([_btnConsultar, _btnExportar, _btnExportarSeleccion]);
-
-        filterRows.Controls.Add(r1, 0, 0);
-        filterRows.Controls.Add(r2, 0, 1);
-        filterCard.Controls.Add(filterRows);
+        FlowLayoutPanel r2 = UiHelpers.CreateFilterRow(_btnConsultar, _btnExportar, _btnExportarSeleccion);
+        Panel filterCard = UiHelpers.BuildAutoFilterCard(r1, r2);
 
         Size = new Size(1280, 760);
 
@@ -129,9 +118,9 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         {
             if (split.Width > 860)
             {
-                split.Panel1MinSize = 320;
+                split.Panel1MinSize = 360;
                 split.Panel2MinSize = 460;
-                split.SplitterDistance = 395;
+                split.SplitterDistance = 445;
             }
         };
 
@@ -147,44 +136,63 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
             Text = "Estructura Editable de Grupos (Nodos Padre / Hijo)",
             Font = AppTheme.FontSection,
             ForeColor = AppTheme.SidebarDark,
+            AutoEllipsis = true,
             Dock = DockStyle.Top,
-            Height = 26
+            Height = 28
         };
 
         FlowLayoutPanel crudBar = new()
         {
             Dock = DockStyle.Top,
-            Height = 76,
-            Padding = new Padding(0, 4, 0, 4),
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            Padding = new Padding(0, 6, 0, 8),
+            Margin = Padding.Empty,
             WrapContents = true
         };
 
+        void SyncCrudBarWidth()
+        {
+            int avail = Math.Max(260, pnlLeft.ClientSize.Width - pnlLeft.Padding.Horizontal);
+            if (crudBar.MaximumSize.Width != avail)
+            {
+                crudBar.MaximumSize = new Size(avail, 0);
+            }
+        }
+
+        pnlLeft.SizeChanged += (_, _) => SyncCrudBarWidth();
+        pnlLeft.HandleCreated += (_, _) => SyncCrudBarWidth();
+
         _btnAddPadre = AppTheme.CreateButton("Grupo Padre", IconKind.Plus, ButtonVariant.Success,
             async (_, _) => await AddNodeAsync(NodoGrupoTipo.CarpetaGrupo, atRoot: true),
-            "Agregar nuevo Grupo Padre en el nivel raíz", Tip, 118, 30);
+            "Agregar nuevo Grupo Padre en el nivel raíz", Tip, 0, 30, AppTheme.FontButtonCompact);
         _btnAddSubgrupo = AppTheme.CreateButton("Subgrupo", IconKind.Layers, ButtonVariant.Primary,
             async (_, _) => await AddNodeAsync(NodoGrupoTipo.CarpetaGrupo, atRoot: false),
-            "Agregar carpeta Subgrupo como nodo hijo del seleccionado", Tip, 106, 30);
+            "Agregar carpeta Subgrupo como nodo hijo del seleccionado", Tip, 0, 30, AppTheme.FontButtonCompact);
         _btnAddProducto = AppTheme.CreateButton("Producto", IconKind.Import, ButtonVariant.Gold,
             async (_, _) => await AddNodeAsync(NodoGrupoTipo.ProductoAsignado, atRoot: false),
-            "Asignar un código de producto como nodo hijo del grupo elegido", Tip, 102, 30);
+            "Asignar un código de producto como nodo hijo del grupo elegido", Tip, 0, 30, AppTheme.FontButtonCompact);
         _btnEditar = AppTheme.CreateButton("Editar", IconKind.Edit, ButtonVariant.Secondary,
             async (_, _) => await EditSelectedNodeAsync(),
-            "Renombrar o editar el nodo seleccionado", Tip, 86, 30);
+            "Renombrar o editar el nodo seleccionado", Tip, 0, 30, AppTheme.FontButtonCompact);
         _btnMover = AppTheme.CreateButton("Mover", IconKind.Move, ButtonVariant.Secondary,
             async (_, _) => await MoveSelectedNodeAsync(),
-            "Mover el nodo o subrama hacia otro grupo padre", Tip, 90, 30);
+            "Mover el nodo o subrama hacia otro grupo padre", Tip, 0, 30, AppTheme.FontButtonCompact);
         _btnSubir = AppTheme.CreateButton("Subir", IconKind.ArrowUp, ButtonVariant.Secondary,
             async (_, _) => await ReorderSelectedAsync(moveUp: true),
-            "Mover nodo hacia arriba dentro del mismo grupo", Tip, 80, 30);
+            "Mover nodo hacia arriba dentro del mismo grupo", Tip, 0, 30, AppTheme.FontButtonCompact);
         _btnBajar = AppTheme.CreateButton("Bajar", IconKind.ArrowDown, ButtonVariant.Secondary,
             async (_, _) => await ReorderSelectedAsync(moveUp: false),
-            "Mover nodo hacia abajo dentro del mismo grupo", Tip, 80, 30);
+            "Mover nodo hacia abajo dentro del mismo grupo", Tip, 0, 30, AppTheme.FontButtonCompact);
         _btnEliminar = AppTheme.CreateButton("Quitar", IconKind.Trash, ButtonVariant.Danger,
             async (_, _) => await DeleteSelectedNodeAsync(),
-            "Quitar el nodo seleccionado (subgrupos o productos)", Tip, 88, 30);
+            "Quitar el nodo seleccionado (subgrupos o productos)", Tip, 0, 30, AppTheme.FontButtonCompact);
 
-        crudBar.Controls.AddRange([_btnAddPadre, _btnAddSubgrupo, _btnAddProducto, _btnEditar, _btnMover, _btnSubir, _btnBajar, _btnEliminar]);
+        foreach (Button b in new[] { _btnAddPadre, _btnAddSubgrupo, _btnAddProducto, _btnEditar, _btnMover, _btnSubir, _btnBajar, _btnEliminar })
+        {
+            b.Margin = new Padding(0, 0, 6, 6);
+            crudBar.Controls.Add(b);
+        }
 
         _tree.Dock = DockStyle.Fill;
         _tree.Font = AppTheme.FontBody;
@@ -243,10 +251,11 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         Label lblDragHint = new()
         {
             Text = "Tip: arrastre un nodo o use Shift/Ctrl en la tabla para exportar ramas/filas seleccionadas.",
-            Font = new Font("Segoe UI", 8.2F, FontStyle.Italic),
+            Font = AppTheme.FontSmallItalic,
             ForeColor = AppTheme.TextSecondary,
             Dock = DockStyle.Bottom,
-            Height = 22
+            Padding = new Padding(0, 4, 0, 0),
+            Height = 34
         };
 
         pnlLeft.Controls.Add(_tree);
@@ -256,7 +265,7 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
 
         Panel pnlRight = new() { Dock = DockStyle.Fill, Padding = new Padding(6, 0, 0, 0) };
 
-        TableLayoutPanel kpis = new() { Dock = DockStyle.Top, Height = 92, ColumnCount = 3, RowCount = 1 };
+        TableLayoutPanel kpis = new() { Dock = DockStyle.Top, Height = 98, ColumnCount = 3, RowCount = 1, Padding = new Padding(0, 0, 0, 4) };
         for (int i = 0; i < 3; i++) kpis.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
         kpis.Controls.Add(UiHelpers.CreateKpiCard("KILOS DEL ÁRBOL", AppTheme.AccentCyan, out _lblKilosVal, out _lblKilosSub), 0, 0);
         kpis.Controls.Add(UiHelpers.CreateKpiCard("GRUPOS Y NODOS", AppTheme.AccentGold, out _lblNodosVal, out _lblNodosSub), 1, 0);

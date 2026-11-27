@@ -10,6 +10,7 @@ namespace GestionScrap.Desktop.Forms;
 public sealed class SplashForm : Form
 {
     private readonly Label _lblStatus = new();
+    private readonly Panel _progressTrack = new();
     private readonly Panel _progressFill = new();
     private int _progressPercent = 15;
 
@@ -17,7 +18,7 @@ public sealed class SplashForm : Form
     {
         FormBorderStyle = FormBorderStyle.None;
         StartPosition = FormStartPosition.CenterScreen;
-        Size = new Size(640, 340);
+        Size = new Size(660, 356);
         BackColor = Color.White;
         ShowInTaskbar = false;
         DoubleBuffered = true;
@@ -52,6 +53,7 @@ public sealed class SplashForm : Form
         Label lblDiv = new()
         {
             Text = "DIVISIÓN SCRAP & BÁSCULAS\nPlacilla · Santiago · Talcahuano",
+            UseMnemonic = false,
             Font = AppTheme.FontSmallBold,
             ForeColor = Color.FromArgb(226, 232, 240),
             TextAlign = ContentAlignment.MiddleCenter,
@@ -104,27 +106,24 @@ public sealed class SplashForm : Form
             AutoSize = true
         };
 
-        Panel progressTrack = new()
-        {
-            Bounds = new Rectangle(28, 198, 316, 12),
-            BackColor = Color.FromArgb(226, 232, 240)
-        };
+        _progressTrack.Bounds = new Rectangle(28, 198, 340, 12);
+        _progressTrack.BackColor = Color.FromArgb(226, 232, 240);
         _progressFill.BackColor = AppTheme.AccentCyan;
         _progressFill.Bounds = new Rectangle(0, 0, 56, 12);
-        progressTrack.Controls.Add(_progressFill);
+        _progressTrack.Controls.Add(_progressFill);
 
         _lblStatus.Text = "Inicializando base SQLite WAL y seguridad...";
         _lblStatus.Font = AppTheme.FontSubtitle;
         _lblStatus.ForeColor = AppTheme.TextSecondary;
-        _lblStatus.Bounds = new Rectangle(28, 222, 320, 40);
+        _lblStatus.Bounds = new Rectangle(28, 222, 340, 44);
 
         Label lblVersion = new()
         {
             Text = $"Versión {AppMetadata.Version} · .NET 10 LTS",
             Font = AppTheme.FontSmallBold,
             ForeColor = AppTheme.AccentCyan,
-            Location = new Point(172, 290),
-            AutoSize = true
+            TextAlign = ContentAlignment.MiddleRight,
+            Bounds = new Rectangle(28, 294, 340, 22)
         };
 
         Label lblCopy = new()
@@ -132,11 +131,11 @@ public sealed class SplashForm : Form
             Text = "Cambiaso Hnos. S.A.C. · 2026",
             Font = AppTheme.FontCaption,
             ForeColor = AppTheme.TextSecondary,
-            Location = new Point(165, 310),
-            AutoSize = true
+            TextAlign = ContentAlignment.MiddleRight,
+            Bounds = new Rectangle(28, 316, 340, 20)
         };
 
-        rightPane.Controls.AddRange([picWordmark, lblAppTitle, lblAppSub, progressTrack, _lblStatus, lblVersion, lblCopy]);
+        rightPane.Controls.AddRange([picWordmark, lblAppTitle, lblAppSub, _progressTrack, _lblStatus, lblVersion, lblCopy]);
         Controls.Add(rightPane);
         Controls.Add(leftPane);
 
@@ -150,7 +149,7 @@ public sealed class SplashForm : Form
     public void UpdateProgress(int percent, string message)
     {
         _progressPercent = Math.Clamp(percent, 5, 100);
-        _progressFill.Width = (int)(316 * (_progressPercent / 100.0));
+        _progressFill.Width = (int)(_progressTrack.Width * (_progressPercent / 100.0));
         _lblStatus.Text = message;
         Refresh();
     }

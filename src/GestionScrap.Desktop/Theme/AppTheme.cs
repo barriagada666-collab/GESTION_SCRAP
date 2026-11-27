@@ -15,7 +15,7 @@ public enum ButtonVariant
 
 /// <summary>
 /// Sistema visual corporativo Cambiaso (Azul Petróleo + Cian Técnico + Dorado 1875)
-/// con recursos gráficos embebidos en ensamblado sin dependencias externas.
+/// con dimensionamiento seguro de botones High-DPI y recursos embebidos sin dependencias externas.
 /// </summary>
 public static class AppTheme
 {
@@ -40,6 +40,8 @@ public static class AppTheme
     public static readonly Font FontSection = new("Segoe UI", 10F, FontStyle.Bold);
     public static readonly Font FontBody = new("Segoe UI", 9.5F, FontStyle.Regular);
     public static readonly Font FontBodyBold = new("Segoe UI", 9.5F, FontStyle.Bold);
+    public static readonly Font FontButton = new("Segoe UI", 9F, FontStyle.Bold);
+    public static readonly Font FontButtonCompact = new("Segoe UI", 8.5F, FontStyle.Bold);
     public static readonly Font FontSmall = new("Segoe UI", 8.5F, FontStyle.Regular);
     public static readonly Font FontSmallBold = new("Segoe UI", 8.5F, FontStyle.Bold);
     public static readonly Font FontSmallItalic = new("Segoe UI", 8.5F, FontStyle.Italic);
@@ -49,7 +51,8 @@ public static class AppTheme
     public static readonly Font FontLoginTitle = new("Segoe UI", 14.5F, FontStyle.Bold);
     public static readonly Font FontSplashTitle = new("Segoe UI", 16F, FontStyle.Bold);
     public static readonly Font FontMono = new("Consolas", 9.5F, FontStyle.Regular);
-    public static readonly Font FontKpiValue = new("Segoe UI", 15.5F, FontStyle.Bold);
+    public static readonly Font FontMonoBold = new("Consolas", 11F, FontStyle.Bold);
+    public static readonly Font FontKpiValue = new("Segoe UI", 15F, FontStyle.Bold);
 
     public static Button CreateButton(
         string text,
@@ -59,7 +62,8 @@ public static class AppTheme
         string? tooltip = null,
         ToolTip? tipControl = null,
         int width = 0,
-        int height = 34)
+        int height = 34,
+        Font? font = null)
     {
         (Color bg, Color fg, Color border, Color hover) = variant switch
         {
@@ -72,34 +76,44 @@ public static class AppTheme
             _ => (Color.White, TextPrimary, CardBorder, Color.FromArgb(241, 245, 249))
         };
 
+        string cleanText = text.Trim();
+        int iconSize = height <= 30 ? 15 : 16;
+        Padding pad = height <= 30 ? new Padding(9, 0, 10, 0) : new Padding(10, 0, 12, 0);
+
         Button btn = new()
         {
-            Text = "  " + text,
-            Image = IconFactory.GetIcon(icon, fg, 16),
+            Text = " " + cleanText,
+            Image = IconFactory.GetIcon(icon, fg, iconSize),
             ImageAlign = ContentAlignment.MiddleLeft,
             TextAlign = ContentAlignment.MiddleCenter,
             TextImageRelation = TextImageRelation.ImageBeforeText,
+            UseCompatibleTextRendering = false,
+            UseMnemonic = false,
+            AutoEllipsis = false,
             BackColor = bg,
             ForeColor = fg,
             FlatStyle = FlatStyle.Flat,
-            Font = FontBodyBold,
+            Font = font ?? FontButton,
             Cursor = Cursors.Hand,
-            Height = height,
-            AutoSize = width <= 0,
-            MinimumSize = new Size(width > 0 ? width : 100, height),
-            Padding = new Padding(10, 0, 12, 0),
-            AccessibleName = text,
-            AccessibleDescription = tooltip ?? text
+            AutoSize = false,
+            Padding = pad,
+            Margin = new Padding(0, 2, 8, 4),
+            AccessibleName = cleanText,
+            AccessibleDescription = tooltip ?? cleanText
         };
-
-        if (width > 0)
-        {
-            btn.Width = width;
-        }
 
         btn.FlatAppearance.BorderSize = 1;
         btn.FlatAppearance.BorderColor = border;
         btn.FlatAppearance.MouseOverBackColor = hover;
+
+        int baseMinW = width;
+        int baseMinH = Math.Max(30, height);
+        EnsureButtonFitsText(btn, baseMinW, baseMinH);
+
+        btn.HandleCreated += (_, _) => EnsureButtonFitsText(btn, baseMinW, baseMinH);
+        btn.DpiChangedAfterParent += (_, _) => EnsureButtonFitsText(btn, baseMinW, baseMinH);
+        btn.TextChanged += (_, _) => EnsureButtonFitsText(btn, baseMinW, baseMinH);
+        btn.FontChanged += (_, _) => EnsureButtonFitsText(btn, baseMinW, baseMinH);
 
         if (onClick is not null)
         {
@@ -112,6 +126,105 @@ public static class AppTheme
         }
 
         return btn;
+    }
+
+    /// <summary>
+    /// Garantiza que el texto completo del botón quepa en una sola línea sin saltos ni recortes en cualquier DPI.
+    /// </summary>
+    public static void EnsureButtonFitsText(Button btn, int baseMinWidth = 0, int baseMinHeight = 32)
+    {
+        float dpiScale = btn.DeviceDpi > 0 ? btn.DeviceDpi / 96f : 1f;
+        Size measured;
+        if (btn.IsHandleCreated)
+        {
+            using Graphics g = btn.CreateGraphics();
+            measured = TextRenderer.MeasureText(
+                g,
+                btn.Text,
+                btn.Font,
+                new Size(int.MaxValue, int.MaxValue),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+        }
+        else
+        {
+            measured = TextRenderer.MeasureText(
+                btn.Text,
+                btn.Font,
+                new Size(int.MaxValue, int.MaxValue),
+                TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
+        }
+
+        int iconAllowance = btn.Image is not null ? btn.Image.Width + 8 : 0;
+        int safetyBuffer = (int)Math.Ceiling(14 * dpiScale);
+        int requiredWidth = measured.Width + iconAllowance + btn.Padding.Horizontal + safetyBuffer;
+        int requiredHeight = Math.Max((int)Math.Ceiling(baseMinHeight * dpiScale), measured.Height + (int)Math.Ceiling(12 * dpiScale));
+
+        int minW = (int)Math.Ceiling(baseMinWidth * dpiScale);
+        int finalWidth = Math.Max(minW, requiredWidth);
+
+        if (btn.MinimumSize.Width != finalWidth || btn.MinimumSize.Height != requiredHeight)
+        {
+            btn.MinimumSize = new Size(finalWidth, requiredHeight);
+        }
+
+        if (btn.Width != finalWidth || btn.Height != requiredHeight)
+        {
+            btn.Size = new Size(finalWidth, requiredHeight);
+        }
+    }
+
+    /// <summary>
+    /// Crea una barra inferior uniforme para diálogos con botones visibles, alineados a la derecha y sin superposición.
+    /// </summary>
+    public static Panel CreateDialogFooter(params Button[] buttonsLeftToRight)
+    {
+        int maxBtnH = buttonsLeftToRight.Length > 0 ? buttonsLeftToRight.Max(b => b.Height) : 34;
+        Panel footer = new()
+        {
+            Dock = DockStyle.Bottom,
+            Height = maxBtnH + 24,
+            BackColor = Color.White,
+            Padding = new Padding(16, 12, 16, 12)
+        };
+        footer.Paint += (_, e) =>
+        {
+            using Pen divider = new(CardBorder, 1f);
+            e.Graphics.DrawLine(divider, 0, 0, footer.Width, 0);
+        };
+
+        FlowLayoutPanel flow = new()
+        {
+            Dock = DockStyle.Fill,
+            FlowDirection = FlowDirection.RightToLeft,
+            WrapContents = false,
+            Margin = Padding.Empty,
+            Padding = Padding.Empty
+        };
+
+        // En RightToLeft el primer agregado queda más a la derecha, preservando el orden visual izquierda->derecha
+        for (int i = buttonsLeftToRight.Length - 1; i >= 0; i--)
+        {
+            Button btn = buttonsLeftToRight[i];
+            btn.Margin = i == buttonsLeftToRight.Length - 1
+                ? new Padding(0, 0, 0, 0)
+                : new Padding(0, 0, 10, 0);
+            flow.Controls.Add(btn);
+        }
+
+        void SyncHeight()
+        {
+            int h = buttonsLeftToRight.Length > 0 ? buttonsLeftToRight.Max(b => b.Height) : 34;
+            int needed = h + footer.Padding.Vertical;
+            if (footer.Height != needed)
+            {
+                footer.Height = needed;
+            }
+        }
+
+        footer.HandleCreated += (_, _) => SyncHeight();
+        footer.DpiChangedAfterParent += (_, _) => SyncHeight();
+        footer.Controls.Add(flow);
+        return footer;
     }
 
     public static Panel CreateCardPanel(Padding? padding = null) => new()
@@ -137,15 +250,18 @@ public static class AppTheme
         dgv.RowHeadersVisible = false;
         dgv.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
         dgv.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-        dgv.ColumnHeadersHeight = 34;
-        dgv.RowTemplate.Height = 28;
+        dgv.ColumnHeadersHeight = 36;
+        dgv.RowTemplate.Height = 29;
 
         dgv.ColumnHeadersDefaultCellStyle = new DataGridViewCellStyle
         {
             BackColor = HeaderDark,
             ForeColor = Color.White,
-            Font = FontBodyBold,
+            SelectionBackColor = HeaderDark,
+            SelectionForeColor = Color.White,
+            Font = FontSmallBold,
             Alignment = DataGridViewContentAlignment.MiddleLeft,
+            WrapMode = DataGridViewTriState.False,
             Padding = new Padding(6, 0, 6, 0)
         };
 
@@ -156,7 +272,7 @@ public static class AppTheme
             Font = FontBody,
             SelectionBackColor = GridSelRow,
             SelectionForeColor = TextPrimary,
-            Padding = new Padding(6, 2, 6, 2)
+            Padding = new Padding(8, 2, 8, 2)
         };
 
         dgv.AlternatingRowsDefaultCellStyle = new DataGridViewCellStyle
@@ -166,7 +282,7 @@ public static class AppTheme
             Font = FontBody,
             SelectionBackColor = GridSelRow,
             SelectionForeColor = TextPrimary,
-            Padding = new Padding(6, 2, 6, 2)
+            Padding = new Padding(8, 2, 8, 2)
         };
     }
 
@@ -182,7 +298,7 @@ public static class AppTheme
     {
         dtp.Format = DateTimePickerFormat.Short;
         dtp.Font = FontBody;
-        dtp.Width = 115;
+        dtp.Width = 122;
     }
 
     private static Bitmap? LoadEmbeddedImage(string resourceName)

@@ -91,7 +91,7 @@ public sealed class ImportadorControl : ScrapTabControlBase
         Panel flowCard = new()
         {
             Dock = DockStyle.Top,
-            Height = 56,
+            Height = 60,
             BackColor = AppTheme.HeaderDark,
             Padding = new Padding(12, 8, 12, 8),
             Margin = new Padding(0, 0, 0, 6)
@@ -104,12 +104,13 @@ public sealed class ImportadorControl : ScrapTabControlBase
         _lblFlowOrigin.Dock = DockStyle.Fill;
         _lblFlowOrigin.Font = AppTheme.FontMono;
         _lblFlowOrigin.ForeColor = AppTheme.AccentGold;
+        _lblFlowOrigin.AutoEllipsis = true;
         _lblFlowOrigin.TextAlign = ContentAlignment.MiddleLeft;
 
         Label lblArrow = new()
         {
             Text = "➔",
-            Font = new Font("Segoe UI", 14F, FontStyle.Bold),
+            Font = AppTheme.FontLoginTitle,
             ForeColor = Color.FromArgb(103, 232, 249),
             Dock = DockStyle.Fill,
             TextAlign = ContentAlignment.MiddleCenter
@@ -118,6 +119,7 @@ public sealed class ImportadorControl : ScrapTabControlBase
         _lblFlowDest.Dock = DockStyle.Fill;
         _lblFlowDest.Font = AppTheme.FontMono;
         _lblFlowDest.ForeColor = Color.FromArgb(167, 243, 208);
+        _lblFlowDest.AutoEllipsis = true;
         _lblFlowDest.TextAlign = ContentAlignment.MiddleLeft;
 
         flowGrid.Controls.Add(_lblFlowOrigin, 0, 0);
@@ -125,23 +127,23 @@ public sealed class ImportadorControl : ScrapTabControlBase
         flowGrid.Controls.Add(_lblFlowDest, 2, 0);
         flowCard.Controls.Add(flowGrid);
 
-        Panel topCard = UiHelpers.BuildFilterCard(100);
-        topCard.BorderStyle = BorderStyle.FixedSingle;
-
         UiHelpers.PopulatePlantaCombo(_cmbPlanta, includeTalcahuano: true);
         UiHelpers.SelectPlanta(_cmbPlanta, Planta.Santiago);
+        _cmbPlanta.Margin = new Padding(0, 3, 6, 3);
         _cmbPlanta.SelectedIndexChanged += (_, _) => UpdateEndpointBanner();
 
         _dtpDesde.Value = new DateTime(2024, 1, 1);
         _dtpHasta.Value = DateTime.Today;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
+        _dtpDesde.Margin = new Padding(0, 3, 6, 3);
+        _dtpHasta.Margin = new Padding(0, 3, 6, 3);
 
         _chkTodoHistorial.Text = "Importar todo (sin rango)";
         _chkTodoHistorial.Checked = true;
         _chkTodoHistorial.Font = AppTheme.FontBodyBold;
         _chkTodoHistorial.AutoSize = true;
-        _chkTodoHistorial.Margin = new Padding(8, 7, 6, 0);
+        _chkTodoHistorial.Margin = new Padding(8, 7, 8, 3);
         _chkTodoHistorial.CheckedChanged += (_, _) =>
         {
             _dtpDesde.Enabled = !_chkTodoHistorial.Checked;
@@ -154,49 +156,41 @@ public sealed class ImportadorControl : ScrapTabControlBase
         _chkOmitirCeros.Checked = false;
         _chkOmitirCeros.Font = AppTheme.FontBody;
         _chkOmitirCeros.AutoSize = true;
-        _chkOmitirCeros.Margin = new Padding(6, 7, 6, 0);
+        _chkOmitirCeros.Margin = new Padding(6, 7, 6, 3);
 
         _btnTestTcp = AppTheme.CreateButton("Probar Conexión", IconKind.Check, ButtonVariant.Secondary,
-            async (_, _) => await TestTcpAsync(), "Verifica conectividad TCP 3050, tablas y pesajes reales en origen", Tip, 146, 32);
+            async (_, _) => await TestTcpAsync(), "Verifica conectividad TCP 3050, tablas y pesajes reales en origen", Tip, 0, 32);
         _btnConfig = AppTheme.CreateButton("Configurar Red", IconKind.Settings, ButtonVariant.Secondary,
-            (_, _) => OpenConfigDialog(), "Configura servidores Firebird, rutas .GDB/.FDB y credenciales", Tip, 138, 32);
+            (_, _) => OpenConfigDialog(), "Configura servidores Firebird, rutas .GDB/.FDB y credenciales", Tip, 0, 32);
         _btnVistaPrevia = AppTheme.CreateButton("Vista Previa", IconKind.Search, ButtonVariant.Primary,
-            async (_, _) => await BuscarRemotoAsync(), "Consulta previa opcional de los registros antes de guardar", Tip, 130, 32);
+            async (_, _) => await BuscarRemotoAsync(), "Consulta previa opcional de los registros antes de guardar", Tip, 0, 32);
         _btnImportarDirecto = AppTheme.CreateButton("Importar Directo", IconKind.Import, ButtonVariant.Success,
-            async (_, _) => await ImportarDirectoAsync(), "Sincronización simple en 1 clic: extrae del origen e importa al SQLite destino", Tip, 155, 32);
+            async (_, _) => await ImportarDirectoAsync(), "Sincronización simple en 1 clic: extrae del origen e importa al SQLite destino", Tip, 0, 32);
         _btnExportarVista = AppTheme.CreateButton("Exportar Vista", IconKind.Excel, ButtonVariant.Gold,
-            (_, _) => ExportarVistaPrevia(), "Exporta la vista previa o solo las filas seleccionadas a Excel", Tip, 142, 32);
+            (_, _) => ExportarVistaPrevia(), "Exporta la vista previa o solo las filas seleccionadas a Excel", Tip, 0, 32);
 
-        TableLayoutPanel rows = new() { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 2 };
-        rows.RowStyles.Add(new RowStyle(SizeType.Percent, 48F));
-        rows.RowStyles.Add(new RowStyle(SizeType.Percent, 52F));
-
-        FlowLayoutPanel r1 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r1.Controls.AddRange(
-        [
-            new Label { Text = "Origen / Planta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 4, 0) },
+        FlowLayoutPanel r1 = UiHelpers.CreateFilterRow(
+            UiHelpers.CreateFilterLabel("Origen / Planta:", 0),
             _cmbPlanta,
             _chkTodoHistorial,
-            new Label { Text = "Desde:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 7, 4, 0) },
+            UiHelpers.CreateFilterLabel("Desde:"),
             _dtpDesde,
-            new Label { Text = "Hasta:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(6, 7, 4, 0) },
+            UiHelpers.CreateFilterLabel("Hasta:"),
             _dtpHasta,
-            _chkOmitirCeros
-        ]);
+            _chkOmitirCeros);
 
-        FlowLayoutPanel r2 = new() { Dock = DockStyle.Fill, WrapContents = false };
-        r2.Controls.AddRange([_btnImportarDirecto, _btnVistaPrevia, _btnTestTcp, _btnConfig, _btnExportarVista]);
+        FlowLayoutPanel r2 = UiHelpers.CreateFilterRow(
+            _btnImportarDirecto, _btnVistaPrevia, _btnTestTcp, _btnConfig, _btnExportarVista);
 
-        rows.Controls.Add(r1, 0, 0);
-        rows.Controls.Add(r2, 0, 1);
-        topCard.Controls.Add(rows);
+        Panel topCard = UiHelpers.BuildAutoFilterCard(r1, r2);
 
         Panel gridCard = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(10), BorderStyle = BorderStyle.FixedSingle };
         _lblResumenExtract.Text = "Use 'Importar Directo' para sincronizar en 1 paso desde WMDBSPC.GDB hacia su SQLite local, o 'Vista Previa' para inspeccionar primero.";
         _lblResumenExtract.Font = AppTheme.FontSection;
         _lblResumenExtract.ForeColor = AppTheme.SidebarDark;
+        _lblResumenExtract.AutoEllipsis = true;
         _lblResumenExtract.Dock = DockStyle.Top;
-        _lblResumenExtract.Height = 28;
+        _lblResumenExtract.Height = 30;
 
         _dgv.Columns.AddRange(
         [
@@ -234,19 +228,36 @@ public sealed class ImportadorControl : ScrapTabControlBase
         _lblMdbDestino.Dock = DockStyle.Top;
         _lblMdbDestino.Height = 24;
 
-        Panel mdbRow = new() { Dock = DockStyle.Top, Height = 46, Padding = new Padding(0, 6, 0, 6) };
-        _txtMdbPath.SetBounds(0, 6, 520, 28);
+        TableLayoutPanel mdbRow = new()
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            AutoSizeMode = AutoSizeMode.GrowAndShrink,
+            ColumnCount = 3,
+            RowCount = 1,
+            Padding = new Padding(0, 8, 0, 10)
+        };
+        mdbRow.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        mdbRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        mdbRow.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        mdbRow.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        _txtMdbPath.Dock = DockStyle.Fill;
+        _txtMdbPath.Margin = new Padding(0, 5, 10, 0);
         _txtMdbPath.Text = settings.LastMdbPath;
         AppTheme.ApplyInputStyle(_txtMdbPath);
 
         _btnBrowseMdb = AppTheme.CreateButton("Examinar .MDB", IconKind.Document, ButtonVariant.Secondary,
-            (_, _) => BrowseMdb(), "Seleccionar archivo BD_SCRAP.mdb o .accdb", Tip, 148, 32);
-        _btnBrowseMdb.Location = new Point(530, 4);
+            (_, _) => BrowseMdb(), "Seleccionar archivo BD_SCRAP.mdb o .accdb", Tip, 0, 34);
+        _btnBrowseMdb.Margin = new Padding(0, 0, 8, 0);
 
         _btnMigrateMdb = AppTheme.CreateButton("Importar Access", IconKind.Import, ButtonVariant.Success,
-            async (_, _) => await RunMdbMigrationAsync(), "Ejecutar migración desde archivo Access y registrar en historial", Tip, 165, 32);
-        _btnMigrateMdb.Location = new Point(686, 4);
-        mdbRow.Controls.AddRange([_txtMdbPath, _btnBrowseMdb, _btnMigrateMdb]);
+            async (_, _) => await RunMdbMigrationAsync(), "Ejecutar migración desde archivo Access y registrar en historial", Tip, 0, 34);
+        _btnMigrateMdb.Margin = new Padding(0, 0, 0, 0);
+
+        mdbRow.Controls.Add(_txtMdbPath, 0, 0);
+        mdbRow.Controls.Add(_btnBrowseMdb, 1, 0);
+        mdbRow.Controls.Add(_btnMigrateMdb, 2, 0);
 
         _txtMdbLog.Dock = DockStyle.Fill;
         _txtMdbLog.Font = AppTheme.FontMono;
@@ -264,33 +275,29 @@ public sealed class ImportadorControl : ScrapTabControlBase
         // =========================================================================
         TabPage tpControl = new("Control e Historial (Desde -> Hacia)") { BackColor = AppTheme.CanvasLight, Padding = new Padding(8) };
 
-        TableLayoutPanel histKpis = new() { Dock = DockStyle.Top, Height = 92, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 0, 0, 6) };
+        TableLayoutPanel histKpis = new() { Dock = DockStyle.Top, Height = 98, ColumnCount = 4, RowCount = 1, Padding = new Padding(0, 0, 0, 6) };
         for (int i = 0; i < 4; i++) histKpis.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
         histKpis.Controls.Add(UiHelpers.CreateKpiCard("IMPORTACIONES REGISTRADAS", AppTheme.AccentBlue, out _lblHistCountVal, out _lblHistCountSub), 0, 0);
         histKpis.Controls.Add(UiHelpers.CreateKpiCard("PESAJES EN BASE DESTINO", AppTheme.AccentCyan, out _lblDbRowsVal, out _lblDbRowsSub), 1, 0);
         histKpis.Controls.Add(UiHelpers.CreateKpiCard("VOLUMEN ALMACENADO", AppTheme.AccentEmerald, out _lblDbKilosVal, out _lblDbKilosSub), 2, 0);
         histKpis.Controls.Add(UiHelpers.CreateKpiCard("ÚLTIMA SINCRONIZACIÓN", AppTheme.AccentGold, out _lblLastSyncVal, out _lblLastSyncSub), 3, 0);
 
-        Panel histToolbar = UiHelpers.BuildFilterCard(52);
-        histToolbar.BorderStyle = BorderStyle.FixedSingle;
         AppTheme.ApplyInputStyle(_txtFiltroHist);
+        _txtFiltroHist.Margin = new Padding(0, 4, 8, 3);
         _txtFiltroHist.PlaceholderText = "Filtrar origen, planta o usuario...";
         _txtFiltroHist.TextChanged += (_, _) => ApplyHistoryFilter();
 
         _btnRefreshHist = AppTheme.CreateButton("Actualizar Control", IconKind.Refresh, ButtonVariant.Primary,
-            async (_, _) => await RefreshHistoryAndStatsAsync(), "Recargar historial Origen -> Destino y estadísticas SQLite", Tip, 155, 30);
+            async (_, _) => await RefreshHistoryAndStatsAsync(), "Recargar historial Origen -> Destino y estadísticas SQLite", Tip, 0, 32);
         _btnExportHist = AppTheme.CreateButton("Exportar Control", IconKind.Excel, ButtonVariant.Success,
-            (_, _) => ExportarControlHistorial(), "Exporta historial completo o filas seleccionadas de importaciones", Tip, 150, 30);
+            (_, _) => ExportarControlHistorial(), "Exporta historial completo o filas seleccionadas de importaciones", Tip, 0, 32);
 
-        FlowLayoutPanel histFlow = new() { Dock = DockStyle.Fill, WrapContents = false };
-        histFlow.Controls.AddRange(
-        [
-            new Label { Text = "Buscar:", Font = AppTheme.FontBodyBold, AutoSize = true, Margin = new Padding(0, 7, 6, 0) },
+        FlowLayoutPanel histFlow = UiHelpers.CreateFilterRow(
+            UiHelpers.CreateFilterLabel("Buscar:", 0),
             _txtFiltroHist,
             _btnRefreshHist,
-            _btnExportHist
-        ]);
-        histToolbar.Controls.Add(histFlow);
+            _btnExportHist);
+        Panel histToolbar = UiHelpers.BuildAutoFilterCard(histFlow);
 
         Panel histGridCard = new() { Dock = DockStyle.Fill, BackColor = AppTheme.CardSurface, Padding = new Padding(8), BorderStyle = BorderStyle.FixedSingle };
         _dgvHistory.Columns.AddRange(

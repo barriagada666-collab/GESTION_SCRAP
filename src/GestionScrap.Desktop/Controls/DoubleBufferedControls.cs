@@ -123,12 +123,12 @@ public sealed class DashboardChartControl : Control
             return;
         }
 
-        Rectangle plot = new(56, 46, Math.Max(80, Width - 80), Math.Max(60, Height - 92));
+        Rectangle plot = new(56, 56, Math.Max(80, Width - 78), Math.Max(52, Height - 84));
         long maxVal = Math.Max(1, _weekData.Max(w => Math.Max(w.KilosActual, w.KilosAnterior)));
 
         using Pen gridPen = new(Color.FromArgb(226, 232, 240)) { DashStyle = DashStyle.Dash };
         using SolidBrush labelBrush = new(AppTheme.TextSecondary);
-        using Font axisFont = new("Segoe UI", 8F);
+        Font axisFont = AppTheme.FontCaption;
 
         for (int i = 0; i <= 4; i++)
         {
@@ -177,15 +177,15 @@ public sealed class DashboardChartControl : Control
             g.FillEllipse(dotAct, ptsActual[i].X - 4f, ptsActual[i].Y - 4f, 8, 8);
         }
 
-        int legRight = Math.Max(220, Width - 14);
-        int bWidth = Math.Max(60, TextRenderer.MeasureText(_seriesPrevLabel, axisFont).Width + 18);
-        int aWidth = Math.Max(60, TextRenderer.MeasureText(_seriesActualLabel, axisFont).Width + 20);
-        int ax = legRight - bWidth - aWidth;
-        int bx = legRight - bWidth;
-        g.FillRectangle(dotAct, ax, 14, 10, 10);
-        g.DrawString(_seriesActualLabel, axisFont, labelBrush, ax + 14, 12);
-        g.FillRectangle(dotPrev, bx, 14, 10, 10);
-        g.DrawString(_seriesPrevLabel, axisFont, labelBrush, bx + 14, 12);
+        // Leyenda en fila dedicada debajo del título (sin solapamiento)
+        int ax = 14;
+        int ly = 33;
+        int aWidth = TextRenderer.MeasureText(g, _seriesActualLabel, axisFont).Width + 24;
+        g.FillRectangle(dotAct, ax, ly + 2, 10, 10);
+        g.DrawString(_seriesActualLabel, axisFont, labelBrush, ax + 14, ly);
+        int bx = ax + aWidth;
+        g.FillRectangle(dotPrev, bx, ly + 2, 10, 10);
+        g.DrawString(_seriesPrevLabel, axisFont, labelBrush, bx + 14, ly);
     }
 
     private void DrawHorizontalBars(Graphics g)
@@ -196,25 +196,31 @@ public sealed class DashboardChartControl : Control
             return;
         }
 
-        long maxVal = Math.Max(1, _barData.Max(b => b.Value));
-        int top = 46;
-        int rowH = Math.Min(32, Math.Max(20, (Height - 60) / _barData.Count));
-        int labelW = Math.Min(175, Width / 3);
-        int barMaxW = Math.Max(48, Width - labelW - 105);
+        int top = 42;
+        int availH = Math.Max(40, Height - top - 10);
+        int maxRows = Math.Max(1, availH / 22);
+        int visibleCount = Math.Min(_barData.Count, maxRows);
+        long maxVal = Math.Max(1, _barData.Take(visibleCount).Max(b => b.Value));
+        int rowH = Math.Min(30, Math.Max(20, availH / visibleCount));
 
-        using Font f = new("Segoe UI", 8.5F);
+        Font f = AppTheme.FontSmall;
+        int maxValueTextW = _barData.Take(visibleCount).Max(b => TextRenderer.MeasureText(g, string.Create(EsCl, $"{b.Value:N0} Kg"), f).Width) + 14;
+        int labelW = Math.Clamp(Width / 3, 115, 185);
+        int barMaxW = Math.Max(44, Width - labelW - maxValueTextW - 34);
+
         using SolidBrush textBrush = new(AppTheme.TextPrimary);
         using SolidBrush subBrush = new(AppTheme.TextSecondary);
+        using StringFormat sfLabel = new() { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap, LineAlignment = StringAlignment.Center };
 
-        for (int i = 0; i < _barData.Count; i++)
+        for (int i = 0; i < visibleCount; i++)
         {
             int y = top + i * rowH;
-            string name = _barData[i].Label.Length > 25 ? _barData[i].Label[..23] + "…" : _barData[i].Label;
-            g.DrawString(name, f, textBrush, 14, y + 3);
+            RectangleF labelRect = new(14, y + 1, labelW - 6, rowH - 2);
+            g.DrawString(_barData[i].Label, f, textBrush, labelRect, sfLabel);
 
             int bw = Math.Max(4, (int)(_barData[i].Value * (double)barMaxW / maxVal));
             using SolidBrush barBrush = new(Palette[i % Palette.Length]);
-            g.FillRectangle(barBrush, labelW + 16, y + 3, bw, rowH - 9);
+            g.FillRectangle(barBrush, labelW + 16, y + 4, bw, Math.Max(10, rowH - 9));
             g.DrawString(string.Create(EsCl, $"{_barData[i].Value:N0} Kg"), f, subBrush, labelW + 22 + bw, y + 3);
         }
     }
@@ -228,8 +234,11 @@ public sealed class DashboardChartControl : Control
         }
 
         long total = Math.Max(1, _donutData.Sum(d => d.Kilos));
-        int diam = Math.Max(60, Math.Min(Height - 70, Width / 2 - 20));
-        Rectangle rect = new(24, 50, diam, diam);
+        int topPad = 42;
+        int availH = Math.Max(48, Height - topPad - 12);
+        int diam = Math.Max(48, Math.Min(availH, (int)(Width * 0.36)));
+        int circleY = topPad + Math.Max(0, (availH - diam) / 2);
+        Rectangle rect = new(18, circleY, diam, diam);
 
         float startAngle = -90f;
         for (int i = 0; i < _donutData.Count; i++)
@@ -247,18 +256,24 @@ public sealed class DashboardChartControl : Control
             g.FillEllipse(holeBrush, rect.X + offset, rect.Y + offset, hole, hole);
         }
 
-        using Font f = new("Segoe UI", 8.5F);
+        Font f = AppTheme.FontCaption;
         using SolidBrush textBrush = new(AppTheme.TextPrimary);
-        int lx = rect.Right + 20;
-        int ly = 54;
-        for (int i = 0; i < Math.Min(7, _donutData.Count); i++)
+        using StringFormat sfLegend = new() { Trimming = StringTrimming.EllipsisCharacter, FormatFlags = StringFormatFlags.NoWrap, LineAlignment = StringAlignment.Center };
+        int lx = rect.Right + 16;
+        int legendW = Math.Max(60, Width - lx - 24);
+        int maxItems = Math.Max(1, Math.Min(7, availH / 18));
+        int showCount = Math.Min(maxItems, _donutData.Count);
+        int step = Math.Min(21, Math.Max(16, availH / showCount));
+        int ly = topPad + Math.Max(0, (availH - (showCount * step)) / 2);
+
+        for (int i = 0; i < showCount; i++)
         {
             using SolidBrush swatch = new(Palette[i % Palette.Length]);
-            g.FillRectangle(swatch, lx, ly + 3, 10, 10);
+            g.FillRectangle(swatch, lx, ly + 4, 9, 9);
             double pct = _donutData[i].Kilos * 100.0 / total;
-            string lbl = _donutData[i].Grupo.Length > 20 ? _donutData[i].Grupo[..18] + "…" : _donutData[i].Grupo;
-            g.DrawString(string.Create(EsCl, $"{lbl} ({pct:N1}%)"), f, textBrush, lx + 15, ly);
-            ly += 22;
+            string lbl = string.Create(EsCl, $"{_donutData[i].Grupo} ({pct:N1}%)");
+            g.DrawString(lbl, f, textBrush, new RectangleF(lx + 14, ly, legendW, step), sfLegend);
+            ly += step;
         }
     }
 

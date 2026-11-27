@@ -19,14 +19,22 @@ public sealed class LimpiarTablasDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(470, 260);
+        ClientSize = new Size(515, 295);
         BackColor = AppTheme.CanvasLight;
         Icon = AppTheme.LoadAppIcon();
+
+        Panel body = new()
+        {
+            Dock = DockStyle.Fill,
+            Size = new Size(ClientSize.Width, ClientSize.Height - 58),
+            BackColor = AppTheme.CanvasLight
+        };
 
         Panel warnBox = new()
         {
             Location = new Point(16, 16),
-            Size = new Size(438, 100),
+            Size = new Size(483, 108),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
             BackColor = Color.FromArgb(254, 242, 242),
             BorderStyle = BorderStyle.FixedSingle,
             Padding = new Padding(12)
@@ -46,27 +54,31 @@ public sealed class LimpiarTablasDialog : Form
         {
             Text = "Escriba exactamente la palabra ELIMINAR para confirmar:",
             Font = AppTheme.FontBodyBold,
-            Location = new Point(16, 130),
+            Location = new Point(16, 138),
             AutoSize = true
         };
 
-        _txtConfirm.SetBounds(16, 156, 438, 28);
+        _txtConfirm.SetBounds(16, 166, 483, 30);
+        _txtConfirm.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _txtConfirm.TextAlign = HorizontalAlignment.Center;
-        _txtConfirm.Font = new Font("Consolas", 11F, FontStyle.Bold);
         AppTheme.ApplyInputStyle(_txtConfirm);
+        _txtConfirm.Font = AppTheme.FontMonoBold;
+
+        body.Controls.AddRange([warnBox, lblPrompt, _txtConfirm]);
 
         Button btnCancelar = AppTheme.CreateButton("Cancelar", IconKind.Close, ButtonVariant.Secondary, (_, _) =>
         {
             DialogResult = DialogResult.Cancel;
             Close();
-        }, "Cancelar purga", _toolTip, 115, 34);
-        btnCancelar.Location = new Point(185, 204);
+        }, "Cancelar purga", _toolTip, 0, 34);
 
         Button btnPurgar = AppTheme.CreateButton("Confirmar Purga", IconKind.Trash, ButtonVariant.Danger, async (_, _) => await ConfirmPurgeAsync(),
-            "Eliminar registros de pesaje", _toolTip, 148, 34);
-        btnPurgar.Location = new Point(306, 204);
+            "Eliminar registros de pesaje", _toolTip, 0, 34);
 
-        Controls.AddRange([warnBox, lblPrompt, _txtConfirm, btnCancelar, btnPurgar]);
+        Panel footer = AppTheme.CreateDialogFooter(btnCancelar, btnPurgar);
+
+        Controls.Add(body);
+        Controls.Add(footer);
         CancelButton = btnCancelar;
     }
 
@@ -90,6 +102,7 @@ public sealed class LimpiarTablasDialog : Form
         {
             _toolTip.Dispose();
         }
+
         base.Dispose(disposing);
     }
 }

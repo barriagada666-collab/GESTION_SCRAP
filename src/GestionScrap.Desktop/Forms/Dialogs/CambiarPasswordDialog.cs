@@ -19,37 +19,51 @@ public sealed class CambiarPasswordDialog : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterParent;
-        ClientSize = new Size(410, 270);
+        ClientSize = new Size(470, 295);
         BackColor = AppTheme.CanvasLight;
         Icon = AppTheme.LoadAppIcon();
 
-        Label l1 = new() { Text = "Contraseña actual:", Font = AppTheme.FontBodyBold, Location = new Point(20, 18), AutoSize = true };
-        _txtActual.SetBounds(20, 42, 370, 26);
+        Panel body = new()
+        {
+            Dock = DockStyle.Fill,
+            Size = new Size(ClientSize.Width, ClientSize.Height - 58),
+            BackColor = AppTheme.CanvasLight,
+            Padding = new Padding(20, 16, 20, 12)
+        };
+
+        Label l1 = new() { Text = "Contraseña actual:", Font = AppTheme.FontBodyBold, Location = new Point(20, 16), AutoSize = true };
+        _txtActual.SetBounds(20, 40, 430, 28);
+        _txtActual.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _txtActual.UseSystemPasswordChar = true;
         AppTheme.ApplyInputStyle(_txtActual);
 
-        Label l2 = new() { Text = "Nueva contraseña (mín. 8 caracteres, Mayús/Minús/Dígito):", Font = AppTheme.FontBodyBold, Location = new Point(20, 78), AutoSize = true };
-        _txtNueva.SetBounds(20, 102, 370, 26);
+        Label l2 = new() { Text = "Nueva contraseña (mín. 8 caracteres, Mayús/Minús/Dígito):", Font = AppTheme.FontBodyBold, Location = new Point(20, 80), AutoSize = true };
+        _txtNueva.SetBounds(20, 104, 430, 28);
+        _txtNueva.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _txtNueva.UseSystemPasswordChar = true;
         AppTheme.ApplyInputStyle(_txtNueva);
 
-        Label l3 = new() { Text = "Confirmar nueva contraseña:", Font = AppTheme.FontBodyBold, Location = new Point(20, 138), AutoSize = true };
-        _txtConfirm.SetBounds(20, 162, 370, 26);
+        Label l3 = new() { Text = "Confirmar nueva contraseña:", Font = AppTheme.FontBodyBold, Location = new Point(20, 144), AutoSize = true };
+        _txtConfirm.SetBounds(20, 168, 430, 28);
+        _txtConfirm.Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right;
         _txtConfirm.UseSystemPasswordChar = true;
         AppTheme.ApplyInputStyle(_txtConfirm);
+
+        body.Controls.AddRange([l1, _txtActual, l2, _txtNueva, l3, _txtConfirm]);
 
         Button btnCancelar = AppTheme.CreateButton("Cancelar", IconKind.Close, ButtonVariant.Secondary, (_, _) =>
         {
             DialogResult = DialogResult.Cancel;
             Close();
-        }, "Cancelar cambio", _toolTip, 110, 34);
-        btnCancelar.Location = new Point(126, 210);
+        }, "Cancelar cambio", _toolTip, 0, 34);
 
         Button btnGuardar = AppTheme.CreateButton("Guardar Clave", IconKind.Key, ButtonVariant.Primary, async (_, _) => await SaveAsync(),
-            "Actualizar contraseña de usuario", _toolTip, 146, 34);
-        btnGuardar.Location = new Point(244, 210);
+            "Actualizar contraseña de usuario", _toolTip, 0, 34);
 
-        Controls.AddRange([l1, _txtActual, l2, _txtNueva, l3, _txtConfirm, btnCancelar, btnGuardar]);
+        Panel footer = AppTheme.CreateDialogFooter(btnCancelar, btnGuardar);
+
+        Controls.Add(body);
+        Controls.Add(footer);
         AcceptButton = btnGuardar;
         CancelButton = btnCancelar;
     }
@@ -87,6 +101,7 @@ public sealed class CambiarPasswordDialog : Form
         {
             _toolTip.Dispose();
         }
+
         base.Dispose(disposing);
     }
 }
