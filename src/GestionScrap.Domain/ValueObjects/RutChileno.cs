@@ -79,4 +79,78 @@ public static class RutChileno
 
         return false;
     }
+
+    /// <summary>
+    /// Calcula el dígito verificador chileno (Módulo 11) para un cuerpo numérico válido.
+    /// </summary>
+    public static string ComputeDv(string? bodyDigits)
+    {
+        string body = Clean(bodyDigits).TrimStart('0');
+        if (string.IsNullOrEmpty(body) || !body.All(char.IsAsciiDigit))
+        {
+            return string.Empty;
+        }
+
+        int sum = 0;
+        int multiplier = 2;
+        for (int i = body.Length - 1; i >= 0; i--)
+        {
+            sum += (body[i] - '0') * multiplier;
+            multiplier = multiplier == 7 ? 2 : multiplier + 1;
+        }
+
+        int rem = 11 - (sum % 11);
+        return rem switch
+        {
+            11 => "0",
+            10 => "K",
+            _ => rem.ToString(System.Globalization.CultureInfo.InvariantCulture)
+        };
+    }
+
+    /// <summary>
+    /// Valida sintaxis y dígito verificador chileno cuando se proporciona con guión o formato completo.
+    /// </summary>
+    public static (bool IsValid, string Body, string Dv, string Formatted, string Message) ValidateAndFormat(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return (false, string.Empty, string.Empty, string.Empty, "El RUT es obligatorio.");
+        }
+
+        string trimmed = raw.Trim().ToUpperInvariant();
+        string body;
+        string? providedDv = null;
+
+        int dashIdx = trimmed.IndexOf('-');
+        if (dashIdx > 0)
+        {
+            body = Clean(trimmed[..dashIdx]).TrimStart('0');
+            providedDv = Clean(trimmed[(dashIdx + 1)..]);
+        }
+        else
+        {
+            string cleaned = Clean(trimmed).TrimStart('0');
+            if (cleaned.Length < 2)
+            {
+                return (false, string.Empty, string.Empty, string.Empty, "El RUT ingresado es demasiado corto.");
+            }
+
+            body = cleaned[..^1];
+            providedDv = cleaned[^1..];
+        }
+
+        if (body.Length < 6 || body.Length > 9 || !body.All(char.IsAsciiDigit))
+        {
+            return (false, string.Empty, string.Empty, string.Empty, "El cuerpo numérico del RUT debe tener entre 6 y 9 dígitos.");
+        }
+
+        string expectedDv = ComputeDv(body);
+        if (!string.IsNullOrEmpty(providedDv) && !string.Equals(providedDv, expectedDv, StringComparison.OrdinalIgnoreCase))
+        {
+            return (false, body, expectedDv, $"{body}-{expectedDv}", $"Dígito verificador inválido para el RUT {body} (esperado: {expectedDv}).");
+        }
+
+        return (true, body, expectedDv, $"{body}-{expectedDv}", "RUT válido.");
+    }
 }

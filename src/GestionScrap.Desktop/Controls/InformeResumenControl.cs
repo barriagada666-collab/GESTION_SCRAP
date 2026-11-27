@@ -67,6 +67,7 @@ public sealed class InformeResumenControl : ScrapTabControlBase
     private readonly DoubleBufferedDataGridView _dgvSegmentacion = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
     private readonly DoubleBufferedDataGridView _dgvMovimientos = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
 
+    private readonly List<ContextMenuStrip> _menus = [];
     private InformeResumenDto? _lastDto;
     private IReadOnlyList<MaterialGroupNode> _nodes = [];
     private Dictionary<string, string> _productGroupMap = new(StringComparer.OrdinalIgnoreCase);
@@ -119,8 +120,8 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         ]);
         _cmbSegmento.SelectedIndex = 0;
 
-        _dtpDesde.Value = new DateTime(2024, 1, 1);
-        _dtpHasta.Value = DateTime.Today;
+        _dtpDesde.Value = UiHelpers.CurrentMonthStartLocal;
+        _dtpHasta.Value = UiHelpers.CurrentDateLocal;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
         _dtpDesde.Margin = new Padding(0, 3, 6, 3);
@@ -197,7 +198,7 @@ public sealed class InformeResumenControl : ScrapTabControlBase
             TextAlign = ContentAlignment.MiddleLeft
         };
         _btnImportarAhora = AppTheme.CreateButton("Ir a Importador Firebird", IconKind.Import, ButtonVariant.Gold,
-            (_, _) => _navigateToTab(3), "Abrir módulo Importador WMDBSPC.GDB", Tip, 0, 34);
+            (_, _) => _navigateToTab(6), "Abrir módulo Importador WMDBSPC.GDB", Tip, 0, 34);
         _btnImportarAhora.Margin = new Padding(0, 2, 0, 0);
         FlowLayoutPanel bannerRight = new() { Dock = DockStyle.Right, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false };
         bannerRight.Controls.Add(_btnImportarAhora);
@@ -425,7 +426,41 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         Controls.Add(_emptyBanner);
         Controls.Add(filterCard);
 
+        AttachQuickExportMenu(_dgvUltimos, "Últimos Movimientos", "UltimosMovimientos");
+        AttachQuickExportMenu(_dgvMovimientos, "Movimientos Filtrados", "MovimientosFiltrados");
+        AttachQuickExportMenu(_dgvSegmentacion, "Segmentación Dinámica", "Segmentacion");
+
         RefreshPermissions();
+    }
+
+    private void AttachQuickExportMenu(DataGridView dgv, string title, string sheet)
+    {
+        ContextMenuStrip menu = new();
+        menu.Items.Add("Exportar selección a Excel (.xlsx)", null, (_, _) =>
+        {
+            if (_auth.HasPermission(PermisoSistema.ExportarExcel))
+            {
+                UiHelpers.ExportDataGridViewToExcel(this, dgv, _app.ExcelExporter, title, sheet, onlySelected: true, NotifyStatus);
+            }
+        });
+        menu.Items.Add("Exportar tabla completa a Excel (.xlsx)", null, (_, _) =>
+        {
+            if (_auth.HasPermission(PermisoSistema.ExportarExcel))
+            {
+                UiHelpers.ExportDataGridViewToExcel(this, dgv, _app.ExcelExporter, title, sheet, onlySelected: false, NotifyStatus);
+            }
+        });
+        menu.Items.Add(new ToolStripSeparator());
+        menu.Items.Add("Copiar valor de celda", null, (_, _) =>
+        {
+            string? val = dgv.CurrentCell?.Value?.ToString();
+            if (!string.IsNullOrEmpty(val))
+            {
+                Clipboard.SetText(val);
+            }
+        });
+        _menus.Add(menu);
+        UiHelpers.AttachGridContextMenu(dgv, menu);
     }
 
     public override void RefreshPermissions()
@@ -451,8 +486,8 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         _txtProducto.Clear();
         _chkExcluirCeros.Checked = false;
         _chkSinTraslados.Checked = false;
-        _dtpDesde.Value = new DateTime(2024, 1, 1);
-        _dtpHasta.Value = DateTime.Today;
+        _dtpDesde.Value = UiHelpers.CurrentMonthStartLocal;
+        _dtpHasta.Value = UiHelpers.CurrentDateLocal;
         await ActivateAsync();
     }
 
@@ -775,5 +810,18 @@ public sealed class InformeResumenControl : ScrapTabControlBase
         IEnumerable<Pesaje> fromSegExplorer = _dgvMovimientos.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as Pesaje).OfType<Pesaje>();
         IEnumerable<Pesaje> fromUltimos = _dgvUltimos.SelectedRows.Cast<DataGridViewRow>().Select(r => r.DataBoundItem as Pesaje).OfType<Pesaje>();
         return [.. fromSegExplorer.Concat(fromUltimos).DistinctBy(p => (p.Planta, p.Folio, p.HoraIngreso))];
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        if (disposing)
+        {
+            foreach (ContextMenuStrip m in _menus)
+            {
+                m.Dispose();
+            }
+        }
+
+        base.Dispose(disposing);
     }
 }

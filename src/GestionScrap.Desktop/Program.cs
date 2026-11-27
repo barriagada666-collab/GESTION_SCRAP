@@ -57,12 +57,15 @@ internal static class Program
             services.AddSingleton<IAppLogger>(AppLogger);
             services.AddSingleton(settingsStore);
             services.AddSingleton(settings);
-            services.AddSingleton<IScrapRepository>(_ => new SqliteScrapRepository(settings.SqliteDatabasePath));
+            services.AddSingleton(_ => new SqliteScrapRepository(settings.SqliteDatabasePath));
+            services.AddSingleton<IScrapRepository>(sp => sp.GetRequiredService<SqliteScrapRepository>());
+            services.AddSingleton<IEnterpriseRepository>(sp => sp.GetRequiredService<SqliteScrapRepository>());
             services.AddSingleton<IAuthService, SecuritySessionService>();
             services.AddSingleton<IFirebirdSyncService, FirebirdSyncService>();
             services.AddSingleton<IExcelExportService, ClosedXmlExcelExportService>();
             services.AddSingleton<IMdbMigrationService, MdbMigrationService>();
             services.AddSingleton<ScrapApplicationService>();
+            services.AddSingleton<EnterpriseApplicationService>();
 
             provider = services.BuildServiceProvider();
 
@@ -91,6 +94,7 @@ internal static class Program
             AppSettings settings = provider.GetRequiredService<AppSettings>();
             IAuthService auth = provider.GetRequiredService<IAuthService>();
             ScrapApplicationService appService = provider.GetRequiredService<ScrapApplicationService>();
+            EnterpriseApplicationService enterpriseService = provider.GetRequiredService<EnterpriseApplicationService>();
 
             while (true)
             {
@@ -101,7 +105,7 @@ internal static class Program
                 }
 
                 bool logoutRequested;
-                using (MainForm main = new(appService, auth, settingsStore, settings))
+                using (MainForm main = new(appService, enterpriseService, auth, settingsStore, settings))
                 {
                     System.Windows.Forms.Application.Run(main);
                     logoutRequested = main.LogoutRequested;

@@ -48,6 +48,8 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
     private readonly DoubleBufferedDataGridView _dgvJerarquia = new() { Dock = DockStyle.Fill, AutoGenerateColumns = false, MultiSelect = true };
     private readonly DashboardChartControl _chartProductos = new() { Dock = DockStyle.Fill };
 
+    private readonly ContextMenuStrip _treeContextMenu = new();
+    private readonly ContextMenuStrip _gridContextMenu = new();
     private IReadOnlyList<MaterialGroupNode> _nodes = [];
     private GrupoMaterialReportResultDto? _lastReport;
     private long? _selectedNodeId;
@@ -67,8 +69,8 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         UiHelpers.PopulatePlantaFilterCombo(_cmbPlanta);
         _cmbPlanta.Margin = new Padding(0, 3, 6, 3);
 
-        _dtpDesde.Value = new DateTime(2024, 1, 1);
-        _dtpHasta.Value = DateTime.Today;
+        _dtpDesde.Value = UiHelpers.CurrentMonthStartLocal;
+        _dtpHasta.Value = UiHelpers.CurrentDateLocal;
         AppTheme.ApplyDatePickerStyle(_dtpDesde);
         AppTheme.ApplyDatePickerStyle(_dtpHasta);
         _dtpDesde.Margin = new Padding(0, 3, 6, 3);
@@ -318,6 +320,26 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
 
         split.Panel1.Controls.Add(pnlLeft);
         split.Panel2.Controls.Add(pnlRight);
+
+        _treeContextMenu.Items.Add("Nuevo Grupo Padre", null, async (_, _) => await AddNodeAsync(NodoGrupoTipo.CarpetaGrupo, atRoot: true));
+        _treeContextMenu.Items.Add("Agregar Subgrupo Hijo", null, async (_, _) => await AddNodeAsync(NodoGrupoTipo.CarpetaGrupo, atRoot: false));
+        _treeContextMenu.Items.Add("Asignar Producto Hijo", null, async (_, _) => await AddNodeAsync(NodoGrupoTipo.ProductoAsignado, atRoot: false));
+        _treeContextMenu.Items.Add(new ToolStripSeparator());
+        _treeContextMenu.Items.Add("Editar Nodo", null, async (_, _) => await EditSelectedNodeAsync());
+        _treeContextMenu.Items.Add("Mover a Otro Padre", null, async (_, _) => await MoveSelectedNodeAsync());
+        _treeContextMenu.Items.Add("Quitar Nodo", null, async (_, _) => await DeleteSelectedNodeAsync());
+        _tree.ContextMenuStrip = _treeContextMenu;
+        _tree.NodeMouseClick += (_, e) =>
+        {
+            if (e.Button == MouseButtons.Right && e.Node is not null)
+            {
+                _tree.SelectedNode = e.Node;
+            }
+        };
+
+        _gridContextMenu.Items.Add("Exportar Selección a Excel (.xlsx)", null, (_, _) => ExportarPersonalizado());
+        _gridContextMenu.Items.Add("Exportar Jerarquía Completa", null, (_, _) => ExportarDirecto());
+        UiHelpers.AttachGridContextMenu(_dgvJerarquia, _gridContextMenu);
 
         Controls.Add(split);
         Controls.Add(filterCard);
@@ -805,6 +827,8 @@ public sealed class GrupoMaterialControl : ScrapTabControlBase
         if (disposing)
         {
             _treeIcons.Dispose();
+            _treeContextMenu.Dispose();
+            _gridContextMenu.Dispose();
         }
 
         base.Dispose(disposing);

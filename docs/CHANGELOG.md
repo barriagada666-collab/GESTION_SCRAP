@@ -1,5 +1,33 @@
 # Historial de Cambios (Changelog) · Gestión de Scrap
 
+## [5.0.0] — 2026-11-26 — Plataforma Integral CRM, ERP, Pesajes Industriales (1 y 2 Mediciones), Flota, Inventario e Informes Multi-Selección
+
+### CRM Unificado, Catálogo de Materiales y Flota de Vehículos (`Ctrl+4`)
+- **CRM Clientes y Proveedores por RUT Único:** Entidad unificada con roles `Cliente`, `Proveedor` o `Cliente y Proveedor` (`RolEntidadComercial`), validación estricta de dígito verificador Módulo 11 (`RutChileno.ValidateAndFormat`), prevención de duplicados por `rut_normalizado`, gestión de documentos comerciales (`entidades_documentos`), **Ficha 360°** (pesajes, órdenes ERP, vehículos y documentos), activación/desactivación y protección contra borrado físico con historial.
+- **Catálogo Maestro de Materiales Extendido:** CRUD completo sobre `productos` con código único, nombre, descripción, grupo, unidad (`KG`/`TON`), porcentaje de tolerancia de diferencia (`ToleranciaDiferenciaPct`), estado activo/inactivo, filtros combinados (búsqueda, grupo, unidad, estado y RUT proveedor) e historial integrado de stock y pesajes.
+- **Flota de Vehículos y Patentes (`vehiculos`):** Normalización estricta mediante [PatenteChilena.cs](../src/GestionScrap.Domain/ValueObjects/PatenteChilena.cs) evitando duplicados (`AB-CD-12` == `abcd12`), backfill automático no destructivo desde patentes históricas, búsqueda exacta/parcial e historial de pesajes por vehículo.
+
+### Gestión Integral de Pesajes Industriales, Operaciones ERP e Inventario (`Ctrl+3`)
+- **Motor Estricto de Reglas de Pesaje ([WeighingRules.cs](../src/GestionScrap.Application/Services/WeighingRules.cs)):** Cálculo obligatorio `Neto = Bruto - Tara`, rechazo de pesos negativos o invertidos, validación de unidad de medida consistente con el material, bloqueo de sobrescritura manual de peso neto sin ajuste autorizado + motivo, y evaluación de tolerancia contra peso esperado (`PendienteAutorizacion`).
+- **Flujo de 1 y 2 Mediciones (Entrada y Salida):** `IniciarPesajeDosMedicionesAsync` preserva `PrimeraMedicionKg` y `PrimeraMedicionUtc` con `PesoNeto = 0` sin afectar inventario; `CompletarSegundaMedicionAsync` calcula `Bruto = max`, `Tara = min`, `Neto = Bruto - Tara`, bloquea duplicación de cierre y genera exactamente un movimiento de inventario.
+- **Correcciones, Anulaciones e Historial Inmutable (`pesajes_historial`):** Nunca elimina físicamente pesajes confirmados; toda corrección o anulación exige permiso `AutorizarAnularPesajesInventario` y motivo auditable, revirtiendo y ajustando automáticamente el inventario.
+- **Órdenes Comerciales ERP (`operaciones_comerciales`):** CRUD de `OrdenCompra`, `OrdenVenta`, `RecepcionMaterial`, `EntregaDespacho` y `TrasladoInterno` con trazabilidad punta a punta (`Orden -> Pesajes -> Movimientos Inventario -> Documentos`) y actualización automática de cantidad real confirmada.
+- **Libro Mayor Inmutable de Inventario (`inventario_movimientos`):** Existencias derivadas exclusivamente de movimientos confirmados (`Entradas - Salidas + Ajustes == StockActual`), índice único parcial `idx_inv_mov_pesaje_activo` impidiendo duplicados por pesaje, reversos automáticos por anulación y ajustes autorizados.
+- **Tipos de Pesaje Configurables (`tipos_pesaje_config`):** Semilla de 9 tipos (`Recepción`, `Despacho`, `Movimiento Interno`, `Entrada`, `Salida`, `Carga`, `Descarga`, `Individual`, `Entrada y Salida`) con CRUD y activación/desactivación.
+
+### Centro de Informes Empresariales y Segmentadores Multi-Selección (`Ctrl+2`)
+- **Rango Mensual Local por Defecto:** Todos los informes inicializan automáticamente desde el día 1 del mes actual local hasta la fecha actual local.
+- **9 Segmentadores Multi-Selección ([MultiSelectSlicerButton.cs](../src/GestionScrap.Desktop/Controls/MultiSelectSlicerButton.cs)):** `Proveedores`, `Clientes`, `Materiales`, `Grupos`, `Patentes`, `Tipos Pesaje`, `Años`, `Meses` y `Estados` (OR dentro de categoría, AND entre categorías), con búsqueda interna, `Todos`, `Ninguno`, contador visual e indicador de filtros activos.
+- **6 Informes 100 % Consistentes + Detalle:** `Por Patente`, `Por Material`, `Por Proveedor`, `Por Cliente`, `Por RUT (Rol CRM)`, `Por Tipo de Pesaje` y `Detalle de Pesajes`, con exportación multi-hoja a Excel.
+- **Menús Contextuales (`ContextMenuStrip`) y Reparación High-DPI:** Clic derecho habilitado en todas las grillas operacionales y árbol de grupos; corregido auto-cálculo de altura en `UiHelpers.BuildAutoFilterCard` evitando recortes al envolver múltiples filas de filtros/segmentadores.
+
+### Migración SQLite `v3`, RBAC (`13` Permisos), Pruebas y Documentación
+- **Migración Idempotente `v3`:** Verificada sobre copia de base productiva (`32.178` pesajes, `546` clientes, `52` productos) con `PRAGMA quick_check = ok`, `0` violaciones FK, `100 %` de registros preservados y permisos RBAC `10..13` sincronizados en perfiles sembrados.
+- **Calidad y Pruebas:** `0` errores, `0` advertencias, **`34/34` pruebas `xUnit` exitosas** (incluyendo auditoría UI STA endurecida en los `8` módulos y `15` diálogos modales + verificación visual por capturas).
+- **Documentación Integral:** Nuevo [MODELO_DATOS_Y_DICCIONARIO.md](MODELO_DATOS_Y_DICCIONARIO.md) con diagrama ER, diccionario de tablas/campos y procedimientos de pesaje.
+
+---
+
 ## [4.1.1] — 2026-11-26 — Reparación Integral UI High-DPI, Botones, Diálogos, Grillas y Gráficos
 
 ### Interfaz de Usuario, Botones y Escalado High-DPI (`PerMonitorV2`)

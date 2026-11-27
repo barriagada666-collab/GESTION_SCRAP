@@ -1,4 +1,4 @@
-# Seguridad, Perfiles RBAC y Auditoría · Gestión de Scrap v4.1.0
+# Seguridad, Perfiles RBAC y Auditoría · Gestión de Scrap v5.0.0
 
 ## 1. Modelo de Seguridad Implementado
 
@@ -10,35 +10,32 @@
 - **Secretos Firebird:** Cifrado en `%LocalAppData%\GestionScrap\settings.json` mediante **Windows DPAPI** (`ProtectedData.Protect`, `DataProtectionScope.CurrentUser`).
 
 ### 1.2 Defensa en Profundidad (UI + Aplicación + SQLite)
-Cada permiso se valida en **dos niveles**:
-1. **Nivel Visual (`GestionScrap.Desktop`):** Botones de barra superior, pestañas del menú lateral y acciones internas consultan `_auth.HasPermission(...)`.
-2. **Nivel de Negocio (`ScrapApplicationService`):** Cada caso de uso exige `_auth.EnsurePermission(...)` lanzando `UnauthorizedAccessException` ante cualquier acceso no autorizado.
-3. **Consultas Parametrizadas y Lista Blanca:** Consultas 100 % parametrizadas en SQLite/Firebird y validación de tablas en lista blanca para migración Access.
+Cada permiso se valida en **tres niveles**:
+1. **Nivel Visual (`GestionScrap.Desktop`):** Botones, pestañas laterales (`Ctrl+1..Ctrl+8`) y menús contextuales consultan `_auth.HasPermission(...)`.
+2. **Nivel de Negocio (`ScrapApplicationService` y `EnterpriseApplicationService`):** Cada caso de uso exige `_auth.EnsurePermission(...)` lanzando `UnauthorizedAccessException` ante cualquier intento no autorizado.
+3. **Nivel de Persistencia (`SqliteScrapRepository`):** Consultas 100 % parametrizadas, protección del último administrador activo, integridad referencial `PRAGMA foreign_keys = ON` e índice único parcial contra movimientos duplicados de inventario.
 
-## 2. Perfiles Iniciales y Permisos (`PermisoSistema`)
+## 2. Perfiles Iniciales y Permisos (`PermisoSistema` · 13 Permisos)
 
-| Permiso (`PermisoSistema`) | Administrador | Supervisor | Analista | Operador | Auditor |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| `VerInformeResumen` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `VerGrupoMaterial` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `AdministrarGrupoMaterial` | ✓ | ✓ | ✓ | — | — |
-| `VerAnalisisProveedores` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `ImportarDatos` | ✓ | ✓ | — | ✓ | — |
-| `ExportarExcel` | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `AdministrarSeguridadPerfiles` | ✓ | — | — | — | — |
-| `VerAuditoria` | ✓ | ✓ | — | — | ✓ |
-| `MantenimientoBaseDatos` | ✓ | — | — | — | — |
+| # | Permiso (`PermisoSistema`) | Administrador | Supervisor | Analista | Operador | Auditor |
+| :-: | :--- | :---: | :---: | :---: | :---: | :---: |
+| 1 | `VerInformeResumen` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 2 | `VerGrupoMaterial` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 3 | `AdministrarGrupoMaterial` | ✓ | ✓ | ✓ | — | — |
+| 4 | `VerAnalisisProveedores` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 5 | `ImportarDatos` | ✓ | ✓ | — | ✓ | — |
+| 6 | `ExportarExcel` | ✓ | ✓ | ✓ | ✓ | ✓ |
+| 7 | `AdministrarSeguridadPerfiles` | ✓ | — | — | — | — |
+| 8 | `VerAuditoria` | ✓ | ✓ | — | — | ✓ |
+| 9 | `MantenimientoBaseDatos` | ✓ | — | — | — | — |
+| 10 | `AdministrarCrmEntidades` | ✓ | ✓ | — | — | — |
+| 11 | `AdministrarMaterialesVehiculos` | ✓ | ✓ | — | ✓ | — |
+| 12 | `GestionarPesajesOperaciones` | ✓ | ✓ | — | ✓ | — |
+| 13 | `AutorizarAnularPesajesInventario` | ✓ | ✓ | — | — | — |
 
-Además de los `5` perfiles iniciales (`DefaultRoleProfiles`), desde **Seguridad y Perfiles (`Ctrl+5`)** el administrador puede crear nuevos perfiles (`PerfilUsuario`) o editar los existentes con combinaciones personalizadas de permisos.
+Al migrar bases existentes al esquema `v3`, el sistema sincroniza automáticamente los permisos `10..13` en los perfiles sembrados (`Administrador`, `Supervisor`, `Operador`) sin alterar perfiles personalizados.
 
-## 3. Cuenta Inicial de Administrador
+## 3. Cuenta Inicial de Administrador y Trazabilidad Forense
 
-Al crear una base SQLite nueva, el sistema siembra los `5` perfiles base y aprovisiona la cuenta inicial de administrador:
-- **Usuario:** `barriagada` *(Perfil `Administrador`, protegido contra eliminación/desactivación/degradación cuando es el último administrador activo)*
-- **Contraseña inicial:** entregada exclusivamente por canal administrativo interno (no publicada en el repositorio).
-
-> **Nota de Seguridad en Producción:** Cambie la contraseña inicial en el primer inicio de sesión desde **Mi Clave** o **Seguridad y Perfiles (`Ctrl+5`)**.
-
-## 4. Auditoría Forense (`audit_log`)
-
-Se registran con marca temporal UTC, actor, entidad, identificador y detalle las acciones de login, fallo de autenticación, cambio de clave, creación/edición/eliminación de perfiles y usuarios, cambios en el árbol de grupos de material, exportaciones Excel, importaciones Firebird/Access, respaldos SQLite y purgas de base de datos.
+- **Usuario inicial:** `barriagada` *(Perfil `Administrador`, protegido contra eliminación, desactivación o degradación cuando es el último administrador activo)*; contraseña inicial provista únicamente por canal interno de TI (no publicada en el repositorio).
+- **Auditoría doble:** `audit_log` registra eventos globales del sistema (login, seguridad, CRM, materiales, flota, ERP, inventario, importaciones y mantenimiento) y `pesajes_historial` conserva de forma inmutable cada cambio de estado y peso de todo pesaje industrial.

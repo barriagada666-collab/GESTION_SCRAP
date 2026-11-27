@@ -186,6 +186,24 @@ public sealed class WinFormsAuditTests
                 Assert.True(
                     btn.Bottom <= parent.ClientSize.Height + 2,
                     $"Botón recortado abajo en {id}: btn.Bottom={btn.Bottom} > parent.ClientHeight={parent.ClientSize.Height}");
+
+                // Verificar también que el botón no quede recortado por ancestros de filtros/tarjetas (aritmética pura sin llamadas Win32)
+                Control? cur = parent;
+                int relBottom = btn.Bottom;
+                int depth = 0;
+                while (cur?.Parent is Control anc && anc != root && depth < 3)
+                {
+                    relBottom += cur.Top;
+                    if (anc is not ScrollableControl ascSc || !ascSc.AutoScroll)
+                    {
+                        Assert.True(
+                            relBottom <= anc.ClientSize.Height + 4,
+                            $"Botón recortado verticalmente por ancestro '{anc.GetType().Name}' en {id}: bottomY={relBottom} > ancestor.ClientHeight={anc.ClientSize.Height}");
+                    }
+
+                    cur = anc;
+                    depth++;
+                }
             }
         }
 
@@ -271,6 +289,12 @@ public sealed class WinFormsAuditTests
                     new ClosedXmlExcelExportService(),
                     new MdbMigrationService(repo));
 
+                EnterpriseApplicationService enterprise = new(
+                    repo,
+                    repo,
+                    auth,
+                    new ClosedXmlExcelExportService());
+
                 using (SplashForm splash = new())
                 {
                     splash.CreateControl();
@@ -282,12 +306,12 @@ public sealed class WinFormsAuditTests
                     AssertAllButtonsAndLayoutValid(login, nameof(LoginForm));
                 }
 
-                using (MainForm main = new(app, auth, store, settings))
+                using (MainForm main = new(app, enterprise, auth, store, settings))
                 {
                     main.WindowState = FormWindowState.Normal;
                     main.Size = new Size(1380, 840);
                     AssertAllButtonsAndLayoutValid(main, nameof(MainForm));
-                    Assert.Equal(5, main.NavigationButtons.Count);
+                    Assert.Equal(8, main.NavigationButtons.Count);
                     Assert.All(main.NavigationButtons, b => Assert.True(b.Enabled));
 
                     // Verificar también en tamaño mínimo soportado (1180x720)
@@ -299,6 +323,9 @@ public sealed class WinFormsAuditTests
                 UserControl[] tabs =
                 [
                     new InformeResumenControl(app, auth, _ => { }),
+                    new CentroInformesEnterpriseControl(enterprise, app, auth),
+                    new OperacionesPesajesErpControl(enterprise, app, auth),
+                    new CrmMaestrosControl(enterprise, app, auth),
                     new GrupoMaterialControl(app, auth),
                     new AnalisisProveedoresControl(app, auth),
                     new ImportadorControl(app, auth, store, settings),
@@ -316,6 +343,10 @@ public sealed class WinFormsAuditTests
 
                 MaterialGroupNode[] nodes = [.. repo.GetMaterialNodesAsync().GetAwaiter().GetResult()];
                 Producto[] prods = [.. repo.GetProductosAsync().GetAwaiter().GetResult()];
+                TipoPesajeConfig[] tiposCfg = [.. repo.GetTiposPesajeConfigAsync().GetAwaiter().GetResult()];
+                Cliente[] ents = [.. repo.GetEntidadesComercialesAsync().GetAwaiter().GetResult()];
+                Vehiculo[] vehs = [.. repo.GetVehiculosAsync().GetAwaiter().GetResult()];
+                OperacionComercial[] ops = [.. repo.GetOperacionesAsync().GetAwaiter().GetResult()];
 
                 Form[] dialogs =
                 [
@@ -325,7 +356,15 @@ public sealed class WinFormsAuditTests
                     new MaterialNodeEditorDialog(NodoGrupoTipo.CarpetaGrupo, null, "Raíz Principal", prods),
                     new MaterialNodeEditorDialog(NodoGrupoTipo.ProductoAsignado, nodes[0].Id, nodes[0].Nombre, prods),
                     new MoverNodoDialog(nodes[^1], nodes),
-                    new ExportacionPersonalizadaDialog("Informe Personalizado", 2, ["KPIs y Estadísticas", "Segmentación"])
+                    new ExportacionPersonalizadaDialog("Informe Personalizado", 2, ["KPIs y Estadísticas", "Segmentación"]),
+                    new EntidadComercialDialog(),
+                    new MaterialEditorDialog(["SCRAP PESQUERA", "GENERAL"]),
+                    new VehiculoEditorDialog(ents),
+                    new TipoPesajeConfigDialog(),
+                    new PesajeEditorDialog(PesajeDialogMode.SingleStepCreate, tiposCfg, vehs, prods, ents, ops, true),
+                    new OperacionComercialDialog(ents, prods, vehs),
+                    new AjusteInventarioDialog(prods),
+                    new DocumentoAsociadoDialog("76218764-5", "Entidad Prueba")
                 ];
 
                 foreach (Form dlg in dialogs)
@@ -377,6 +416,12 @@ public sealed class WinFormsAuditTests
                     new ClosedXmlExcelExportService(),
                     new MdbMigrationService(repo));
 
+                EnterpriseApplicationService enterprise = new(
+                    repo,
+                    repo,
+                    auth,
+                    new ClosedXmlExcelExportService());
+
                 // Crear usuario con perfil Analista (ID 3: sin ImportarDatos ni AdministrarSeguridadPerfiles)
                 auth.LoginAsync("barriagada", "Cambias0").GetAwaiter().GetResult();
                 app.SaveUsuarioAsync(new Usuario
@@ -390,12 +435,15 @@ public sealed class WinFormsAuditTests
                 auth.Logout();
 
                 auth.LoginAsync("analista1", "Analista2026").GetAwaiter().GetResult();
-                using MainForm mainAnalista = new(app, auth, store, settings);
+                using MainForm mainAnalista = new(app, enterprise, auth, store, settings);
                 Assert.True(mainAnalista.NavigationButtons[0].Enabled);  // Informe Resumen
-                Assert.True(mainAnalista.NavigationButtons[1].Enabled);  // Grupos de Material
-                Assert.True(mainAnalista.NavigationButtons[2].Enabled);  // Análisis Proveedores
-                Assert.False(mainAnalista.NavigationButtons[3].Enabled); // Importador BD
-                Assert.False(mainAnalista.NavigationButtons[4].Enabled); // Seguridad y Perfiles
+                Assert.True(mainAnalista.NavigationButtons[1].Enabled);  // Informes Pesajes
+                Assert.True(mainAnalista.NavigationButtons[2].Enabled);  // Pesajes y ERP (consulta)
+                Assert.True(mainAnalista.NavigationButtons[3].Enabled);  // CRM y Maestros (consulta)
+                Assert.True(mainAnalista.NavigationButtons[4].Enabled);  // Grupos de Material
+                Assert.True(mainAnalista.NavigationButtons[5].Enabled);  // Análisis Proveedores
+                Assert.False(mainAnalista.NavigationButtons[6].Enabled); // Importador BD
+                Assert.False(mainAnalista.NavigationButtons[7].Enabled); // Seguridad y Perfiles
             }
             finally
             {

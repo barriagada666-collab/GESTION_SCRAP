@@ -1,57 +1,40 @@
-# Guía de Compilación y Construcción · Gestión de Scrap v4.1.1
+# Guía de Compilación y Construcción · Gestión de Scrap v5.0.0
 
 ## 1. Requisitos del Entorno de Desarrollo
 
 - **Sistema Operativo:** Windows 10 / Windows 11 (x64)
 - **SDK:** **.NET 10 SDK** (`10.0.100` o superior)
 - **Empaquetador:** **Inno Setup 7** (`7.1.1`) instalado en `%LOCALAPPDATA%\Programs\Inno Setup 7\ISCC.exe` o `C:\Program Files (x86)\Inno Setup 7\ISCC.exe`
-- **Opcional (solo migración `.mdb` directa sin puente x86):** Microsoft Access Database Engine (`ACE.OLEDB.16.0` / `12.0`).
+- **Opcional (migración `.mdb` directa 64 bits):** Microsoft Access Database Engine (`ACE.OLEDB.16.0` / `12.0`).
 
-## 2. Dependencias NuGet Principales
+## 2. Reglas de Compilación Estricta (`Directory.Build.props`)
 
-| Proyecto | Paquete | Versión |
-| :--- | :--- | :--- |
-| `GestionScrap.Infrastructure` | `Microsoft.Data.Sqlite` | `10.0.15` |
-| `GestionScrap.Infrastructure` | `SQLitePCLRaw.lib.e_sqlite3` | `2.1.14` |
-| `GestionScrap.Infrastructure` | `FirebirdSql.Data.FirebirdClient` | `10.3.4` |
-| `GestionScrap.Infrastructure` | `ClosedXML` | `0.105.1` |
-| `GestionScrap.Infrastructure` | `System.Data.OleDb` | `10.0.15` |
-| `GestionScrap.Desktop` | `Microsoft.Extensions.DependencyInjection` | `10.0.15` |
-| `GestionScrap.Tests` | `xunit` / `xunit.runner.visualstudio` / `Microsoft.NET.Test.Sdk` | `2.9.3` / `3.1.4` / `17.14.1` |
+- `Version`: `5.0.0` (`AssemblyVersion` / `FileVersion`: `5.0.0.0`)
+- `LangVersion`: `14`, `Nullable`: `enable`, `TreatWarningsAsErrors`: `true`, `WarningLevel`: `9999`, `AnalysisLevel`: `latest-recommended`, `EnforceCodeStyleInBuild`: `true`.
+- **Cero supresiones:** prohibidos `NoWarn`, `#pragma warning disable`, `SuppressMessage` y `async void` en `src/`.
 
-*(Los gráficos e iconos corporativos se encuentran en `installer/assets/` y están embebidos en tiempo de compilación dentro de `GestionScrap.Desktop` como `EmbeddedResource`, sin paquetes UI externos.)*
-
-## 3. Reglas de Compilación Estricta (`Directory.Build.props`)
-
-- `LangVersion`: `14`
-- `Nullable`: `enable`
-- `TreatWarningsAsErrors`: `true`
-- `WarningLevel`: `9999`
-- `AnalysisLevel`: `latest-recommended`
-- `EnforceCodeStyleInBuild`: `true`
-
-## 4. Comandos de Compilación, Pruebas y Empaquetado
+## 3. Comandos de Compilación, Pruebas y Empaquetado
 
 ```powershell
 # Restaurar paquetes
 dotnet restore GestionScrap.sln
 
 # Compilar Debug y Release (0 errores / 0 advertencias)
-dotnet build GestionScrap.sln -c Debug --no-restore
-dotnet build GestionScrap.sln -c Release --no-restore
+dotnet build GestionScrap.sln -c Debug --no-restore --no-incremental --disable-build-servers
+dotnet build GestionScrap.sln -c Release --no-restore --no-incremental --disable-build-servers
 
-# Ejecutar suite automatizada de pruebas
-dotnet test GestionScrap.sln -c Release --no-build --verbosity normal
+# Ejecutar suite automatizada completa (34/34 pruebas xUnit)
+dotnet test GestionScrap.sln -c Release --no-build --disable-build-servers --verbosity normal
 
-# Regenerar iconos y gráficos HiDPI Cambiaso (si se modifica la imagen fuente)
-dotnet run --project installer\AssetBuilder -- "installer\assets" "v4.1.1"
+# Regenerar iconos y gráficos HiDPI Cambiaso (v5.0.0)
+dotnet run --project installer\AssetBuilder -- "installer\assets" "v5.0.0"
 
-# Construcción automatizada completa (Build Release + Publish x64 + Instaladores Inno Setup 7 + Portable ZIP + SHA-256)
+# Construcción automatizada completa (Debug + Release + Tests + Publish x64 + Inno Setup 7 + Portable ZIP + SHA-256)
 pwsh -NoProfile -ExecutionPolicy Bypass -File scripts\Build-Release.ps1
 ```
 
 Los artefactos resultantes quedan en `Instalador\`:
-1. `GestionScrap_Setup_v4.1.1_x64_SelfContained.exe`
-2. `GestionScrap_Setup_v4.1.1_x64_FrameworkDependent.exe`
-3. `GestionScrap_Portable_v4.1.1_win-x64.zip`
+1. `GestionScrap_Setup_v5.0.0_x64_SelfContained.exe`
+2. `GestionScrap_Setup_v5.0.0_x64_FrameworkDependent.exe`
+3. `GestionScrap_Portable_v5.0.0_win-x64.zip`
 4. `checksums_sha256.txt`

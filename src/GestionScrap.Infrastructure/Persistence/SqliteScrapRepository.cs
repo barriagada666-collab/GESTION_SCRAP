@@ -4,15 +4,17 @@ using GestionScrap.Application.Services;
 using GestionScrap.Domain.Entities;
 using GestionScrap.Domain.Enums;
 using GestionScrap.Domain.Interfaces;
+using GestionScrap.Domain.ValueObjects;
 using Microsoft.Data.Sqlite;
 
 namespace GestionScrap.Infrastructure.Persistence;
 
 /// <summary>
 /// Repositorio SQLite (WAL) con soporte completo para árbol CRUD de Grupos de Material (Nodos/Hijos),
-/// perfiles configurables de usuario, cuenta administrativa barriagada y almacenamiento limpio de pesajes.
+/// perfiles configurables de usuario, cuenta administrativa barriagada, CRM unificado, ERP, flota,
+/// pesajes de 1/2 mediciones e inventario trazable.
 /// </summary>
-public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
+public sealed partial class SqliteScrapRepository : IScrapRepository, IEnterpriseRepository, IDisposable
 {
     private readonly string _connectionString;
     private bool _initialized;
@@ -306,6 +308,12 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
             await RecordMigrationTxAsync(conn, tx, 2, "v4.1.0 composite covering indexes for pesajes and audit_log", ct).ConfigureAwait(false);
         }
 
+        if (!applied.Contains(3))
+        {
+            await ApplyMigrationV3EnterpriseTxAsync(conn, tx, ct).ConfigureAwait(false);
+            await RecordMigrationTxAsync(conn, tx, 3, "v5.0.0 CRM unificado, materiales extendidos, flota/patentes, tipos pesaje, pesajes 2-pasos, ERP operaciones, inventario ledger y documentos", ct).ConfigureAwait(false);
+        }
+
         await tx.CommitAsync(ct).ConfigureAwait(false);
     }
 
@@ -488,7 +496,11 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
             SELECT id, folio, planta, tipo_pesaje, patente, acoplado, peso_bruto, peso_tara, peso_neto,
                    cod_producto, nom_producto, rut_cliente, nom_cliente, origen, destino, guia_despacho,
                    chofer, transportista, fecha_ingreso, hora_ingreso, fecha_salida, hora_salida,
-                   observacion, grupo_material, es_traslado, ciudad_cliente
+                   observacion, grupo_material, es_traslado, ciudad_cliente,
+                   folio_codigo, unidad_medida, bascula, operador, estado_pesaje, tipo_pesaje_config_id,
+                   operacion_id, vehiculo_id, primera_medicion_kg, primera_medicion_utc,
+                   segunda_medicion_kg, segunda_medicion_utc, peso_esperado_kg,
+                   ajuste_manual_autorizado, motivo_ajuste_anulacion, modificado_por, modificado_en_utc
             FROM pesajes
             {clause}
             ORDER BY fecha_ingreso DESC, folio DESC
@@ -498,35 +510,7 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         await using SqliteDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await rd.ReadAsync(ct).ConfigureAwait(false))
         {
-            results.Add(new Pesaje
-            {
-                Id = rd.GetInt64(0),
-                Folio = rd.GetInt64(1),
-                Planta = (Planta)rd.GetInt32(2),
-                TipoPesaje = (TipoPesaje)rd.GetInt32(3),
-                Patente = rd.GetString(4),
-                Acoplado = rd.GetString(5),
-                PesoBruto = rd.GetInt32(6),
-                PesoTara = rd.GetInt32(7),
-                PesoNeto = rd.GetInt32(8),
-                CodProducto = rd.GetString(9),
-                NomProducto = rd.GetString(10),
-                RutCliente = rd.GetString(11),
-                NomCliente = rd.GetString(12),
-                Origen = rd.GetString(13),
-                Destino = rd.GetString(14),
-                GuiaDespacho = rd.GetString(15),
-                Chofer = rd.GetString(16),
-                Transportista = rd.GetString(17),
-                FechaIngreso = DateOnly.ParseExact(rd.GetString(18), "yyyy-MM-dd", CultureInfo.InvariantCulture),
-                HoraIngreso = TimeOnly.ParseExact(rd.GetString(19), "HH:mm:ss", CultureInfo.InvariantCulture),
-                FechaSalida = DateOnly.ParseExact(rd.GetString(20), "yyyy-MM-dd", CultureInfo.InvariantCulture),
-                HoraSalida = TimeOnly.ParseExact(rd.GetString(21), "HH:mm:ss", CultureInfo.InvariantCulture),
-                Observacion = rd.GetString(22),
-                GrupoMaterial = rd.GetString(23),
-                EsTraslado = rd.GetInt32(24) == 1,
-                CiudadCliente = rd.IsDBNull(25) ? null : rd.GetString(25)
-            });
+            results.Add(MapPesajeRow(rd));
         }
 
         return results;
@@ -538,8 +522,21 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
         await using SqliteCommand cmd = conn.CreateCommand();
         cmd.CommandText = planta.HasValue
-            ? "SELECT rut, digito, nombre, razon_social, giro, comuna, ciudad, direccion, telefono, planta_asociada FROM clientes WHERE planta_asociada IS NULL OR planta_asociada = @p ORDER BY razon_social"
-            : "SELECT rut, digito, nombre, razon_social, giro, comuna, ciudad, direccion, telefono, planta_asociada FROM clientes ORDER BY razon_social";
+            ? """
+              SELECT rut, digito, nombre, razon_social, giro, comuna, ciudad, direccion, telefono, planta_asociada,
+                     rut_normalizado, nombre_comercial, contacto_nombre, email, condicion_comercial,
+                     observaciones, es_cliente, es_proveedor, activo, actualizado_en_utc
+              FROM clientes
+              WHERE planta_asociada IS NULL OR planta_asociada = @p
+              ORDER BY razon_social
+              """
+            : """
+              SELECT rut, digito, nombre, razon_social, giro, comuna, ciudad, direccion, telefono, planta_asociada,
+                     rut_normalizado, nombre_comercial, contacto_nombre, email, condicion_comercial,
+                     observaciones, es_cliente, es_proveedor, activo, actualizado_en_utc
+              FROM clientes
+              ORDER BY razon_social
+              """;
         if (planta.HasValue)
         {
             cmd.Parameters.AddWithValue("@p", (int)planta.Value);
@@ -549,19 +546,7 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         await using SqliteDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await rd.ReadAsync(ct).ConfigureAwait(false))
         {
-            list.Add(new Cliente
-            {
-                Rut = rd.GetString(0),
-                Digito = rd.GetString(1),
-                Nombre = rd.GetString(2),
-                RazonSocial = rd.GetString(3),
-                Giro = rd.GetString(4),
-                Comuna = rd.GetString(5),
-                Ciudad = rd.GetString(6),
-                Direccion = rd.GetString(7),
-                Telefono = rd.GetString(8),
-                PlantaAsociada = rd.IsDBNull(9) ? null : (Planta)rd.GetInt32(9)
-            });
+            list.Add(MapClienteRow(rd));
         }
 
         return list;
@@ -572,19 +557,18 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         await InitializeAsync(ct).ConfigureAwait(false);
         await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
         await using SqliteCommand cmd = conn.CreateCommand();
-        cmd.CommandText = "SELECT codigo, descripcion, grupo, unidad_medida FROM productos ORDER BY codigo";
+        cmd.CommandText = """
+            SELECT codigo, descripcion, grupo, unidad_medida,
+                   nombre, informacion_adicional, activo, tolerancia_diferencia_pct, actualizado_en_utc
+            FROM productos
+            ORDER BY codigo
+            """;
 
         List<Producto> list = [];
         await using SqliteDataReader rd = await cmd.ExecuteReaderAsync(ct).ConfigureAwait(false);
         while (await rd.ReadAsync(ct).ConfigureAwait(false))
         {
-            list.Add(new Producto
-            {
-                Codigo = rd.GetString(0),
-                Descripcion = rd.GetString(1),
-                Grupo = rd.GetString(2),
-                UnidadMedida = rd.GetString(3)
-            });
+            list.Add(MapProductoRow(rd));
         }
 
         return list;
@@ -887,18 +871,21 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
             await using SqliteCommand cmd = conn.CreateCommand();
             cmd.Transaction = tx;
             cmd.CommandText = """
-                INSERT INTO clientes(rut, digito, nombre, razon_social, giro, comuna, ciudad, direccion, telefono, planta_asociada)
-                VALUES(@r, @d, @n, @rs, @g, @com, @ci, @dir, @tel, @pl)
+                INSERT INTO clientes(rut, digito, nombre, razon_social, giro, comuna, ciudad, direccion, telefono, planta_asociada, rut_normalizado, nombre_comercial)
+                VALUES(@r, @d, @n, @rs, @g, @com, @ci, @dir, @tel, @pl, @rn, @nc)
                 ON CONFLICT(rut) DO UPDATE SET
                     digito = CASE WHEN excluded.digito <> '' THEN excluded.digito ELSE clientes.digito END,
                     nombre = excluded.nombre,
                     razon_social = excluded.razon_social,
+                    rut_normalizado = CASE WHEN excluded.rut_normalizado <> '' THEN excluded.rut_normalizado ELSE clientes.rut_normalizado END,
+                    nombre_comercial = CASE WHEN clientes.nombre_comercial = '' THEN excluded.nombre_comercial ELSE clientes.nombre_comercial END,
                     giro = CASE WHEN excluded.giro <> '' THEN excluded.giro ELSE clientes.giro END,
                     comuna = CASE WHEN excluded.comuna <> '' THEN excluded.comuna ELSE clientes.comuna END,
                     ciudad = CASE WHEN excluded.ciudad <> '' THEN excluded.ciudad ELSE clientes.ciudad END,
                     direccion = CASE WHEN excluded.direccion <> '' THEN excluded.direccion ELSE clientes.direccion END,
                     telefono = CASE WHEN excluded.telefono <> '' THEN excluded.telefono ELSE clientes.telefono END
                 """;
+            string rutNorm = RutChileno.NormalizeBody(string.IsNullOrWhiteSpace(c.Digito) ? c.Rut : $"{c.Rut}-{c.Digito}");
             cmd.Parameters.AddWithValue("@r", c.Rut.Trim());
             cmd.Parameters.AddWithValue("@d", c.Digito.Trim());
             cmd.Parameters.AddWithValue("@n", c.Nombre.Trim());
@@ -909,6 +896,8 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
             cmd.Parameters.AddWithValue("@dir", c.Direccion.Trim());
             cmd.Parameters.AddWithValue("@tel", c.Telefono.Trim());
             cmd.Parameters.AddWithValue("@pl", c.PlantaAsociada.HasValue ? (int)c.PlantaAsociada.Value : DBNull.Value);
+            cmd.Parameters.AddWithValue("@rn", rutNorm);
+            cmd.Parameters.AddWithValue("@nc", string.IsNullOrWhiteSpace(c.NombreComercial) ? c.Nombre.Trim() : c.NombreComercial.Trim());
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             count++;
         }
@@ -935,16 +924,19 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
             await using SqliteCommand cmd = conn.CreateCommand();
             cmd.Transaction = tx;
             cmd.CommandText = """
-                INSERT INTO productos(codigo, descripcion, grupo, unidad_medida)
-                VALUES(@c, @d, @g, @u)
+                INSERT INTO productos(codigo, descripcion, grupo, unidad_medida, nombre)
+                VALUES(@c, @d, @g, @u, @nom)
                 ON CONFLICT(codigo) DO UPDATE SET
                     descripcion = excluded.descripcion,
+                    nombre = CASE WHEN productos.nombre = '' THEN excluded.nombre ELSE productos.nombre END,
                     grupo = CASE WHEN excluded.grupo <> 'GENERAL' THEN excluded.grupo ELSE productos.grupo END
                 """;
+            string descUpper = p.Descripcion.Trim().ToUpperInvariant();
             cmd.Parameters.AddWithValue("@c", p.Codigo.Trim().ToUpperInvariant());
-            cmd.Parameters.AddWithValue("@d", p.Descripcion.Trim().ToUpperInvariant());
+            cmd.Parameters.AddWithValue("@d", descUpper);
             cmd.Parameters.AddWithValue("@g", string.IsNullOrWhiteSpace(p.Grupo) ? "GENERAL" : p.Grupo.Trim().ToUpperInvariant());
             cmd.Parameters.AddWithValue("@u", p.UnidadMedida);
+            cmd.Parameters.AddWithValue("@nom", string.IsNullOrWhiteSpace(p.Nombre) ? descUpper : p.Nombre.Trim().ToUpperInvariant());
             await cmd.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
             count++;
         }
@@ -959,6 +951,13 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         await InitializeAsync(ct).ConfigureAwait(false);
         await using SqliteConnection conn = await OpenConnectionAsync(ct).ConfigureAwait(false);
         await using SqliteTransaction tx = conn.BeginTransaction();
+
+        await using (SqliteCommand clearInv = conn.CreateCommand())
+        {
+            clearInv.Transaction = tx;
+            clearInv.CommandText = "DELETE FROM inventario_movimientos WHERE pesaje_id IS NOT NULL";
+            await clearInv.ExecuteNonQueryAsync(ct).ConfigureAwait(false);
+        }
 
         await using SqliteCommand cmd = conn.CreateCommand();
         cmd.Transaction = tx;
@@ -1599,9 +1598,10 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
             INSERT INTO pesajes(folio, planta, tipo_pesaje, patente, acoplado, peso_bruto, peso_tara, peso_neto,
                                 cod_producto, nom_producto, rut_cliente, nom_cliente, origen, destino,
                                 guia_despacho, chofer, transportista, fecha_ingreso, hora_ingreso, fecha_salida,
-                                hora_salida, observacion, grupo_material, es_traslado, ciudad_cliente)
+                                hora_salida, observacion, grupo_material, es_traslado, ciudad_cliente,
+                                folio_codigo, unidad_medida, estado_pesaje)
             VALUES(@folio, @pl, @tp, @pat, @aco, @br, @ta, @ne, @cp, @np, @rc, @nc, @or, @de, @gu, @ch, @tr,
-                   @fi, @hi, @fs, @hs, @ob, @gm, @et, @ci)
+                   @fi, @hi, @fs, @hs, @ob, @gm, @et, @ci, @fc, @um, @es)
             """;
         cmd.Parameters.Add("@folio", SqliteType.Integer);
         cmd.Parameters.Add("@pl", SqliteType.Integer);
@@ -1628,6 +1628,9 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         cmd.Parameters.Add("@gm", SqliteType.Text);
         cmd.Parameters.Add("@et", SqliteType.Integer);
         cmd.Parameters.Add("@ci", SqliteType.Text);
+        cmd.Parameters.Add("@fc", SqliteType.Text);
+        cmd.Parameters.Add("@um", SqliteType.Text);
+        cmd.Parameters.Add("@es", SqliteType.Integer);
         cmd.Prepare();
         return cmd;
     }
@@ -1659,6 +1662,9 @@ public sealed class SqliteScrapRepository : IScrapRepository, IDisposable
         cmd.Parameters["@gm"].Value = p.GrupoMaterial;
         cmd.Parameters["@et"].Value = p.EsTraslado ? 1 : 0;
         cmd.Parameters["@ci"].Value = (object?)p.CiudadCliente ?? DBNull.Value;
+        cmd.Parameters["@fc"].Value = p.FolioDisplay;
+        cmd.Parameters["@um"].Value = string.IsNullOrWhiteSpace(p.UnidadMedida) ? "KG" : p.UnidadMedida.Trim().ToUpperInvariant();
+        cmd.Parameters["@es"].Value = (int)p.Estado;
     }
 
     private static async Task AddAuditTxAsync(

@@ -1,39 +1,44 @@
-# Manual Funcional · Gestión de Scrap v4.1.0
+# Manual Funcional · Gestión de Scrap v5.0.0
 
-## 1. Inicio de Sesión y Navegación
+## 1. Inicio de Sesión y Navegación (`Ctrl+1` .. `Ctrl+8`)
 
-Al abrir **Gestión de Scrap**, el sistema ejecuta una verificación automática de integridad de SQLite (`PRAGMA quick_check` y `PRAGMA foreign_key_check`), presenta `SplashForm` y luego `LoginForm` (la cuenta administrativa inicial se aprovisiona mediante TI / Operaciones; cambie la clave en el primer inicio de sesión). Tras **5 intentos fallidos consecutivos**, la cuenta se bloquea por **5 minutos**.
+Al abrir **Gestión de Scrap v5.0.0**, el sistema ejecuta automáticamente las migraciones versionadas SQLite WAL (`v3`), verifica integridad (`PRAGMA quick_check` y `PRAGMA foreign_key_check`), presenta `SplashForm` y solicita autenticación en `LoginForm`. Tras **5 intentos fallidos consecutivos**, la cuenta se bloquea por **5 minutos**.
 
 ### Atajos de Teclado
-- `Ctrl+1`: **Informe Resumen**
-- `Ctrl+2`: **Grupos de Material**
-- `Ctrl+3`: **Análisis de Proveedores**
-- `Ctrl+4`: **Importador BD**
-- `Ctrl+5`: **Seguridad y Perfiles**
-- `F5`: Actualizar datos de la pestaña activa.
+- `Ctrl+1`: **Informe Resumen** (KPIs ejecutivos, comparativos YoY/MoM, segmentación dinámica)
+- `Ctrl+2`: **Informes Pesajes** (Centro de Informes Empresariales con 9 segmentadores multi-selección)
+- `Ctrl+3`: **Pesajes y ERP** (Pesajes 1/2 mediciones, Órdenes ERP, Libro Mayor de Inventario, Tipos de Pesaje)
+- `Ctrl+4`: **CRM y Maestros** (Clientes/Proveedores unificados por RUT + Ficha 360°, Materiales y Vehículos/Patentes)
+- `Ctrl+5`: **Grupos de Material** (Árbol CRUD jerárquico Padre / Subgrupo / Producto Hijo)
+- `Ctrl+6`: **Análisis Proveedores** (Ranking Pareto ABC, mix de materiales, flota y entregas)
+- `Ctrl+7`: **Importador BD** (Firebird TCP `WMDBSPC.GDB` / `PWAREHOUSE.FDB` y Access `.mdb`/`.accdb`)
+- `Ctrl+8`: **Seguridad y Perfiles** (Usuarios, Perfiles RBAC con `13` permisos, Auditoría y Respaldo SQLite)
+- `F5`: Recargar datos de la pestaña activa.
+- **Clic derecho (`ContextMenuStrip`)**: Disponible en todas las grillas operacionales y el árbol de materiales para crear, editar, ver historial, activar/desactivar, anular, copiar valor o exportar selección a Excel.
 
-## 2. Módulos Operativos
+---
 
-### 2.1 Informe Resumen, Datos, Segmentación y Comparativos (`Ctrl+1`)
-- **Filtros y Checkboxes:** Filtre por `Planta`, `Movimiento`, `Grupo Material`, `Proveedor/RUT/Patente`, `Producto/Código` y rango `Desde/Hasta`. Active **`Excluir totales en 0`** para ocultar registros y grupos sin kilos, o **`Sin traslados`** para aislar compras/recepciones reales.
-- **KPIs y Ficha Estadística:** Visualice volumen en Kg y Toneladas, viajes, promedio, mediana, mínimo, máximo, desviación estándar, días operativos, ritmo diario, mejor mes/año y variación interanual (**YoY**).
-- **Subpestaña `Comparativo Año a Año (YoY) y Mes a Mes (MoM)`:** Muestra el gráfico mensual vs año anterior, el consolidado anual con variación YoY y la evolución mes a mes con variación **MoM** y **YoY**.
-- **Subpestaña `Segmentación y Análisis de Datos`:** Elija `Segmentar por` (`Grupo Material`, `Planta`, `Tipo Movimiento`, `Proveedor`, `Producto`, `Origen`, `Mes`, `Año`). Seleccione una o varias filas de segmento (`Ctrl`/`Shift` + clic) para filtrar los movimientos detallados inferiores.
-- **Exportación:** Use **`Exportar Resumen`** para el libro estándar, o **`Exportar Selección...`** (`ExportacionPersonalizadaDialog`) para exportar **únicamente las filas seleccionadas** y elegir qué secciones estadísticas incluir.
+## 2. Módulos Empresariales v5.0.0
 
-### 2.2 Grupos de Material con Árbol CRUD Jerárquico (`Ctrl+2`)
-- Cree y organice **Grupos Padre**, **Subgrupos** y **Productos Hijo** (editar, mover mediante diálogo o arrastrar/soltar, reordenar y quitar).
-- Active **`Excluir totales en 0`** para limpiar nodos sin movimiento en el rango analizado.
-- Use **`Exportar Selección...`** para exportar **únicamente la subrama del árbol** o las filas seleccionadas en la grilla.
+### 2.1 Centro de Informes Empresariales (`Ctrl+2`)
+- **Rango por defecto mensual local:** Inicializa automáticamente desde el **1er día del mes actual** hasta la **fecha actual del equipo** (`Mes Actual` / `Histórico`).
+- **Búsqueda combinada:** Planta, Folio (exacto o parcial conservando formato original), Patente, RUT, Operador/Báscula, `Ocultar anulados` y `Excluir 0 Kg`.
+- **9 Segmentadores Multi-Selección:** `Proveedores`, `Clientes`, `Materiales`, `Grupos`, `Patentes`, `Tipos Pesaje`, `Años`, `Meses` y `Estados`. Cada botón abre un panel con búsqueda interna, checkboxes, `Todos`, `Ninguno`, contador de activos y aplicación **OR** dentro de la categoría + **AND** entre categorías distintas.
+- **6 Informes 100 % Consistentes + Detalle:** `Por Patente`, `Por Material`, `Por Proveedor`, `Por Cliente`, `Por RUT (CRM)` (mostrando el rol comercial exacto), `Por Tipo de Pesaje` y `Detalle de Pesajes`. Todas las cifras coinciden exactamente con los KPIs y la exportación Excel multi-hoja.
 
-### 2.3 Análisis de Proveedores (`Ctrl+3`)
-- Ranking **Pareto ABC**, variación porcentual entre períodos, días inactivos, ficha detalle con mix de materiales, evolución mensual, patentes y orígenes.
-- Incluye **`Excluir totales en 0`**, multi-selección de proveedores/entregas y **`Exportar Selección...`**.
+### 2.2 Pesajes Industriales, Operaciones ERP e Inventario (`Ctrl+3`)
+- **Pesajes Industriales (1 y 2 Mediciones):**
+  - **Nuevo Pesaje (1 paso):** Selecciona planta, tipo, vehículo activo, material activo, entidad CRM y operación ERP opcional. Calcula automáticamente `Neto = Bruto - Tara` y valida unidad (`KG`/`TON`) y tolerancia de peso esperado.
+  - **Flujo 2 Mediciones (`1ª Medición` -> `Completar 2ª`):** Registra la primera medición preservando su fecha/hora y valor en estado `Pendiente 2ª Medición` (`Neto = 0`, sin mover inventario). Al registrar la segunda medición, calcula `Bruto = max`, `Tara = min`, `Neto = Bruto - Tara` y contabiliza un único movimiento de inventario.
+  - **Autorización, Corrección y Anulación:** Exigen permiso `AutorizarAnularPesajesInventario` y motivo obligatorio. Ningún pesaje confirmado se borra físicamente: queda registrado en `pesajes_historial` y las anulaciones generan reverso automático en inventario.
+- **Órdenes y Operaciones ERP:** Administra `OrdenCompra`, `OrdenVenta`, `RecepcionMaterial`, `EntregaDespacho` y `TrasladoInterno`, visualizando en tiempo real su trazabilidad completa (`Pesajes vinculados`, `Movimientos de inventario` y `Documentos asociados`).
+- **Inventario y Movimientos (Libro Mayor):** Muestra existencias calculadas exclusivamente desde movimientos confirmados (`Entradas - Salidas + Ajustes == Stock Actual`) y permite emitir **Ajustes Autorizados** auditados (`+` / `-`).
+- **Tipos de Pesaje Configurables:** CRUD y activación/desactivación de tipos de pesaje con definición de 1 o 2 mediciones e impacto en inventario (`+`, `-` o neutro).
 
-### 2.4 Importador Simple y Control Origen -> Destino (`Ctrl+4`)
-- **Pestaña `Importar Firebird (WMDBSPC.GDB)`:** Muestra el flujo directo `DESDE (IP:Puerto · Ruta .GDB/.FDB) ➔ HACIA (SQLite local)`. Permite `Importar Directo` en 1 clic, `Vista Previa`, `Omitir 0 Kg` y exportar la vista previa/selección.
-- **Pestaña `Importar Access (.mdb / .accdb)`:** Migra bases Access hacia SQLite local registrando la trazabilidad.
-- **Pestaña `Control e Historial (Desde -> Hacia)`:** Consulta la tabla persistente `import_history` con origen exacto, destino exacto, rango, leídos, nuevos, duplicados, kilos y exportación Excel.
+### 2.3 CRM y Maestros (`Ctrl+4`)
+- **CRM Clientes y Proveedores (RUT Único):** Un único registro por RUT validado con Módulo 11 (`Cliente`, `Proveedor` o `Cliente y Proveedor`), contacto, dirección, giro, condiciones comerciales, documentos asociados y **Ficha 360°** inferior. Entidades con historial están protegidas contra eliminación física (se desactivan para conservar trazabilidad).
+- **Catálogo de Materiales:** Filtros combinados (texto, grupo, unidad, estado y RUT proveedor), configuración de tolerancia `%` por material e historial de stock y pesajes.
+- **Vehículos y Patentes (Flota):** Normalización automática evitando duplicados (`AB-CD-12` == `abcd12`), búsqueda exacta/parcial e historial completo de pesajes por patente.
 
-### 2.5 Seguridad y Perfiles (`Ctrl+5`)
-- Administración CRUD de **Perfiles RBAC (`PerfilUsuario`)** y **Usuarios**, visor filtrable `audit_log`, respaldo SQLite en caliente (`BackupDatabaseAsync`) y purga confirmada (`"ELIMINAR"`).
+### 2.4 Módulos Operativos Existentes (`Ctrl+1`, `Ctrl+5`, `Ctrl+6`, `Ctrl+7`, `Ctrl+8`)
+- **Informe Resumen (`Ctrl+1`)**, **Grupos de Material (`Ctrl+5`)**, **Análisis Proveedores (`Ctrl+6`)**, **Importador BD (`Ctrl+7`)** y **Seguridad y Perfiles (`Ctrl+8`)** mantienen el 100 % de sus capacidades históricas, incorporando rango mensual local por defecto y menús contextuales con clic derecho.

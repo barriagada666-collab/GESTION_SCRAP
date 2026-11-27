@@ -3,7 +3,7 @@ using System.Drawing.Imaging;
 using System.Drawing.Text;
 
 string outDir = args.Length > 0 ? args[0] : Path.Combine(AppContext.BaseDirectory, "assets");
-string versionText = args.Length > 1 ? args[1] : "v4.1.1";
+string versionText = args.Length > 1 ? args[1] : "v5.0.0";
 
 Directory.CreateDirectory(outDir);
 
@@ -147,7 +147,7 @@ static Bitmap RenderWizardBanner(int width, int height, string ver, Bitmap emble
 
     g.DrawString("CAMBIASO HNOS.", brandFont, goldBrush, width / 2f, 142f * scale, center);
     g.DrawString("Gestión de\nScrap y Pesajes", titleFont, whiteBrush, width / 2f, 160f * scale, center);
-    g.DrawString("Grupos · Proveedores\nFirebird · SQLite", subFont, mutedBrush, width / 2f, 208f * scale, center);
+    g.DrawString("CRM · ERP · Pesajes\nInventario · SQLite", subFont, mutedBrush, width / 2f, 208f * scale, center);
 
     RectangleF pill = new(24f * scale, 260f * scale, width - 48f * scale, 24f * scale);
     using (GraphicsPath pillPath = RoundedRect(pill, 11f * scale))
