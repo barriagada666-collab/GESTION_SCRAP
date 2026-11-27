@@ -1,0 +1,171 @@
+name: Release — Build Inno Setup 7, Validate & Publish GitHub Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Etiqueta de versión a publicar (ej. v4.1.0)'
+        required: false
+        default: ''
+      force_republish:
+        description: 'Sobrescribir activos si la Release ya existe'
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build-validate-publish:
+    name: Build, Validate Installers & Publish Release
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: NuGet Vulnerability & Static Audit Gate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $codeFiles = @(Get-ChildItem -Path src,tests -Recurse -File -Include *.cs,*.csproj | Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' }) + @(Get-Item Directory.Build.props)
+          $supp = $codeFiles | Select-String -Pattern "NoWarn|#pragma warning disable|SuppressMessage|TreatWarningsAsErrors>false"
+          if (@($supp).Count -gt 0) { throw "Se detectaron supresiones prohibidas." }
+          dotnet restore GestionScrap.sln
+          $vuln = dotnet list GestionScrap.sln package --vulnerable --include-transitive 2>&1
+          $vuln | Write-Host
+          if ($vuln -match ">\s+\S+\s+\d") { throw "Paquetes NuGet vulnerables detectados; publicación detenida." }
+
+      - name: Ensure Inno Setup 7 is Installed
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $candidates = @(
+            "$env:LOCALAPPDATA\Programs\Inno Setup 7\ISCC.exe",
+            "C:\Program Files\Inno Setup 7\ISCC.exe",
+            "C:\Program Files (x86)\Inno Setup 7\ISCC.exe"
+          )
+          $iscc = $candidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+          if (-not $iscc) {
+            choco install innosetup -y --no-progress
+            $cmd = Get-Command "ISCC.exe" -ErrorAction SilentlyContinue
+            $extra = if ($cmd) { @($cmd.Source) } else { @() }
+            $all = $candidates + @("C:\Program Files (x86)\Inno Setup 6\ISCC.exe") + $extra
+            $iscc = $all | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) } | Select-Object -First 1
+          }
+          if (-not $iscc) { throw "No se pudo localizar Inno Setup (ISCC.exe)." }
+          Write-Host "ISCC localizado: $iscc"
+
+      - name: Build Debug, Release, Tests, Portable ZIP, Installers & SHA-256
+        shell: pwsh
+        run: .\scripts\Build-Release.ps1 -SkipAssetRebuild
+
+      - name: Silent Installer QA Validation (Install, Version Check & Clean Uninstall)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          [xml]$props = Get-Content Directory.Build.props
+          $appVer = $props.Project.PropertyGroup.Version.Trim()
+          $setupExe = "Instalador\GestionScrap_Setup_v${appVer}_x64_SelfContained.exe"
+          $qaDir = Join-Path $env:RUNNER_TEMP "qa_install_v${appVer}"
+
+          $p1 = Start-Process -FilePath $setupExe -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART","/SP-","/DIR=`"$qaDir`"" -Wait -PassThru
+          if ($p1.ExitCode -ne 0) { throw "Fallo instalacion silenciosa (exit=$($p1.ExitCode))" }
+
+          $installedExe = Join-Path $qaDir "GestionScrap.exe"
+          if (-not (Test-Path $installedExe)) { throw "Falta GestionScrap.exe en $qaDir" }
+          $fv = (Get-Item $installedExe).VersionInfo.FileVersion
+          if ($fv -ne "$appVer.0") { throw "FileVersion esperada $appVer.0, obtenida $fv" }
+
+          $unins = Join-Path $qaDir "unins000.exe"
+          $p2 = Start-Process -FilePath $unins -ArgumentList "/VERYSILENT","/SUPPRESSMSGBOXES","/NORESTART" -Wait -PassThru
+          if ($p2.ExitCode -ne 0) { throw "Fallo desinstalacion silenciosa (exit=$($p2.ExitCode))" }
+          if (Test-Path $installedExe) { throw "GestionScrap.exe no fue removido por desinstalador" }
+          Write-Host "QA Instalador OK: FileVersion=$fv instalado y desinstalado limpiamente."
+
+      - name: Upload Distribution Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: GestionScrap-Release-${{ github.ref_name }}
+          path: |
+            Instalador/GestionScrap_Setup_v*_x64_SelfContained.exe
+            Instalador/GestionScrap_Setup_v*_x64_FrameworkDependent.exe
+            Instalador/GestionScrap_Portable_v*_win-x64.zip
+            Instalador/checksums_sha256.txt
+          retention-days: 30
+
+      - name: Publish or Verify GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+          FORCE_REPUBLISH: ${{ inputs.force_republish }}
+        run: |
+          $ErrorActionPreference = "Stop"
+          [xml]$props = Get-Content Directory.Build.props
+          $appVer = $props.Project.PropertyGroup.Version.Trim()
+          $tagName = if ($env:GITHUB_REF_TYPE -eq 'tag') {
+            $env:GITHUB_REF_NAME
+          } elseif (-not [string]::IsNullOrWhiteSpace($env:INPUT_TAG)) {
+            $env:INPUT_TAG.Trim()
+          } else {
+            "v$appVer"
+          }
+
+          $scSetup = "Instalador/GestionScrap_Setup_v${appVer}_x64_SelfContained.exe"
+          $fddSetup = "Instalador/GestionScrap_Setup_v${appVer}_x64_FrameworkDependent.exe"
+          $portable = "Instalador/GestionScrap_Portable_v${appVer}_win-x64.zip"
+          $checksum = "Instalador/checksums_sha256.txt"
+          $releaseReadme = "docs/releases/README-${tagName}.md"
+
+          foreach ($f in @($scSetup, $fddSetup, $portable, $checksum)) {
+            if (-not (Test-Path $f)) { throw "Falta artefacto requerido: $f" }
+          }
+
+          $notesPath = "$env:RUNNER_TEMP\release_notes.md"
+          if (Test-Path $releaseReadme) {
+            Get-Content $releaseReadme -Raw -Encoding UTF8 | Set-Content -Path $notesPath -Encoding UTF8
+          } else {
+            "## Gestión de Scrap $tagName (.NET 10)`n`nInstaladores corporativos y paquete portable validados para Windows x64." | Set-Content -Path $notesPath -Encoding UTF8
+          }
+
+          $files = @($scSetup, $fddSetup, $portable, $checksum)
+          if (Test-Path $releaseReadme) { $files += $releaseReadme }
+
+          $prevEap = $ErrorActionPreference
+          $ErrorActionPreference = 'Continue'
+          $existingJson = gh release view $tagName --json tagName,assets 2>$null
+          $exists = ($LASTEXITCODE -eq 0)
+          $ErrorActionPreference = $prevEap
+
+          if ($exists) {
+            $parsed = $existingJson | ConvertFrom-Json
+            $assetNames = @($parsed.assets | ForEach-Object { $_.name })
+            $hasAllCore = ($assetNames -contains (Split-Path $scSetup -Leaf)) -and
+                          ($assetNames -contains (Split-Path $fddSetup -Leaf)) -and
+                          ($assetNames -contains (Split-Path $portable -Leaf)) -and
+                          ($assetNames -contains (Split-Path $checksum -Leaf))
+            if ($hasAllCore -and $env:FORCE_REPUBLISH -ne 'true') {
+              Write-Host "Release $tagName ya existe con todos los activos publicados y verificados; se preservan los hashes sellados."
+            } else {
+              gh release edit $tagName --title "Gestión de Scrap $tagName (.NET 10)" --notes-file $notesPath
+              gh release upload $tagName @files --clobber
+            }
+          } else {
+            gh release create $tagName @files --title "Gestión de Scrap $tagName (.NET 10)" --notes-file $notesPath --target $env:GITHUB_SHA
+          }

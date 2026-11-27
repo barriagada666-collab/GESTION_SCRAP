@@ -4,18 +4,18 @@
 
 #define MyAppName "Gestión de Scrap"
 #define MyAppShortName "GestionScrap"
-#define MyAppVersion "4.0.0"
-#define MyAppPublisher "Gestión de Scrap"
+#define MyAppVersion "4.1.0"
+#define MyAppPublisher "Cambiaso Hnos. S.A.C."
 #define MyAppURL "https://github.com/barriagada666-collab/GESTION_SCRAP"
 #define MyAppExeName "GestionScrap.exe"
 
 #if Variant == "framework"
   #define SourcePublishDir "..\publish\win-x64-fdd"
-  #define OutputBase "GestionScrap_Setup_v4.0.0_x64_FrameworkDependent"
+  #define OutputBase "GestionScrap_Setup_v" + MyAppVersion + "_x64_FrameworkDependent"
   #define VariantLabel "Requerido .NET 10 Desktop Runtime"
 #else
   #define SourcePublishDir "..\publish\win-x64"
-  #define OutputBase "GestionScrap_Setup_v4.0.0_x64_SelfContained"
+  #define OutputBase "GestionScrap_Setup_v" + MyAppVersion + "_x64_SelfContained"
   #define VariantLabel "Autocontenido (.NET 10)"
 #endif
 
@@ -44,8 +44,9 @@ WizardStyle=modern
 WizardSizePercent=100
 WizardImageFile=assets\wizard_banner.bmp,assets\wizard_banner_2x.bmp
 WizardSmallImageFile=assets\wizard_small.bmp,assets\wizard_small_2x.bmp
+LicenseFile=..\LICENSE
 InfoBeforeFile=InfoSoftware.rtf
-Compression=lzma2/normal
+Compression=lzma2/ultra64
 SolidCompression=yes
 CloseApplications=yes
 RestartApplications=yes
@@ -53,10 +54,10 @@ DisableWelcomePage=no
 ShowLanguageDialog=no
 VersionInfoVersion={#MyAppVersion}.0
 VersionInfoCompany={#MyAppPublisher}
-VersionInfoDescription=Instalador de Gestión de Scrap
+VersionInfoDescription=Instalador Corporativo de Gestión de Scrap v{#MyAppVersion} (.NET 10)
 VersionInfoProductName={#MyAppName}
 VersionInfoProductVersion={#MyAppVersion}
-VersionInfoCopyright=Copyright (C) 2026
+VersionInfoCopyright=Copyright (C) 2026 {#MyAppPublisher}
 
 [Languages]
 Name: "spanish"; MessagesFile: "compiler:Languages\Spanish.isl"
